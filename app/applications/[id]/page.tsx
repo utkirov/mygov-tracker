@@ -102,6 +102,19 @@ export default function DetailPage() {
           ))}
         </div>
 
+        {app.pdf_filename && (
+          <a
+            href={`/api/applications/${id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-white border rounded-xl px-4 py-3 text-sm font-medium text-blue-600 hover:bg-blue-50"
+          >
+            <span>📄</span>
+            <span>{app.pdf_filename}</span>
+            <span className="ml-auto text-gray-400">↗</span>
+          </a>
+        )}
+
         <div className="bg-white rounded-xl border p-4">
           <label className="text-xs text-gray-400 uppercase tracking-wide block mb-2">Заметки</label>
           <textarea
