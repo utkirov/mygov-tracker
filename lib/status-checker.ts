@@ -1,10 +1,8 @@
 // lib/status-checker.ts
 import * as cheerio from 'cheerio';
 
-// NOTE: This URL needs verification against the real my.gov.uz public status page.
-// Open my.gov.uz, find the public application status check page (no login required),
-// and update STATUS_CHECK_BASE if needed.
-const STATUS_CHECK_BASE = 'https://my.gov.uz/ru/service/appeal/status';
+const BASE = 'https://oldmy.gov.uz:4433/ru/site/task-view';
+const CAPTCHA_REFRESH = 'https://oldmy.gov.uz:4433/ru/site/captcha?refresh=1';
 
 export interface CheckedStatus {
   status: string;
@@ -13,34 +11,48 @@ export interface CheckedStatus {
   last_changed_date: string;
 }
 
-export function buildStatusCheckUrl(applicationNumber: string, password: string): string {
-  const params = new URLSearchParams({ number: applicationNumber, password });
-  return `${STATUS_CHECK_BASE}?${params.toString()}`;
+// Yii2 captcha hash: sum of char codes of the answer string
+function computeCaptchaAnswer(hash: number): number {
+  for (let ans = 0; ans < 10000; ans++) {
+    const computed = String(ans).split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+    if (computed === hash) return ans;
+  }
+  return 0;
+}
+
+// Extract cookies from Set-Cookie headers into a single Cookie string
+function parseCookies(response: Response): string {
+  const getSetCookie = (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
+  if (typeof getSetCookie === 'function') {
+    return getSetCookie.call(response.headers).map(c => c.split(';')[0]).join('; ');
+  }
+  // Fallback: combined header (comma-joined, not split-safe, but usually works)
+  return (response.headers.get('set-cookie') ?? '').split(',').map(c => c.split(';')[0]).join('; ');
 }
 
 export function parseStatusPage(html: string): CheckedStatus | null {
   const $ = cheerio.load(html);
 
-  function findByLabel(label: string): string {
-    let value = '';
-    $('td, th').each((_, el) => {
-      const text = $(el).text().trim();
-      if (text === label) {
-        value = $(el).next('td').text().trim();
-        return false as unknown as void;
-      }
-    });
-    return value;
-  }
+  const fields: Record<string, string> = {};
+  $('th').each((_, th) => {
+    const label = $(th).text().trim();
+    const value = $(th).next('td').text().trim();
+    if (label && value && label.length < 80) {
+      fields[label] = value;
+    }
+  });
 
-  const status = findByLabel('Состояние');
-  if (!status) return null;
+  const rawStatus = fields['Состояние'];
+  if (!rawStatus) return null;
+
+  // Status field has a tooltip appended — take only the first line
+  const status = rawStatus.split('\n')[0].trim();
 
   return {
     status,
-    current_action: findByLabel('Текущее действие'),
-    acting_party: findByLabel('На данный момент действует'),
-    last_changed_date: findByLabel('Дата последнего изменения'),
+    current_action: fields['Текущее действие'] || '',
+    acting_party: fields['На данный момент действует'] || '',
+    last_changed_date: fields['Дата последнего изменения'] || '',
   };
 }
 
@@ -48,17 +60,47 @@ export async function fetchApplicationStatus(
   applicationNumber: string,
   verificationPassword: string
 ): Promise<CheckedStatus | null> {
-  const url = buildStatusCheckUrl(applicationNumber, verificationPassword);
+  try {
+    const headers = { 'User-Agent': 'Mozilla/5.0 (compatible; MyGovTracker/1.0)' };
 
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; ApplicationTracker/1.0)',
-      Accept: 'text/html',
-    },
-  });
+    // Step 1: Load form page → get session cookie + CSRF token
+    const pageResp = await fetch(BASE, { headers });
+    const cookie = parseCookies(pageResp);
+    const html = await pageResp.text();
 
-  if (!response.ok) return null;
+    const csrfMatch = html.match(/name="_csrf-myap"\s+value="([^"]+)"/);
+    if (!csrfMatch) return null;
+    const csrf = csrfMatch[1];
 
-  const html = await response.text();
-  return parseStatusPage(html);
+    // Step 2: Get captcha hash (session cookie required for same captcha to be valid)
+    const captchaResp = await fetch(CAPTCHA_REFRESH, {
+      headers: { ...headers, Cookie: cookie, Referer: BASE, 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    const captchaData = (await captchaResp.json()) as { hash1: number };
+    const captchaAnswer = computeCaptchaAnswer(captchaData.hash1);
+
+    // Step 3: Submit the form
+    const body = new URLSearchParams({
+      '_csrf-myap': csrf,
+      'TaskSearchForm[id]': applicationNumber,
+      'TaskSearchForm[pin_code]': verificationPassword,
+      'TaskSearchForm[verifyCode]': String(captchaAnswer),
+    });
+
+    const submitResp = await fetch(BASE, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        Cookie: cookie,
+        Referer: BASE,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    });
+
+    const resultHtml = await submitResp.text();
+    return parseStatusPage(resultHtml);
+  } catch {
+    return null;
+  }
 }
