@@ -1,5 +1,7 @@
 // lib/pdf-parser.ts
-import pdf from 'pdf-parse';
+import * as pdfParse from 'pdf-parse';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const pdf = (pdfParse as any).default ?? pdfParse;
 import type { ParsedPdf } from '@/types';
 
 function extractLine(text: string, label: string): string {
