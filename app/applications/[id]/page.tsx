@@ -88,7 +88,13 @@ export default function DetailPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b px-4 py-3 flex items-center gap-3">
         <button onClick={() => router.back()} className="text-gray-500 text-lg">←</button>
-        <h1 className="font-bold text-base font-mono">№ {app.application_number}</h1>
+        <h1 className="font-bold text-base font-mono flex-1">№ {app.application_number}</h1>
+        <button
+          onClick={() => router.push(`/applications/${id}/edit`)}
+          className="text-sm text-gray-500 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+        >
+          Изменить
+        </button>
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-5">

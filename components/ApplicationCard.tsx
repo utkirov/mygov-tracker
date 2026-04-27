@@ -44,9 +44,20 @@ export function ApplicationCard({ application }: Props) {
               ? new Date(application.last_changed_date).toLocaleDateString('ru-RU')
               : new Date(application.submission_date ?? application.created_at).toLocaleDateString('ru-RU')}
           </div>
-          <span className="text-xs text-blue-600 font-medium">
-            Открыть заявление →
-          </span>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/api/applications/${application.id}/preview`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="text-xs text-gray-500 border border-gray-200 px-2 py-1 rounded-lg hover:bg-gray-50"
+            >
+              Оригинал ↗
+            </a>
+            <span className="text-xs text-blue-600 font-medium">
+              Открыть →
+            </span>
+          </div>
         </div>
       </div>
     </Link>

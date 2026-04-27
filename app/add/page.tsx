@@ -12,6 +12,7 @@ export default function AddPage() {
   const [objectName, setObjectName] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState('');
   const [error, setError] = useState('');
 
   function handleParsed(fields: ParsedPdf, name: string) {
@@ -37,6 +38,9 @@ export default function AddPage() {
       return;
     }
 
+    const { id } = await res.json();
+    setStatus('Проверяю статус на my.gov.uz...');
+    await fetch(`/api/applications/${id}/check`, { method: 'POST' });
     router.push('/dashboard');
   }
 
@@ -95,6 +99,7 @@ export default function AddPage() {
             </div>
 
             {error && <p className="text-red-500 text-sm">{error}</p>}
+            {status && <p className="text-blue-600 text-sm">{status}</p>}
 
             <div className="flex gap-3">
               <button
@@ -108,7 +113,7 @@ export default function AddPage() {
                 disabled={saving}
                 className="flex-1 bg-blue-600 text-white rounded-lg py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
               >
-                {saving ? 'Сохраняю...' : 'Сохранить заявку'}
+                {saving ? (status || 'Сохраняю...') : 'Сохранить заявку'}
               </button>
             </div>
           </>
