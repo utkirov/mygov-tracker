@@ -82,3 +82,54 @@ describe('extractFieldsFromText – real my.gov.uz format', () => {
     expect(r.status).toBe('');
   });
 });
+
+// ── Uzbek language PDF format ─────────────────────────────────────────────────
+const UZ_PDF_TEXT = `
+
+Qurilish-montaj ishlari tugallangan obyektdan foydalanish uchun ruxsatnoma berish va kadastr hujjatlarini rasmiylashtirish
+Ariza raqami 276485292
+Tashkilot
+Urbanizatsiya va uy-joy bozorini barqaror rivojlantirish milliy qo'mitasi huzuridagi
+Kadastr agentligi
+Berilgan sana 03.04.2026 12:13
+Oxirgi o'zgartirish kiritilgan
+sana
+03.04.2026 12:13
+Holati Yangi
+Hozirgi amal Kadastr agentligi tomonidan ko'rib chiqish
+Tekshirish uchun parol 41819
+`;
+
+describe('extractFieldsFromText – Uzbek format', () => {
+  it('extracts application number', () => {
+    expect(extractFieldsFromText(UZ_PDF_TEXT).application_number).toBe('276485292');
+  });
+
+  it('extracts service name from first line', () => {
+    expect(extractFieldsFromText(UZ_PDF_TEXT).service_name).toContain('ruxsatnoma');
+  });
+
+  it('extracts organization spanning multiple lines', () => {
+    expect(extractFieldsFromText(UZ_PDF_TEXT).organization).toContain('Kadastr agentligi');
+  });
+
+  it('extracts status', () => {
+    expect(extractFieldsFromText(UZ_PDF_TEXT).status).toBe('Yangi');
+  });
+
+  it('extracts submission date', () => {
+    expect(extractFieldsFromText(UZ_PDF_TEXT).submission_date).toBe('03.04.2026 12:13');
+  });
+
+  it('extracts last changed date (split-line label)', () => {
+    expect(extractFieldsFromText(UZ_PDF_TEXT).last_changed_date).toBe('03.04.2026 12:13');
+  });
+
+  it('extracts current action', () => {
+    expect(extractFieldsFromText(UZ_PDF_TEXT).current_action).toContain("ko'rib chiqish");
+  });
+
+  it('extracts verification password', () => {
+    expect(extractFieldsFromText(UZ_PDF_TEXT).verification_password).toBe('41819');
+  });
+});
