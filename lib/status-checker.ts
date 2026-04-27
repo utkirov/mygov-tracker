@@ -56,14 +56,13 @@ export function parseStatusPage(html: string): CheckedStatus | null {
   };
 }
 
-export async function fetchApplicationStatus(
+export async function fetchApplicationHtml(
   applicationNumber: string,
   verificationPassword: string
-): Promise<CheckedStatus | null> {
+): Promise<string | null> {
   try {
     const headers = { 'User-Agent': 'Mozilla/5.0 (compatible; MyGovTracker/1.0)' };
 
-    // Step 1: Load form page → get session cookie + CSRF token
     const pageResp = await fetch(BASE, { headers });
     const cookie = parseCookies(pageResp);
     const html = await pageResp.text();
@@ -72,14 +71,12 @@ export async function fetchApplicationStatus(
     if (!csrfMatch) return null;
     const csrf = csrfMatch[1];
 
-    // Step 2: Get captcha hash (session cookie required for same captcha to be valid)
     const captchaResp = await fetch(CAPTCHA_REFRESH, {
       headers: { ...headers, Cookie: cookie, Referer: BASE, 'X-Requested-With': 'XMLHttpRequest' },
     });
     const captchaData = (await captchaResp.json()) as { hash1: number };
     const captchaAnswer = computeCaptchaAnswer(captchaData.hash1);
 
-    // Step 3: Submit the form
     const body = new URLSearchParams({
       '_csrf-myap': csrf,
       'TaskSearchForm[id]': applicationNumber,
@@ -98,9 +95,17 @@ export async function fetchApplicationStatus(
       body: body.toString(),
     });
 
-    const resultHtml = await submitResp.text();
-    return parseStatusPage(resultHtml);
+    return await submitResp.text();
   } catch {
     return null;
   }
+}
+
+export async function fetchApplicationStatus(
+  applicationNumber: string,
+  verificationPassword: string
+): Promise<CheckedStatus | null> {
+  const html = await fetchApplicationHtml(applicationNumber, verificationPassword);
+  if (!html) return null;
+  return parseStatusPage(html);
 }

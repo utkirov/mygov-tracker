@@ -99,13 +99,23 @@ export default function DetailPage() {
               <div className="text-sm mt-1">{app.current_action}</div>
             )}
           </div>
-          <button
-            onClick={handleCheck}
-            disabled={checking}
-            className="shrink-0 bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {checking ? '...' : '↻ Проверить статус'}
-          </button>
+          <div className="flex flex-col gap-2 shrink-0">
+            <button
+              onClick={handleCheck}
+              disabled={checking}
+              className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {checking ? '...' : '↻ Проверить'}
+            </button>
+            <a
+              href={`/api/applications/${id}/preview`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-center border border-gray-300 text-sm px-4 py-2 rounded-lg hover:bg-gray-50"
+            >
+              Оригинал ↗
+            </a>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl border p-4 flex flex-col gap-3">
