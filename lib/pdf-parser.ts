@@ -1,7 +1,6 @@
 // lib/pdf-parser.ts
-// Import from lib/pdf-parse to avoid the test-file loading in the package index
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdf = require('pdf-parse/lib/pdf-parse');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdf: (buffer: Buffer) => Promise<{ text: string }> = require('pdf-parse');
 import type { ParsedPdf } from '@/types';
 
 function extractLine(text: string, label: string): string {
