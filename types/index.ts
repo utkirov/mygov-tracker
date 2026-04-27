@@ -2,6 +2,7 @@
 export interface Application {
   id: string;
   application_number: string;
+  object_name: string;
   service_name: string;
   organization: string;
   status: string;

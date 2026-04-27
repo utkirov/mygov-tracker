@@ -9,6 +9,7 @@ export default function AddPage() {
   const router = useRouter();
   const [parsed, setParsed] = useState<ParsedPdf | null>(null);
   const [filename, setFilename] = useState('');
+  const [objectName, setObjectName] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -26,7 +27,7 @@ export default function AddPage() {
     const res = await fetch('/api/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...parsed, notes, pdf_filename: filename }),
+      body: JSON.stringify({ ...parsed, object_name: objectName, notes, pdf_filename: filename }),
     });
 
     if (!res.ok) {
@@ -71,6 +72,16 @@ export default function AddPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Название объекта</label>
+              <input
+                value={objectName}
+                onChange={e => setObjectName(e.target.value)}
+                placeholder="Жилой дом по ул. Навои 12..."
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
 
             <div>

@@ -12,7 +12,6 @@ export default function DashboardPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
-  const [updatingAll, setUpdatingAll] = useState(false);
 
   useEffect(() => {
     fetch('/api/applications')
@@ -20,29 +19,12 @@ export default function DashboardPage() {
       .then(setApplications);
   }, []);
 
-  function handleStatusUpdated(updated: Application) {
-    setApplications(prev => prev.map(a => a.id === updated.id ? updated : a));
-  }
-
-  async function handleUpdateAll() {
-    setUpdatingAll(true);
-    const active = applications.filter(a => getStatusType(a.acting_party, a.status) !== 'completed');
-    for (const app of active) {
-      const res = await fetch(`/api/applications/${app.id}/check`, { method: 'POST' });
-      if (res.ok) {
-        const { application: updated } = await res.json();
-        setApplications(prev => prev.map(a => a.id === updated.id ? updated : a));
-      }
-      await new Promise(r => setTimeout(r, 1000));
-    }
-    setUpdatingAll(false);
-  }
-
   const filtered = applications
     .filter(a => filter === 'all' || getStatusType(a.acting_party, a.status) === filter)
     .filter(a =>
       !search ||
       a.application_number.includes(search) ||
+      a.object_name.toLowerCase().includes(search.toLowerCase()) ||
       a.service_name.toLowerCase().includes(search.toLowerCase())
     );
 
@@ -69,27 +51,18 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
         <h1 className="font-bold text-lg">my.gov tracker</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={handleUpdateAll}
-            disabled={updatingAll}
-            className="text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-          >
-            {updatingAll ? 'Обновляю...' : '↻ Обновить все'}
+        <Link href="/add">
+          <button className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">
+            + Новая
           </button>
-          <Link href="/add">
-            <button className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">
-              + Новая
-            </button>
-          </Link>
-        </div>
+        </Link>
       </div>
 
       <div className="px-4 py-3 bg-white border-b">
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="🔍 Поиск по номеру или услуге..."
+          placeholder="🔍 Поиск по объекту, номеру или услуге..."
           className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
@@ -114,7 +87,7 @@ export default function DashboardPage() {
           </p>
         )}
         {sorted.map(app => (
-          <ApplicationCard key={app.id} application={app} onStatusUpdated={handleStatusUpdated} />
+          <ApplicationCard key={app.id} application={app} />
         ))}
       </div>
     </div>
