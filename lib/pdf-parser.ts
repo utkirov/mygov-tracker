@@ -3,25 +3,47 @@
 const pdf: (buffer: Buffer) => Promise<{ text: string }> = require('pdf-parse');
 import type { ParsedPdf } from '@/types';
 
-function extractLine(text: string, label: string): string {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`${escaped}\\s{2,}(.+?)(?=\\n|$)`, 'i');
-  const match = text.match(regex);
-  return match?.[1]?.trim() ?? '';
+// Value immediately follows label on the same line (no separator): "Состояние Новое" or "СостояниеНовое"
+function extractInline(text: string, label: string): string {
+  const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = text.match(new RegExp(esc + '\\s*(.+?)(?=\\n|$)', 'i'));
+  return m?.[1]?.trim() ?? '';
+}
+
+// Value is on the next line after the label
+function extractNextLine(text: string, label: string, until?: string): string {
+  const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const untilPart = until
+    ? until.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    : '\\n[А-ЯA-Z]';
+  const m = text.match(new RegExp(esc + '\\s*\\n([\\s\\S]+?)(?=\\n' + untilPart + '|$)', 'i'));
+  return m?.[1]?.replace(/\n/g, ' ').trim() ?? '';
 }
 
 export function extractFieldsFromText(text: string): ParsedPdf {
+  // Service name: first non-empty line (the application title)
+  const svcM = text.match(/^\s*\n+(.+?)(?=\n)/);
+  const service_name = svcM?.[1]?.trim() ?? '';
+
+  // Organization spans multiple lines until "Дата подачи"
+  const orgM = text.match(/Организация\s*\n([\s\S]+?)(?=\nДата подачи|\nСостояние)/i);
+  const organization = orgM?.[1]?.replace(/\n/g, ' ').trim() ?? '';
+
+  // "Дата последнего изменения" label is split across two lines
+  const lastM = text.match(/Дата последнего\s*\nизменения\s*\n(.+?)(?=\n)/i);
+  const last_changed_date = lastM?.[1]?.trim() ?? '';
+
   return {
-    application_number: extractLine(text, 'Номер заявки'),
-    service_name: extractLine(text, 'Наименование услуги'),
-    organization: extractLine(text, 'Организация'),
-    status: extractLine(text, 'Состояние'),
-    submission_date: extractLine(text, 'Дата подачи'),
-    last_changed_date: extractLine(text, 'Дата последнего изменения'),
-    current_action: extractLine(text, 'Текущее действие'),
-    acting_party: extractLine(text, 'На данный момент действует'),
-    verification_password: extractLine(text, 'Пароль для проверки'),
-    sms_phone: extractLine(text, 'Номер телефона для SMS-уведомления'),
+    application_number: extractInline(text, 'Номер заявки'),
+    service_name,
+    organization,
+    status: extractInline(text, 'Состояние'),
+    submission_date: extractInline(text, 'Дата подачи'),
+    last_changed_date,
+    current_action: extractInline(text, 'Текущее действие'),
+    acting_party: extractInline(text, 'На данный момент действует'),
+    verification_password: extractInline(text, 'Пароль для проверки'),
+    sms_phone: extractInline(text, 'Номер телефона для SMS'),
   };
 }
 
