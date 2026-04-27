@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parsePdfBuffer } from '@/lib/pdf-parser';
+import { parsePdfBuffer, getRawText } from '@/lib/pdf-parser';
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const fields = await parsePdfBuffer(buffer);
+  const rawText = await getRawText(buffer);
 
-  return NextResponse.json({ fields, filename: file.name });
+  return NextResponse.json({ fields, filename: file.name, _raw: rawText });
 }

@@ -29,3 +29,8 @@ export async function parsePdfBuffer(buffer: Buffer): Promise<ParsedPdf> {
   const data = await pdf(buffer);
   return extractFieldsFromText(data.text);
 }
+
+export async function getRawText(buffer: Buffer): Promise<string> {
+  const data = await pdf(buffer);
+  return data.text;
+}
