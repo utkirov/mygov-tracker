@@ -1,9 +1,9 @@
-// app/add/page.tsx
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ParsedPdf } from '@/types';
 import { PdfUpload } from '@/components/PdfUpload';
+import { ProjectSelector } from '@/components/ProjectSelector';
 
 export default function AddPage() {
   const router = useRouter();
@@ -11,6 +11,7 @@ export default function AddPage() {
   const [filename, setFilename] = useState('');
   const [objectName, setObjectName] = useState('');
   const [notes, setNotes] = useState('');
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -28,7 +29,7 @@ export default function AddPage() {
     const res = await fetch('/api/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...parsed, object_name: objectName, notes, pdf_filename: filename }),
+      body: JSON.stringify({ ...parsed, object_name: objectName, notes, pdf_filename: filename, project_id: projectId }),
     });
 
     if (!res.ok) {
@@ -55,63 +56,68 @@ export default function AddPage() {
   ] as const;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b px-4 py-3 flex items-center gap-3">
-        <button onClick={() => router.back()} className="text-gray-500 text-lg">←</button>
-        <h1 className="font-bold text-lg">Новая заявка</h1>
+    <div className="min-h-screen bg-[var(--bg)]">
+      <div className="bg-[var(--surface)] border-b border-[var(--border)] px-4 py-3 md:py-4 flex items-center gap-3">
+        <button onClick={() => router.back()} className="text-[var(--text2)] text-lg md:text-xl hover:text-[var(--text)]">←</button>
+        <h1 className="font-bold text-lg md:text-xl text-[var(--text)]">Новая заявка</h1>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 py-6 flex flex-col gap-5">
+      <div className="max-w-2xl mx-auto px-4 py-6 md:py-8 flex flex-col gap-5">
         {!parsed ? (
           <PdfUpload onParsed={handleParsed} />
         ) : (
           <>
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-              <p className="text-green-700 font-semibold text-sm mb-3">✓ Данные извлечены из PDF</p>
-              <div className="flex flex-col gap-2">
+            <div className="card bg-[var(--surface2)] border border-[var(--border)] p-4 md:p-5">
+              <p className="text-[var(--text)] font-semibold text-sm mb-4">✓ Данные извлечены из PDF</p>
+              <div className="flex flex-col gap-2.5">
                 {fields.map(f => (
-                  <div key={f.key} className="flex justify-between text-sm gap-2">
-                    <span className="text-gray-500 shrink-0">{f.label}</span>
-                    <span className="font-medium text-right">{parsed[f.key] || '—'}</span>
+                  <div key={f.key} className="flex justify-between gap-3 text-sm">
+                    <span className="text-[var(--text2)] shrink-0">{f.label}</span>
+                    <span className="text-[var(--text)] font-medium text-right break-words">{parsed[f.key] || '—'}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 block mb-1">Название объекта</label>
+              <label className="text-sm font-medium text-[var(--text)] block mb-2">Название объекта</label>
               <input
                 value={objectName}
                 onChange={e => setObjectName(e.target.value)}
                 placeholder="Жилой дом по ул. Навои 12..."
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-[var(--border)] bg-[var(--surface2)] text-[var(--text)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 block mb-1">Заметка (необязательно)</label>
+              <label className="text-sm font-medium text-[var(--text)] block mb-2">Проект</label>
+              <ProjectSelector value={projectId} onChange={setProjectId} />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-[var(--text)] block mb-2">Заметка (необязательно)</label>
               <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
-                placeholder="Проект, объект, контекст..."
-                className="w-full border rounded-lg px-3 py-2 text-sm h-20 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Контекст, дополнительная информация..."
+                className="w-full border border-[var(--border)] bg-[var(--surface2)] text-[var(--text)] rounded-lg px-3 py-2 text-sm h-20 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             </div>
 
             {error && <p className="text-red-500 text-sm">{error}</p>}
-            {status && <p className="text-blue-600 text-sm">{status}</p>}
+            {status && <p className="text-[var(--accent)] text-sm">{status}</p>}
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={() => { setParsed(null); setFilename(''); }}
-                className="flex-1 border border-gray-300 rounded-lg py-3 text-sm font-medium hover:bg-gray-50"
+                className="flex-1 border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] rounded-lg py-3 text-sm font-medium hover:bg-[var(--surface2)] transition"
               >
                 Загрузить другой PDF
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 bg-blue-600 text-white rounded-lg py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white rounded-lg py-3 text-sm font-semibold transition"
               >
                 {saving ? (status || 'Сохраняю...') : 'Сохранить заявку'}
               </button>

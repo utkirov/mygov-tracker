@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import type { Application } from '@/types';
+import { ProjectSelector } from '@/components/ProjectSelector';
 
 export default function EditPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,7 +17,7 @@ export default function EditPage() {
       .then(({ application }) => setForm(application));
   }, [id]);
 
-  function set(key: keyof Application, value: string) {
+  function set(key: keyof Application, value: string | null) {
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
@@ -48,50 +49,60 @@ export default function EditPage() {
     { label: 'Заметки', key: 'notes', multiline: true },
   ];
 
-  if (!form.id) return <div className="p-8 text-center text-gray-400">Загрузка...</div>;
+  if (!form.id) return <div className="p-8 text-center text-[var(--text2)]">Загрузка...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b px-4 py-3 flex items-center gap-3">
-        <button onClick={() => router.back()} className="text-gray-500 text-lg">←</button>
-        <h1 className="font-bold text-base">Редактировать заявку</h1>
+    <div className="min-h-screen bg-[var(--bg)]">
+      <div className="bg-[var(--surface)] border-b border-[var(--border)] px-4 md:px-6 py-3 md:py-4 flex items-center gap-3">
+        <button onClick={() => router.back()} className="text-[var(--text2)] text-lg md:text-xl hover:text-[var(--text)]">←</button>
+        <h1 className="font-bold text-lg md:text-xl text-[var(--text)]">Редактировать заявку</h1>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-4">
+      <div className="max-w-2xl mx-auto px-4 md:px-6 py-6 md:py-8 flex flex-col gap-5">
         {fields.map(f => (
           <div key={f.key}>
-            <label className="text-xs text-gray-500 uppercase tracking-wide block mb-1">{f.label}</label>
+            <label className="text-xs text-[var(--text3)] uppercase tracking-wide block mb-2">{f.label}</label>
             {f.multiline ? (
               <textarea
                 value={(form[f.key] as string) ?? ''}
                 onChange={e => set(f.key, e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[70px] resize-none"
+                className="w-full border border-[var(--border)] bg-[var(--surface2)] text-[var(--text)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] min-h-[80px] resize-none"
               />
             ) : (
               <input
                 value={(form[f.key] as string) ?? ''}
                 onChange={e => set(f.key, e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-[var(--border)] bg-[var(--surface2)] text-[var(--text)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             )}
           </div>
         ))}
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full bg-blue-600 text-white rounded-lg py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? 'Сохраняю...' : 'Сохранить изменения'}
-        </button>
+        <div>
+          <label className="text-xs text-[var(--text3)] uppercase tracking-wide block mb-2">Проект</label>
+          <ProjectSelector
+            value={(form.project_id as string | null) ?? null}
+            onChange={(projectId) => set('project_id', projectId)}
+          />
+        </div>
 
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="w-full border border-red-300 text-red-600 rounded-lg py-3 text-sm font-medium hover:bg-red-50 disabled:opacity-50"
-        >
-          {deleting ? 'Удаляю...' : 'Удалить заявку'}
-        </button>
+        <div className="flex flex-col gap-3 pt-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white rounded-lg py-3 text-sm font-semibold transition"
+          >
+            {saving ? 'Сохраняю...' : 'Сохранить изменения'}
+          </button>
+
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="w-full border border-red-500/20 text-red-500 dark:border-red-500/30 dark:text-red-400 rounded-lg py-3 text-sm font-medium hover:bg-red-500/5 disabled:opacity-50 transition"
+          >
+            {deleting ? 'Удаляю...' : 'Удалить заявку'}
+          </button>
+        </div>
       </div>
     </div>
   );

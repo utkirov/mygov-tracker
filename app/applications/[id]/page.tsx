@@ -1,4 +1,3 @@
-// app/applications/[id]/page.tsx
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -66,14 +65,7 @@ export default function DetailPage() {
     setSaving(false);
   }
 
-  if (!app) return <div className="p-8 text-center text-gray-400">Загрузка...</div>;
-
-  const type = getStatusType(app.acting_party, app.status);
-  const bannerStyle = {
-    action_required: 'bg-red-50 border-red-200 text-red-700',
-    in_progress: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-    completed: 'bg-green-50 border-green-200 text-green-700',
-  }[type];
+  if (!app) return <div className="p-8 text-center text-[var(--text2)]">Загрузка...</div>;
 
   const fields = [
     { label: 'Наименование услуги', value: app.service_name },
@@ -85,88 +77,91 @@ export default function DetailPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b px-4 py-3 flex items-center gap-3">
-        <button onClick={() => router.back()} className="text-gray-500 text-lg">←</button>
-        <h1 className="font-bold text-base font-mono flex-1">№ {app.application_number}</h1>
+    <div className="min-h-screen bg-[var(--bg)]">
+      <div className="bg-[var(--surface)] border-b border-[var(--border)] px-4 md:px-6 py-3 md:py-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={() => router.back()} className="text-[var(--text2)] text-lg md:text-xl hover:text-[var(--text)]">←</button>
+          <h1 className="font-bold text-base md:text-lg font-mono text-[var(--text)] truncate">№ {app.application_number}</h1>
+        </div>
         <button
           onClick={() => router.push(`/applications/${id}/edit`)}
-          className="text-sm text-gray-500 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+          className="text-sm text-[var(--text2)] border border-[var(--border)] px-3 py-1.5 rounded-lg hover:bg-[var(--surface2)] transition shrink-0"
         >
           Изменить
         </button>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-5">
-        <div className={`border rounded-xl p-4 flex justify-between items-center gap-3 ${bannerStyle}`}>
-          <div>
-            <StatusBadge status={app.status} acting_party={app.acting_party} />
-            {app.current_action && (
-              <div className="text-sm mt-1">{app.current_action}</div>
-            )}
+      <div className="max-w-2xl mx-auto px-4 md:px-6 py-5 md:py-6 flex flex-col gap-5">
+        <StatusBadge status={app.status} acting_party={app.acting_party} />
+
+        {app.current_action && (
+          <div className="card bg-[var(--surface2)] p-4 border border-[var(--border)]">
+            <p className="text-sm text-[var(--text2)] mb-1">Текущее действие</p>
+            <p className="text-[var(--text)] font-medium">{app.current_action}</p>
           </div>
-          <div className="flex flex-col gap-2 shrink-0">
-            <button
-              onClick={handleCheck}
-              disabled={checking}
-              className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {checking ? '...' : '↻ Проверить'}
-            </button>
-            <a
-              href={`/api/applications/${id}/preview`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-center border border-gray-300 text-sm px-4 py-2 rounded-lg hover:bg-gray-50"
-            >
-              Оригинал ↗
-            </a>
-          </div>
+        )}
+
+        <div className="flex flex-col gap-3 md:flex-row md:gap-3">
+          <button
+            onClick={handleCheck}
+            disabled={checking}
+            className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-sm px-4 py-2.5 rounded-lg font-medium transition"
+          >
+            {checking ? '...' : '↻ Проверить'}
+          </button>
+          <a
+            href={`/api/applications/${id}/preview`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 text-center border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm px-4 py-2.5 rounded-lg hover:bg-[var(--surface2)] transition"
+          >
+            Оригинал ↗
+          </a>
         </div>
 
-        <div className="bg-white rounded-xl border p-4 flex flex-col gap-3">
+        <div className="card bg-[var(--surface)] border border-[var(--border)] p-4 md:p-5 flex flex-col gap-4">
           {fields.map(f => (
             <div key={f.label}>
-              <div className="text-xs text-gray-400 uppercase tracking-wide">{f.label}</div>
-              <div className="text-sm text-gray-900 mt-0.5">{f.value || '—'}</div>
+              <div className="text-xs text-[var(--text3)] uppercase tracking-wide mb-1">{f.label}</div>
+              <div className="text-sm text-[var(--text)]">{f.value || '—'}</div>
             </div>
           ))}
         </div>
 
-        <div className="bg-white border rounded-xl px-4 py-3 flex items-center gap-2">
+        <div className="card bg-[var(--surface)] border border-[var(--border)] px-4 py-3 flex items-center gap-3">
           <span>📄</span>
           {app.pdf_filename ? (
             <a
               href={`/api/applications/${id}/pdf`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 text-sm font-medium text-blue-600 hover:underline truncate"
+              className="flex-1 text-sm font-medium text-[var(--accent)] hover:underline truncate"
             >
               {app.pdf_filename}
             </a>
           ) : (
-            <span className="flex-1 text-sm text-gray-400">PDF не прикреплён</span>
+            <span className="flex-1 text-sm text-[var(--text2)]">PDF не прикреплён</span>
           )}
-          <label className="shrink-0 cursor-pointer text-xs text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg px-2 py-1">
+          <label className="shrink-0 cursor-pointer text-xs text-[var(--text2)] hover:text-[var(--accent)] border border-[var(--border)] rounded-lg px-2 py-1 transition">
             {pdfUploading ? '...' : app.pdf_filename ? '↑ Заменить' : '↑ Загрузить'}
             <input type="file" accept=".pdf" className="hidden" onChange={handlePdfReupload} disabled={pdfUploading} />
           </label>
         </div>
 
-        <div className="bg-white rounded-xl border p-4">
-          <label className="text-xs text-gray-400 uppercase tracking-wide block mb-2">Заметки</label>
+        <div className="card bg-[var(--surface)] border border-[var(--border)] p-4 md:p-5">
+          <label className="text-xs text-[var(--text3)] uppercase tracking-wide block mb-3">Заметки</label>
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
             onBlur={handleSaveNotes}
-            className="w-full text-sm text-gray-900 resize-none focus:outline-none min-h-[60px]"
+            className="w-full text-sm text-[var(--text)] bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--accent)] min-h-[80px]"
             placeholder="Добавьте заметку..."
           />
-          {saving && <p className="text-xs text-gray-400 mt-1">Сохраняю...</p>}
+          {saving && <p className="text-xs text-[var(--text2)] mt-2">Сохраняю...</p>}
         </div>
 
-        <div className="bg-white rounded-xl border p-4">
-          <h2 className="text-xs text-gray-400 uppercase tracking-wide mb-3">История статусов</h2>
+        <div className="card bg-[var(--surface)] border border-[var(--border)] p-4 md:p-5">
+          <h2 className="text-xs text-[var(--text3)] uppercase tracking-wide mb-4">История статусов</h2>
           <StatusHistory history={history} />
         </div>
       </div>

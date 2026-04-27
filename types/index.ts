@@ -1,4 +1,11 @@
 // types/index.ts
+export interface Project {
+  id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
 export interface Application {
   id: string;
   application_number: string;
@@ -14,6 +21,7 @@ export interface Application {
   sms_phone: string;
   notes: string;
   pdf_filename: string;
+  project_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,8 +51,13 @@ export interface ParsedPdf {
 export type StatusType = 'action_required' | 'in_progress' | 'completed';
 
 export function getStatusType(acting_party: string, status: string): StatusType {
-  const terminalStatuses = ['одобрено', 'завершено', 'выдано', 'отказано'];
+  const terminalStatuses = ['одобрено', 'завершено', 'выдано', 'отказано', 'tasdiqlangan', 'bekor'];
   if (terminalStatuses.some(s => status.toLowerCase().includes(s))) return 'completed';
-  if (acting_party.toLowerCase().includes('заявитель')) return 'action_required';
+  if (acting_party.toLowerCase().includes('заявитель') || acting_party.toLowerCase().includes('ariza beruvchi')) return 'action_required';
   return 'in_progress';
 }
+
+export const PROJECT_COLORS = [
+  '#0071e3', '#34c759', '#ff9500', '#ff3b30',
+  '#af52de', '#ff2d55', '#5ac8fa', '#ffcc00',
+];

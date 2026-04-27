@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const body = await request.json();
 
   const allowed = ['notes', 'object_name', 'application_number', 'verification_password',
-                   'service_name', 'organization', 'sms_phone'];
+                   'service_name', 'organization', 'sms_phone', 'project_id'];
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of allowed) {
     if (key in body) updates[key] = body[key];

@@ -1,5 +1,4 @@
 'use client';
-// components/PdfUpload.tsx
 import { useRef, useState } from 'react';
 import type { ParsedPdf } from '@/types';
 
@@ -42,18 +41,18 @@ export function PdfUpload({ onParsed }: Props) {
       onDragLeave={() => setDragging(false)}
       onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
       onClick={() => inputRef.current?.click()}
-      className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition
-        ${dragging ? 'border-blue-400 bg-blue-50' : 'border-blue-300 bg-blue-50 hover:bg-blue-100'}`}
+      className={`border-2 border-dashed rounded-2xl p-8 md:p-10 text-center cursor-pointer transition
+        ${dragging ? 'border-[var(--accent)] bg-[var(--accent)]/5' : 'border-[var(--border)] bg-[var(--surface2)] hover:border-[var(--accent)]'}`}
     >
       <input ref={inputRef} type="file" accept=".pdf" className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-      <div className="text-4xl mb-3">📄</div>
+      <div className="text-4xl md:text-5xl mb-3">📄</div>
       {loading ? (
-        <p className="text-blue-600 font-medium">Читаю PDF...</p>
+        <p className="text-[var(--accent)] font-medium">Читаю PDF...</p>
       ) : (
         <>
-          <p className="text-blue-700 font-semibold">Перетащите PDF сюда</p>
-          <p className="text-gray-500 text-sm mt-1">или нажмите чтобы выбрать файл</p>
+          <p className="text-[var(--text)] font-semibold">Перетащите PDF сюда</p>
+          <p className="text-[var(--text2)] text-sm mt-1">или нажмите чтобы выбрать файл</p>
         </>
       )}
       {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
