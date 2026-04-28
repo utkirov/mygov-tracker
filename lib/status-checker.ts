@@ -64,16 +64,30 @@ export async function fetchApplicationHtml(
     const headers = { 'User-Agent': 'Mozilla/5.0 (compatible; MyGovTracker/1.0)' };
 
     const pageResp = await fetch(BASE, { headers });
+    if (!pageResp.ok) {
+      console.error('[Preview] Initial page fetch failed:', pageResp.status);
+      return null;
+    }
+
     const cookie = parseCookies(pageResp);
     const html = await pageResp.text();
 
     const csrfMatch = html.match(/name="_csrf-myap"\s+value="([^"]+)"/);
-    if (!csrfMatch) return null;
+    if (!csrfMatch) {
+      console.error('[Preview] CSRF token not found in page');
+      return null;
+    }
     const csrf = csrfMatch[1];
 
     const captchaResp = await fetch(CAPTCHA_REFRESH, {
       headers: { ...headers, Cookie: cookie, Referer: BASE, 'X-Requested-With': 'XMLHttpRequest' },
     });
+
+    if (!captchaResp.ok) {
+      console.error('[Preview] CAPTCHA refresh failed:', captchaResp.status);
+      return null;
+    }
+
     const captchaData = (await captchaResp.json()) as { hash1: number };
     const captchaAnswer = computeCaptchaAnswer(captchaData.hash1);
 
@@ -95,8 +109,14 @@ export async function fetchApplicationHtml(
       body: body.toString(),
     });
 
+    if (!submitResp.ok) {
+      console.error('[Preview] Form submission failed:', submitResp.status);
+      return null;
+    }
+
     return await submitResp.text();
-  } catch {
+  } catch (err) {
+    console.error('[Preview] Error fetching application HTML:', err);
     return null;
   }
 }
