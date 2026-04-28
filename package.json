@@ -1,13 +1,19 @@
 {
-  "name": "crm-invoices",
-  "version": "0.1.0",
+  "name": "mygov-tracker",
+  "version": "1.0.0",
+  "description": "Трекер заявок my.gov.uz - Windows приложение",
   "private": true,
+  "main": "electron/main.js",
+  "homepage": "./",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "jest"
+    "test": "jest",
+    "electron-dev": "electron .",
+    "electron-build": "npm run build && electron-builder -w",
+    "electron-build-exe": "npm run build && electron-builder --win --publish never"
   },
   "jest": {
     "preset": "ts-jest",
@@ -31,11 +37,62 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "electron-is-dev": "^3.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "jest": "^30.3.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.9",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "com.mygov.tracker",
+    "productName": "my.gov tracker",
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "public/**/*",
+      ".env.local",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "public"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "certificateFile": null,
+      "certificatePassword": null,
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "sign": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "my.gov tracker"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}.exe"
+    }
   }
 }
