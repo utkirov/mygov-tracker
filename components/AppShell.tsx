@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.location.href = '/login';
   }
 
-  if (NO_SHELL.some(p => pathname === p || (p !== '/' && pathname.startsWith(p)))) return <>{children}</>;
+  if (NO_SHELL.includes(pathname)) return <>{children}</>;
 
   return (
     <div className="flex min-h-screen bg-[var(--bg)]">
@@ -49,7 +49,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav className="flex-1 py-3 px-2 flex flex-col gap-0.5 overflow-y-auto">
           {NAV.map(({ href, icon: Icon, label }) => {
-            const active = pathname === href || (pathname.startsWith(href + '/') && href !== '/dashboard') || pathname === href;
             const isDash = href === '/dashboard';
             const isActive = isDash ? pathname === href || pathname.startsWith('/applications') : pathname.startsWith(href);
             return (
@@ -140,6 +139,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Plus size={22} strokeWidth={pathname === '/add' ? 2.5 : 1.8} />
             <span className="text-[10px] font-medium">Новая</span>
           </Link>
+          <button
+            onClick={handleLogout}
+            className="flex-1 flex flex-col items-center justify-center gap-1 text-[var(--text3)] hover:text-red-500 transition-all"
+          >
+            <LogOut size={22} strokeWidth={1.8} />
+            <span className="text-[10px] font-medium">Выйти</span>
+          </button>
         </div>
       </nav>
 
