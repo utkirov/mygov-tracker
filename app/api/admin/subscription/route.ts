@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!userId || !planId) {
-    return NextResponse.json({ error: 'userId и planId обязательны' }, { status: 400 });
+    return NextResponse.json({ error: 'userId and planId are required' }, { status: 400 });
   }
 
   const validPlans = ['free', 'standard', 'pro'];
