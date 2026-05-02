@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createSupabaseServer } from '@/lib/supabase-server';
 
 export async function POST(request: NextRequest) {
-  const { pin } = await request.json();
+  const { email, password } = await request.json();
+  const supabase = await createSupabaseServer();
 
-  if (pin !== process.env.APP_PIN) {
-    return NextResponse.json({ error: 'Неверный PIN' }, { status: 401 });
-  }
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) return NextResponse.json({ error: 'Неверный email или пароль' }, { status: 401 });
 
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set('app_session', pin, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  });
-  return response;
+  return NextResponse.json({ ok: true, user: { id: data.user.id, email: data.user.email } });
 }
