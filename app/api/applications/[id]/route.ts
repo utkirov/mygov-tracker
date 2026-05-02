@@ -75,7 +75,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   }
 
   await adminSupabase.from('status_history').delete().eq('application_id', id);
-  const { error } = await adminSupabase.from('applications').delete().eq('id', id);
+  const { error } = await adminSupabase.from('applications').delete().eq('id', id).eq('user_id', user.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
