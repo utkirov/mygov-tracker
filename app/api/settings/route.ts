@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     user_id: user.id,
     updated_at: new Date().toISOString(),
   }));
-  const { error } = await supabase.from('settings').upsert(rows, { onConflict: 'key' });
+  const { error } = await supabase.from('settings').upsert(rows, { onConflict: 'user_id,key' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
