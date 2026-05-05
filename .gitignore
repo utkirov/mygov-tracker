@@ -53,6 +53,8 @@ next-env.d.ts
 # superpowers
 .superpowers/
 .worktrees/
+/data/local-db.json
+/data/pdfs/
 
 .vercel
 
