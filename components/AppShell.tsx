@@ -1,13 +1,12 @@
 'use client';
-import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard, Archive, Settings, Sun, Moon, Plus, ChevronRight, LogOut,
+  LayoutDashboard, Archive, Settings, Sun, Moon, Plus,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
-const NO_SHELL = ['/login', '/register', '/'];
+const NO_SHELL = ['/'];
 
 const NAV = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Главная' },
@@ -18,28 +17,13 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { theme, toggle } = useTheme();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then(r => r.json())
-      .then(d => { if (d.email) setUserEmail(d.email); })
-      .catch(() => {});
-  }, []);
-
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
-  }
 
   if (NO_SHELL.includes(pathname)) return <>{children}</>;
 
   return (
     <div className="flex min-h-screen bg-[var(--bg)]">
-
-      {/* ── Desktop sidebar ── */}
+      {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col fixed inset-y-0 left-0 w-16 lg:w-60 bg-[var(--surface)] border-r border-[var(--border)] z-30 transition-all duration-200">
-
         {/* Logo */}
         <div className="h-14 flex items-center gap-2.5 px-4 border-b border-[var(--border)] shrink-0">
           <span className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white font-bold text-sm shrink-0">M</span>
@@ -86,32 +70,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               : <Moon size={18} className="shrink-0" />}
             <span className="hidden lg:block">{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</span>
           </button>
-          {userEmail && (
-            <div className="flex items-center gap-2 px-3 py-2">
-              <div className="w-6 h-6 rounded-full bg-[var(--accent)]/20 flex items-center justify-center shrink-0">
-                <span className="text-[10px] font-bold text-[var(--accent)]">
-                  {userEmail[0].toUpperCase()}
-                </span>
-              </div>
-              <span className="hidden lg:block text-xs text-[var(--text2)] truncate flex-1">{userEmail}</span>
-              <button
-                onClick={handleLogout}
-                className="hidden lg:flex items-center justify-center w-6 h-6 rounded-lg hover:bg-[var(--surface2)] text-[var(--text3)] hover:text-red-500 transition-all"
-                title="Выйти"
-              >
-                <LogOut size={13} />
-              </button>
-            </div>
-          )}
         </div>
       </aside>
 
-      {/* ── Main content ── */}
+      {/* Main content */}
       <main className="flex-1 md:ml-16 lg:ml-60 min-h-screen pb-20 md:pb-0 transition-all duration-200">
         {children}
       </main>
 
-      {/* ── Mobile bottom nav ── */}
+      {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-[var(--surface)] border-t border-[var(--border)] z-30 safe-area-inset-bottom">
         <div className="flex items-stretch h-16">
           {NAV.map(({ href, icon: Icon, label }) => {
@@ -139,16 +106,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Plus size={22} strokeWidth={pathname === '/add' ? 2.5 : 1.8} />
             <span className="text-[10px] font-medium">Новая</span>
           </Link>
-          <button
-            onClick={handleLogout}
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-[var(--text3)] hover:text-red-500 transition-all"
-          >
-            <LogOut size={22} strokeWidth={1.8} />
-            <span className="text-[10px] font-medium">Выйти</span>
-          </button>
         </div>
       </nav>
-
     </div>
   );
 }

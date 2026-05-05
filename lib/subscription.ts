@@ -1,19 +1,22 @@
-import { createSupabaseServer, getUser } from './supabase-server';
+import { readLocalDb } from './local-db';
 import { getPlan, type Plan, type PlanId } from './plans';
-import type { User } from '@supabase/supabase-js';
 
-export async function getUserPlan(user?: User | null): Promise<Plan> {
-  const resolvedUser = user !== undefined ? user : await getUser();
-  if (!resolvedUser) return getPlan('free');
+function resolveForcedPlan(): PlanId | null {
+  const forcedPlan = process.env.DEV_FORCE_PLAN;
 
-  const supabase = await createSupabaseServer();
-  const { data } = await supabase
-    .from('subscriptions')
-    .select('plan_id, status, expires_at')
-    .eq('user_id', resolvedUser.id)
-    .single();
+  if (forcedPlan === 'free' || forcedPlan === 'standard' || forcedPlan === 'pro') {
+    return forcedPlan;
+  }
 
-  if (!data || data.status !== 'active') return getPlan('free');
-  if (data.expires_at && new Date(data.expires_at) < new Date()) return getPlan('free');
-  return getPlan(data.plan_id as PlanId);
+  return null;
+}
+
+export async function getUserPlan(): Promise<Plan> {
+  const forcedPlan = resolveForcedPlan();
+  if (forcedPlan) return getPlan(forcedPlan);
+
+  const { subscription } = await readLocalDb();
+  if (subscription.status !== 'active') return getPlan('free');
+  if (subscription.expires_at && new Date(subscription.expires_at) < new Date()) return getPlan('free');
+  return getPlan(subscription.plan_id);
 }
