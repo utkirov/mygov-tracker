@@ -1,82 +1,106 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServer, getUser } from '@/lib/supabase-server';
-import { supabase as adminSupabase } from '@/lib/supabase';
+
+import { deletePdfFile } from '@/lib/local-storage';
+import { readLocalDb, writeLocalDb, type LocalDbApplication } from '@/lib/local-db';
+
+function sortHistory(history: Array<{ recorded_at: string }>) {
+  return [...history].sort((left, right) => right.recorded_at.localeCompare(left.recorded_at));
+}
+
+function toProjectId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const db = await readLocalDb();
+  const application = db.applications.find((entry) => entry.id === id);
 
-  const supabase = await createSupabaseServer();
-  const { data: app, error } = await supabase
-    .from('applications')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .single();
+  if (!application) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
 
-  if (error || !app) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  const { data: history } = await supabase
-    .from('status_history')
-    .select('*')
-    .eq('application_id', id)
-    .order('recorded_at', { ascending: false });
-
-  return NextResponse.json({ application: app, history: history ?? [] });
+  const history = sortHistory(db.status_history.filter((entry) => entry.application_id === id));
+  return NextResponse.json({ application, history });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  let body: Record<string, unknown>;
 
-  const supabase = await createSupabaseServer();
-  const body = await request.json();
-
-  const allowed = ['notes', 'object_name', 'application_number', 'verification_password',
-                   'service_name', 'organization', 'sms_phone', 'project_id', 'archived'];
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  for (const key of allowed) {
-    if (key in body) updates[key] = body[key];
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from('applications')
-    .update(updates)
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .select()
-    .single();
+  const db = await readLocalDb();
+  const application = db.applications.find((entry) => entry.id === id);
 
-  if (error || !data) return NextResponse.json({ error: error?.message ?? 'Not found' }, { status: error ? 500 : 404 });
-  return NextResponse.json(data);
+  if (!application) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const allowedKeys: Array<keyof LocalDbApplication> = [
+    'notes',
+    'object_name',
+    'application_number',
+    'verification_password',
+    'service_name',
+    'organization',
+    'sms_phone',
+    'project_id',
+    'archived',
+  ];
+
+  for (const key of allowedKeys) {
+    if (!(key in body)) continue;
+
+    if (key === 'project_id') {
+      application.project_id = toProjectId(body.project_id);
+      continue;
+    }
+
+    if (key === 'archived') {
+      application.archived = body.archived === true;
+      continue;
+    }
+
+    const value = body[key];
+    if (typeof value === 'string') {
+      application[key] = value as never;
+    }
+  }
+
+  application.updated_at = new Date().toISOString();
+  db.meta.updated_at = application.updated_at;
+
+  await writeLocalDb(db);
+
+  return NextResponse.json(application);
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const db = await readLocalDb();
+  const index = db.applications.findIndex((entry) => entry.id === id);
 
-  const supabase = await createSupabaseServer();
-
-  // Verify ownership before deletion
-  const { data: app } = await supabase
-    .from('applications')
-    .select('id, pdf_filename')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .single();
-
-  if (!app) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  if (app.pdf_filename) {
-    await adminSupabase.storage.from('pdfs').remove([app.pdf_filename]);
+  if (index === -1) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  await adminSupabase.from('status_history').delete().eq('application_id', id);
-  const { error } = await adminSupabase.from('applications').delete().eq('id', id).eq('user_id', user.id);
+  const [application] = db.applications.splice(index, 1);
+  db.status_history = db.status_history.filter((entry) => entry.application_id !== id);
+  db.meta.updated_at = new Date().toISOString();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const pdfStorageKey = application.pdf_storage_key ?? application.pdf_filename;
+  await writeLocalDb(db);
+
+  if (pdfStorageKey) {
+    await deletePdfFile(pdfStorageKey);
+  }
+
   return NextResponse.json({ ok: true });
 }

@@ -1,56 +1,116 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServer, getUser } from '@/lib/supabase-server';
+
+import { readLocalDb, writeLocalDb, type LocalDbSettings } from '@/lib/local-db';
+
+function toFlatSettings(settings: LocalDbSettings) {
+  return {
+    theme: settings.theme,
+    telegram_token: settings.telegram.bot_token,
+    telegram_chat_id: settings.telegram.chat_id,
+    auto_check_interval: settings.auto_check.interval_minutes
+      ? String(settings.auto_check.interval_minutes)
+      : '',
+  };
+}
+
+function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>): LocalDbSettings {
+  const nextTheme =
+    body.theme === 'light' || body.theme === 'dark' || body.theme === 'system'
+      ? body.theme
+      : current.theme;
+
+  const telegramToken =
+    typeof body.telegram_token === 'string'
+      ? body.telegram_token
+      : body.telegram && typeof body.telegram === 'object' && typeof (body.telegram as Record<string, unknown>).bot_token === 'string'
+        ? (body.telegram as Record<string, string>).bot_token
+        : current.telegram.bot_token;
+
+  const telegramChatId =
+    typeof body.telegram_chat_id === 'string'
+      ? body.telegram_chat_id
+      : body.telegram && typeof body.telegram === 'object' && typeof (body.telegram as Record<string, unknown>).chat_id === 'string'
+        ? (body.telegram as Record<string, string>).chat_id
+        : current.telegram.chat_id;
+
+  const nestedAutoCheck = body.auto_check && typeof body.auto_check === 'object'
+    ? body.auto_check as Record<string, unknown>
+    : null;
+  const rawAutoCheckInterval =
+    typeof body.auto_check_interval === 'string' || typeof body.auto_check_interval === 'number'
+      ? body.auto_check_interval
+      : nestedAutoCheck?.interval_minutes;
+  const parsedInterval = rawAutoCheckInterval === '' || rawAutoCheckInterval === null || rawAutoCheckInterval === undefined
+    ? null
+    : Number.parseInt(String(rawAutoCheckInterval), 10);
+  const autoCheckEnabled =
+    typeof nestedAutoCheck?.enabled === 'boolean'
+      ? nestedAutoCheck.enabled
+      : parsedInterval !== null && !Number.isNaN(parsedInterval) && parsedInterval > 0;
+
+  return {
+    theme: nextTheme,
+    telegram: {
+      bot_token: telegramToken,
+      chat_id: telegramChatId,
+    },
+    auto_check: {
+      enabled: autoCheckEnabled,
+      interval_minutes:
+        parsedInterval !== null && !Number.isNaN(parsedInterval) && parsedInterval > 0
+          ? parsedInterval
+          : null,
+    },
+  };
+}
 
 export async function GET() {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const supabase = await createSupabaseServer();
-  const { data, error } = await supabase
-    .from('settings')
-    .select('key, value')
-    .eq('user_id', user.id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const map: Record<string, string> = {};
-  for (const row of data ?? []) map[row.key] = row.value;
-  return NextResponse.json(map);
+  const db = await readLocalDb();
+  return NextResponse.json(toFlatSettings(db.settings));
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  let body: Record<string, unknown>;
 
-  const supabase = await createSupabaseServer();
-  const body = await request.json() as Record<string, string>;
-  const rows = Object.entries(body).map(([key, value]) => ({
-    key,
-    value: String(value),
-    user_id: user.id,
-    updated_at: new Date().toISOString(),
-  }));
-  const { error } = await supabase.from('settings').upsert(rows, { onConflict: 'user_id,key' });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const db = await readLocalDb();
+  db.settings = mergeSettings(db.settings, body);
+  db.meta.updated_at = new Date().toISOString();
+
+  await writeLocalDb(db);
+
   return NextResponse.json({ ok: true });
 }
 
-// Test Telegram connection — no user_id needed (just proxies to Telegram API)
 export async function PUT(request: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   const { token, chatId } = await request.json();
-  if (!token || !chatId) return NextResponse.json({ error: 'Нужны token и chatId' }, { status: 400 });
+  if (!token || !chatId) {
+    return NextResponse.json({ error: 'token and chatId are required' }, { status: 400 });
+  }
+
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: '✅ my.gov tracker подключён!\n\nВы будете получать уведомления при изменении статуса заявлений.', parse_mode: 'HTML' }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: 'Test message from my.gov tracker',
+        parse_mode: 'HTML',
+      }),
     });
-    const data = await res.json();
-    if (res.ok) return NextResponse.json({ ok: true });
-    return NextResponse.json({ error: data.description ?? 'Ошибка Telegram' }, { status: 400 });
+    const data = await response.json();
+
+    if (response.ok) {
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ error: data.description ?? 'Telegram error' }, { status: 400 });
   } catch {
-    return NextResponse.json({ error: 'Нет соединения' }, { status: 502 });
+    return NextResponse.json({ error: 'Connection failed' }, { status: 502 });
   }
 }

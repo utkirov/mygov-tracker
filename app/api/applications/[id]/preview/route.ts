@@ -1,48 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+
+import { readLocalDb } from '@/lib/local-db';
+import { readPdfFile } from '@/lib/local-storage';
 import { fetchApplicationHtml } from '@/lib/status-checker';
 
 const ORIGIN = 'https://oldmy.gov.uz:4433';
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+function buildPreviewFallback(applicationNumber: string) {
+  return new NextResponse(
+    `<html><body style="font-family: sans-serif; padding: 20px;">
+      <h2>Unable to load the live my.gov preview</h2>
+      <p>Application number: ${applicationNumber || 'unknown'}</p>
+      <p>The live page is currently unavailable and there is no saved local PDF fallback for this record.</p>
+    </body></html>`,
+    {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      status: 502,
+    }
+  );
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const db = await readLocalDb();
+  const application = db.applications.find((entry) => entry.id === id);
 
-  const { data: app, error } = await supabase
-    .from('applications')
-    .select('application_number, verification_password')
-    .eq('id', id)
-    .single();
-
-  if (error) {
-    console.error('[Preview] Application not found:', id);
-    return NextResponse.json({ error: 'Заявка не найдена' }, { status: 404 });
+  if (!application) {
+    return NextResponse.json({ error: 'Application not found' }, { status: 404 });
   }
 
-  console.log('[Preview] Fetching for app:', app.application_number);
-  const html = await fetchApplicationHtml(app.application_number, app.verification_password);
-
-  if (!html) {
-    console.error('[Preview] Failed to fetch HTML for:', app.application_number);
-    return new NextResponse(
-      `<html><body style="font-family: sans-serif; padding: 20px;">
-        <h2>Не удалось загрузить страницу</h2>
-        <p>Проверьте номер заявки и пароль.</p>
-        <p>Номер заявки: ${app.application_number}</p>
-        <p>Возможные причины:</p>
-        <ul>
-          <li>Сервер my.gov.uz недоступен</li>
-          <li>Неверный номер заявки</li>
-          <li>Неверный пароль для проверки</li>
-        </ul>
-      </body></html>`,
-      { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 502 }
+  if (application.application_number && application.verification_password) {
+    const html = await fetchApplicationHtml(
+      application.application_number,
+      application.verification_password
     );
+
+    if (html) {
+      const patched = html.includes('<head>')
+        ? html.replace('<head>', `<head><base href="${ORIGIN}/">`)
+        : `<base href="${ORIGIN}/">${html}`;
+
+      return new NextResponse(patched, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
   }
 
-  // Inject base tag so relative CSS/JS/images resolve against the original host
-  const patched = html.replace('<head>', `<head><base href="${ORIGIN}/">`);
+  const preferredKey = application.pdf_storage_key ?? application.pdf_filename;
+  const buffer =
+    (preferredKey ? await readPdfFile(preferredKey) : null) ??
+    (application.pdf_filename && application.pdf_filename !== preferredKey
+      ? await readPdfFile(application.pdf_filename)
+      : null);
 
-  return new NextResponse(patched, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  });
+  if (!buffer) {
+    return buildPreviewFallback(application.application_number);
+  }
+
+  return NextResponse.redirect(new URL(`/api/applications/${id}/pdf`, request.url));
 }

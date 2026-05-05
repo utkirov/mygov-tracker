@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase'; // service role client
+
+import { readLocalDb, writeLocalDb, type LocalPlanId } from '@/lib/local-db';
+
+const VALID_PLANS: LocalPlanId[] = ['free', 'standard', 'pro'];
 
 export async function POST(request: NextRequest) {
   const secret = request.headers.get('x-admin-secret');
@@ -7,30 +10,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let userId: string, planId: string, expiresAt: string | undefined;
+  let userId: string | undefined;
+  let planId: string | undefined;
+  let expiresAt: string | undefined;
+
   try {
     ({ userId, planId, expiresAt } = await request.json());
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  if (!userId || !planId) {
-    return NextResponse.json({ error: 'userId and planId are required' }, { status: 400 });
+  if (!planId) {
+    return NextResponse.json({ error: 'planId is required' }, { status: 400 });
   }
 
-  const validPlans = ['free', 'standard', 'pro'];
-  if (!validPlans.includes(planId)) {
-    return NextResponse.json({ error: `planId must be one of: ${validPlans.join(', ')}` }, { status: 400 });
+  if (!VALID_PLANS.includes(planId as LocalPlanId)) {
+    return NextResponse.json(
+      { error: `planId must be one of: ${VALID_PLANS.join(', ')}` },
+      { status: 400 }
+    );
   }
 
-  const { error } = await supabase.from('subscriptions').upsert({
-    user_id: userId,
-    plan_id: planId,
+  const db = await readLocalDb();
+  db.subscription = {
+    plan_id: planId as LocalPlanId,
     status: 'active',
     expires_at: expiresAt ?? null,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id' });
+  };
+  db.meta.updated_at = db.subscription.updated_at;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, userId, planId, expiresAt: expiresAt ?? null });
+  await writeLocalDb(db);
+
+  return NextResponse.json({
+    ok: true,
+    userId: userId ?? null,
+    planId: db.subscription.plan_id,
+    expiresAt: db.subscription.expires_at,
+  });
 }

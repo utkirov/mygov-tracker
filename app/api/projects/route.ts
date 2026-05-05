@@ -1,33 +1,57 @@
+import { randomUUID } from 'node:crypto';
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServer, getUser } from '@/lib/supabase-server';
+
+import { readLocalDb, writeLocalDb, type LocalDbProject } from '@/lib/local-db';
+import { canAddProject } from '@/lib/plans';
+import { getUserPlan } from '@/lib/subscription';
+
+function sortProjects(projects: LocalDbProject[]) {
+  return [...projects].sort((left, right) => left.created_at.localeCompare(right.created_at));
+}
 
 export async function GET() {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const supabase = await createSupabaseServer();
-  const { data, error } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: true });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  const db = await readLocalDb();
+  return NextResponse.json(sortProjects(db.projects));
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  let body: Record<string, unknown>;
 
-  const supabase = await createSupabaseServer();
-  const { name, color } = await request.json();
-  const { data, error } = await supabase
-    .from('projects')
-    .insert([{ name, color, user_id: user.id }])
-    .select()
-    .single();
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const color = typeof body.color === 'string' ? body.color.trim() : '';
+
+  if (!name || !color) {
+    return NextResponse.json({ error: 'name and color are required' }, { status: 400 });
+  }
+
+  const db = await readLocalDb();
+  const plan = await getUserPlan();
+
+  if (!canAddProject(plan, db.projects.length)) {
+    return NextResponse.json({ error: 'Project limit reached for the current plan' }, { status: 403 });
+  }
+
+  const now = new Date().toISOString();
+  const project: LocalDbProject = {
+    id: randomUUID(),
+    name,
+    color,
+    created_at: now,
+    updated_at: now,
+  };
+
+  db.projects.push(project);
+  db.meta.created_at = db.meta.created_at ?? now;
+  db.meta.updated_at = now;
+
+  await writeLocalDb(db);
+
+  return NextResponse.json(project, { status: 201 });
 }

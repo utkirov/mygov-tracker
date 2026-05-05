@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ParsedPdf } from '@/types';
 import { PdfUpload } from '@/components/PdfUpload';
@@ -9,27 +9,105 @@ export default function AddPage() {
   const router = useRouter();
   const [parsed, setParsed] = useState<ParsedPdf | null>(null);
   const [filename, setFilename] = useState('');
+  const [pdfStorageKey, setPdfStorageKey] = useState('');
   const [objectName, setObjectName] = useState('');
   const [notes, setNotes] = useState('');
   const [projectId, setProjectId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const pdfStorageKeyRef = useRef('');
+  const createdApplicationRef = useRef(false);
 
-  function handleParsed(fields: ParsedPdf, name: string) {
+  useEffect(() => {
+    pdfStorageKeyRef.current = pdfStorageKey;
+  }, [pdfStorageKey]);
+
+  async function cleanupTempPdf(pdfKey: string) {
+    if (!pdfKey) return;
+
+    try {
+      await fetch('/api/applications/parse-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfStorageKey: pdfKey }),
+      });
+    } catch (cleanupError) {
+      console.error('Failed to cleanup temporary PDF:', cleanupError);
+    }
+  }
+
+  function beaconCleanupTempPdf(pdfKey: string) {
+    if (!pdfKey || typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') {
+      return;
+    }
+
+    const payload = new Blob([JSON.stringify({ pdfStorageKey: pdfKey })], {
+      type: 'application/json',
+    });
+
+    navigator.sendBeacon('/api/applications/parse-pdf', payload);
+  }
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      const currentPdfStorageKey = pdfStorageKeyRef.current;
+      if (createdApplicationRef.current || !currentPdfStorageKey) return;
+      beaconCleanupTempPdf(currentPdfStorageKey);
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      const currentPdfStorageKey = pdfStorageKeyRef.current;
+      if (!createdApplicationRef.current && currentPdfStorageKey) {
+        beaconCleanupTempPdf(currentPdfStorageKey);
+      }
+    };
+  }, []);
+
+  function handleParsed(fields: ParsedPdf, name: string, storageKey: string) {
+    if (!createdApplicationRef.current && pdfStorageKey && pdfStorageKey !== storageKey) {
+      void cleanupTempPdf(pdfStorageKey);
+    }
+
     setParsed(fields);
     setFilename(name);
+    setPdfStorageKey(storageKey);
+  }
+
+  async function resetUnsavedUpload() {
+    const currentPdfStorageKey = pdfStorageKeyRef.current;
+    if (!createdApplicationRef.current && currentPdfStorageKey) {
+      await cleanupTempPdf(currentPdfStorageKey);
+    }
+
+    setParsed(null);
+    setFilename('');
+    setPdfStorageKey('');
+    setError('');
+    setStatus('');
   }
 
   async function handleSave() {
-    if (!parsed) return;
+    if (!parsed || !pdfStorageKey) {
+      setError('Нужно сначала загрузить PDF');
+      return;
+    }
     setSaving(true);
     setError('');
 
     const res = await fetch('/api/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...parsed, object_name: objectName, notes, pdf_filename: filename, project_id: projectId }),
+      body: JSON.stringify({
+        ...parsed,
+        object_name: objectName,
+        notes,
+        pdf_filename: filename,
+        pdf_storage_key: pdfStorageKey,
+        project_id: projectId,
+      }),
     });
 
     if (!res.ok) {
@@ -40,6 +118,7 @@ export default function AddPage() {
     }
 
     const { id } = await res.json();
+    createdApplicationRef.current = true;
     setStatus('Проверяю статус на my.gov.uz...');
     await fetch(`/api/applications/${id}/check`, { method: 'POST' });
     router.push('/dashboard');
@@ -109,7 +188,7 @@ export default function AddPage() {
 
             <div className="flex gap-3 pt-2">
               <button
-                onClick={() => { setParsed(null); setFilename(''); }}
+                onClick={() => { void resetUnsavedUpload(); }}
                 className="flex-1 border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] rounded-lg py-3 text-sm font-medium hover:bg-[var(--surface2)] transition"
               >
                 Загрузить другой PDF

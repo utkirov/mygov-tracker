@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import type { ParsedPdf } from '@/types';
 
 interface Props {
-  onParsed: (fields: ParsedPdf, filename: string) => void;
+  onParsed: (fields: ParsedPdf, filename: string, pdfStorageKey: string) => void;
 }
 
 export function PdfUpload({ onParsed }: Props) {
@@ -30,8 +30,8 @@ export function PdfUpload({ onParsed }: Props) {
       return;
     }
 
-    const { fields, filename } = await res.json();
-    onParsed(fields, filename);
+    const { fields, filename, pdfStorageKey } = await res.json();
+    onParsed(fields, filename, pdfStorageKey);
     setLoading(false);
   }
 

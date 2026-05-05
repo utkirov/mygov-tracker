@@ -1,46 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServer, getUser } from '@/lib/supabase-server';
+
+import { readLocalDb, writeLocalDb } from '@/lib/local-db';
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const db = await readLocalDb();
+  const index = db.projects.findIndex((project) => project.id === id);
 
-  const supabase = await createSupabaseServer();
+  if (index === -1) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
 
-  // Verify ownership
-  const { data: project } = await supabase
-    .from('projects')
-    .select('id')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .single();
+  db.projects.splice(index, 1);
+  for (const application of db.applications) {
+    if (application.project_id === id) {
+      application.project_id = null;
+      application.updated_at = new Date().toISOString();
+    }
+  }
 
-  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  db.meta.updated_at = new Date().toISOString();
+  await writeLocalDb(db);
 
-  await supabase.from('applications').update({ project_id: null }).eq('project_id', id).eq('user_id', user.id);
-  const { error } = await supabase.from('projects').delete().eq('id', id).eq('user_id', user.id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  let body: Record<string, unknown>;
 
-  const supabase = await createSupabaseServer();
-  const body = await request.json();
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
 
-  const { data, error } = await supabase
-    .from('projects')
-    .update({ name: body.name, color: body.color })
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .select()
-    .single();
+  const db = await readLocalDb();
+  const project = db.projects.find((entry) => entry.id === id);
 
-  if (error || !data) return NextResponse.json({ error: error?.message ?? 'Not found' }, { status: error ? 500 : 404 });
-  return NextResponse.json(data);
+  if (!project) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  if (typeof body.name === 'string' && body.name.trim()) {
+    project.name = body.name.trim();
+  }
+
+  if (typeof body.color === 'string' && body.color.trim()) {
+    project.color = body.color.trim();
+  }
+
+  project.updated_at = new Date().toISOString();
+  db.meta.updated_at = project.updated_at;
+
+  await writeLocalDb(db);
+
+  return NextResponse.json(project);
 }
