@@ -2,18 +2,98 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { readLocalDb, writeLocalDb, type LocalDbSettings } from '@/lib/local-db';
 
+function parseInteger(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  return null;
+}
+
+function parsePositiveInteger(value: unknown): number | null {
+  const parsed = parseInteger(value);
+  return parsed !== null && parsed > 0 ? parsed : null;
+}
+
+function parseNonNegativeInteger(value: unknown): number | null {
+  const parsed = parseInteger(value);
+  return parsed !== null && parsed >= 0 ? parsed : null;
+}
+
+function parseBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0') {
+      return false;
+    }
+  }
+
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+
+    if (value === 0) {
+      return false;
+    }
+  }
+
+  return null;
+}
+
+function resolveNumericSetting(
+  rawValue: unknown,
+  currentValue: number | null,
+  parser: (value: unknown) => number | null
+): number | null {
+  if (rawValue === undefined) {
+    return currentValue;
+  }
+
+  if (rawValue === null) {
+    return null;
+  }
+
+  if (typeof rawValue === 'string' && !rawValue.trim()) {
+    return currentValue;
+  }
+
+  const parsed = parser(rawValue);
+  return parsed === null ? currentValue : parsed;
+}
+
 function toFlatSettings(settings: LocalDbSettings) {
   return {
     theme: settings.theme,
     telegram_token: settings.telegram.bot_token,
     telegram_chat_id: settings.telegram.chat_id,
-    auto_check_interval: settings.auto_check.interval_minutes
-      ? String(settings.auto_check.interval_minutes)
-      : '',
+    auto_check_enabled: settings.auto_check.enabled,
+    auto_check_interval: settings.auto_check.interval_minutes,
+    auto_check_delay_ms: settings.auto_check.delay_between_checks_ms,
+    auto_check_concurrency: settings.auto_check.concurrency_limit,
   };
 }
 
 function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>): LocalDbSettings {
+  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
   const nextTheme =
     body.theme === 'light' || body.theme === 'dark' || body.theme === 'system'
       ? body.theme
@@ -36,17 +116,60 @@ function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>):
   const nestedAutoCheck = body.auto_check && typeof body.auto_check === 'object'
     ? body.auto_check as Record<string, unknown>
     : null;
+  const hasNestedAutoCheckValue = (key: string) =>
+    nestedAutoCheck !== null && Object.prototype.hasOwnProperty.call(nestedAutoCheck, key);
   const rawAutoCheckInterval =
-    typeof body.auto_check_interval === 'string' || typeof body.auto_check_interval === 'number'
+    hasOwn('auto_check_interval')
       ? body.auto_check_interval
-      : nestedAutoCheck?.interval_minutes;
-  const parsedInterval = rawAutoCheckInterval === '' || rawAutoCheckInterval === null || rawAutoCheckInterval === undefined
-    ? null
-    : Number.parseInt(String(rawAutoCheckInterval), 10);
+      : hasNestedAutoCheckValue('interval_minutes')
+        ? nestedAutoCheck?.interval_minutes
+        : undefined;
+  const rawAutoCheckDelay =
+    hasOwn('auto_check_delay_ms')
+      ? body.auto_check_delay_ms
+      : hasOwn('auto_check_delay_between_checks_ms')
+        ? body.auto_check_delay_between_checks_ms
+      : hasNestedAutoCheckValue('delay_between_checks_ms')
+        ? nestedAutoCheck?.delay_between_checks_ms
+        : undefined;
+  const rawAutoCheckConcurrency =
+    hasOwn('auto_check_concurrency')
+      ? body.auto_check_concurrency
+      : hasOwn('auto_check_concurrency_limit')
+        ? body.auto_check_concurrency_limit
+      : hasNestedAutoCheckValue('concurrency_limit')
+        ? nestedAutoCheck?.concurrency_limit
+        : undefined;
+  const parsedInterval = resolveNumericSetting(
+    rawAutoCheckInterval,
+    current.auto_check.interval_minutes,
+    parsePositiveInteger
+  );
+  const parsedDelay = resolveNumericSetting(
+    rawAutoCheckDelay,
+    current.auto_check.delay_between_checks_ms,
+    parseNonNegativeInteger
+  );
+  const parsedConcurrency = resolveNumericSetting(
+    rawAutoCheckConcurrency,
+    current.auto_check.concurrency_limit,
+    parsePositiveInteger
+  );
+  const hasValidIntervalUpdate =
+    rawAutoCheckInterval !== undefined &&
+    rawAutoCheckInterval !== null &&
+    !(typeof rawAutoCheckInterval === 'string' && !rawAutoCheckInterval.trim()) &&
+    parsePositiveInteger(rawAutoCheckInterval) !== null;
   const autoCheckEnabled =
-    typeof nestedAutoCheck?.enabled === 'boolean'
-      ? nestedAutoCheck.enabled
-      : parsedInterval !== null && !Number.isNaN(parsedInterval) && parsedInterval > 0;
+    hasOwn('auto_check_enabled') || hasNestedAutoCheckValue('enabled')
+      ? parseBoolean(
+          hasOwn('auto_check_enabled')
+            ? body.auto_check_enabled
+            : nestedAutoCheck?.enabled
+        ) ?? current.auto_check.enabled
+      : hasValidIntervalUpdate
+        ? true
+        : current.auto_check.enabled;
 
   return {
     theme: nextTheme,
@@ -56,10 +179,9 @@ function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>):
     },
     auto_check: {
       enabled: autoCheckEnabled,
-      interval_minutes:
-        parsedInterval !== null && !Number.isNaN(parsedInterval) && parsedInterval > 0
-          ? parsedInterval
-          : null,
+      interval_minutes: parsedInterval,
+      delay_between_checks_ms: parsedDelay,
+      concurrency_limit: parsedConcurrency,
     },
   };
 }

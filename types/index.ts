@@ -1,4 +1,11 @@
 // types/index.ts
+export type SyncState = 'idle' | 'queued' | 'checking' | 'success' | 'error';
+export type ApplicationChangeField =
+  | 'status'
+  | 'current_action'
+  | 'acting_party'
+  | 'last_changed_date';
+
 export interface Project {
   id: string;
   name: string;
@@ -21,7 +28,16 @@ export interface Application {
   sms_phone: string;
   notes: string;
   pdf_filename: string;
+  pdf_storage_key: string | null;
   project_id: string | null;
+  archived: boolean;
+  sync_state: SyncState;
+  last_checked_at: string | null;
+  next_check_at: string | null;
+  last_error: string;
+  last_detected_change_at: string | null;
+  last_change_summary: string[];
+  last_change_fields: ApplicationChangeField[];
   created_at: string;
   updated_at: string;
 }

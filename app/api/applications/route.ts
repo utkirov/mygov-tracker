@@ -89,6 +89,13 @@ export async function POST(request: NextRequest) {
     pdf_storage_key: pdfStorageKey,
     project_id: typeof body.project_id === 'string' ? body.project_id : null,
     archived: body.archived === true,
+    sync_state: 'idle',
+    last_checked_at: null,
+    next_check_at: null,
+    last_error: '',
+    last_detected_change_at: null,
+    last_change_summary: [],
+    last_change_fields: [],
     created_at: now,
     updated_at: now,
   };
