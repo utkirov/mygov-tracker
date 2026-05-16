@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, Tray } = require('electron');
 const isDev = require('electron-is-dev');
 const path = require('path');
 const fs = require('fs');
@@ -8,6 +8,8 @@ const http = require('http');
 let mainWindow;
 let nextServer;
 let serverReady = false;
+let tray = null;
+app.isQuitting = false;
 
 function resolveStandaloneServerPath(appDir) {
   const directPath = path.join(appDir, '.next', 'standalone', 'server.js');
@@ -29,6 +31,56 @@ function resolveStandaloneServerPath(appDir) {
   }
 
   throw new Error('Standalone server.js not found');
+}
+
+// Функция для создания системного трея
+function createTrayMenu() {
+  const iconPath = path.join(__dirname, '../public/favicon.ico');
+  tray = new Tray(iconPath);
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Show',
+      click: () => {
+        mainWindow.show();
+        mainWindow.focus();
+      },
+    },
+    {
+      label: 'Check Now',
+      click: () => {
+        // Send IPC message to renderer to trigger sync
+        mainWindow.webContents.send('sync-check-now');
+      },
+    },
+    {
+      label: 'Settings',
+      click: () => {
+        mainWindow.show();
+        mainWindow.focus();
+        // Navigate to settings if needed
+        mainWindow.webContents.send('navigate-to-settings');
+      },
+    },
+    {
+      type: 'separator',
+    },
+    {
+      label: 'Quit',
+      click: () => {
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  // Show/hide window on tray icon double-click
+  tray.on('double-click', () => {
+    mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
+  });
+
+  return tray;
 }
 
 // Функция для проверки доступности сервера
@@ -142,9 +194,25 @@ function createWindow() {
     }, 2000);
   });
 
+  // Hide window when minimized (instead of closing)
+  mainWindow.on('minimize', () => {
+    mainWindow.hide();
+  });
+
+  // Close button minimizes to tray instead of quitting
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Create system tray
+  createTrayMenu();
 }
 
 // Меню приложения
@@ -237,9 +305,18 @@ app.on('window-all-closed', () => {
   }
 });
 
+app.on('before-quit', () => {
+  app.isQuitting = true;
+});
+
 app.on('activate', () => {
   // На macOS переоткрыть окно при клике на иконку в dock
-  if (mainWindow === null) {
+  // На Windows показать существующее окно
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    // Создать окно только если оно не существует
     createWindow();
   }
 });
