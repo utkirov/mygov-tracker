@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 
 import { requestImmediateSyncRun, syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
@@ -16,6 +17,67 @@ import {
   getStatusType,
   isApplicationCheckable,
 } from '@/types';
+
+// Lazy-loaded sections for detail page
+const HistorySection = dynamic(
+  () => import('@/components/detail/HistorySection'),
+  {
+    loading: () => (
+      <div className="h-96 rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+        <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+        <div className="mt-4 space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded-[24px] bg-[var(--panel-strong)] animate-pulse" />
+          ))}
+        </div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
+const NotesSection = dynamic(
+  () => import('@/components/detail/NotesSection'),
+  {
+    loading: () => (
+      <div className="h-56 rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+        <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+        <div className="mt-4 h-32 rounded-[24px] bg-[var(--panel-strong)] animate-pulse" />
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
+const PdfSection = dynamic(
+  () => import('@/components/detail/PdfSection'),
+  {
+    loading: () => (
+      <div className="h-40 rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+        <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+        <div className="mt-4 h-20 rounded-[24px] bg-[var(--panel-strong)] animate-pulse" />
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
+const OperationalDataSection = dynamic(
+  () => import('@/components/detail/OperationalDataSection'),
+  {
+    loading: () => (
+      <div className="h-64 rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+        <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+        <div className="mt-4 space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-16 rounded-[24px] bg-[var(--panel-strong)] animate-pulse" />
+          ))}
+        </div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -366,148 +428,29 @@ export default function DetailPage() {
               </div>
             </div>
 
-            <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                    История статусов
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
-                    Хронология движения
-                  </h2>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-4">
-                {timelineItems.length === 0 && (
-                  <p className="rounded-[24px] bg-[var(--panel-strong)] p-4 text-sm leading-6 text-[var(--text-soft)]">
-                    История статусов пока пустая.
-                  </p>
-                )}
-
-                {timelineItems.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className={`rounded-[24px] border p-4 ${
-                      entry.isCurrentSnapshot
-                        ? 'border-[color:color-mix(in_oklab,var(--accent)_35%,var(--border))] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_10%,var(--panel))_0%,var(--panel)_100%)]'
-                        : 'border-[var(--border)] bg-[var(--panel)]'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-[var(--text)]">
-                          {entry.status}
-                        </p>
-                        <p className="mt-1 text-sm text-[var(--text-soft)]">
-                          {entry.current_action || 'Без дополнительного действия'}
-                        </p>
-                        <p className="mt-2 text-xs text-[var(--text-muted)]">
-                          {entry.acting_party || 'Без действующей стороны'}
-                        </p>
-                      </div>
-                      {entry.isCurrentSnapshot && (
-                        <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--accent)]">
-                          Текущий срез
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-3 text-xs text-[var(--text-muted)]">
-                      {formatDate(entry.recorded_at)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <HistorySection timelineItems={timelineItems} />
           </div>
 
           <div className="space-y-6">
-            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                Операционные данные
-              </p>
-              <div className="mt-4 space-y-3 text-sm">
-                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
-                  <span className="text-[var(--text-soft)]">Организация</span>
-                  <p className="mt-2 font-medium text-[var(--text)]">{application.organization || '—'}</p>
-                </div>
-                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
-                  <span className="text-[var(--text-soft)]">Дата подачи</span>
-                  <p className="mt-2 font-medium text-[var(--text)]">{formatDate(application.submission_date)}</p>
-                </div>
-                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
-                  <span className="text-[var(--text-soft)]">Пароль для проверки</span>
-                  <p className="mt-2 font-medium text-[var(--text)]">{application.verification_password || '—'}</p>
-                </div>
-                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
-                  <span className="text-[var(--text-soft)]">SMS-телефон</span>
-                  <p className="mt-2 font-medium text-[var(--text)]">{application.sms_phone || '—'}</p>
-                </div>
-                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
-                  <span className="text-[var(--text-soft)]">Состояние фоновой очереди</span>
-                  <p className="mt-2 font-medium text-[var(--text)]">
-                    {sync.isRunning && sync.currentApplicationId === application.id
-                      ? 'Сейчас проверяется этим циклом'
-                      : application.archived
-                        ? 'Архивировано'
-                        : checkable
-                          ? 'Под наблюдением'
-                          : 'Исключено из цикла'}
-                  </p>
-                </div>
-              </div>
-            </section>
+            <OperationalDataSection
+              application={application}
+              sync={sync}
+              checkable={checkable}
+            />
 
-            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                    Заметки
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
-                    Контекст по заявлению
-                  </h2>
-                </div>
-                {savingNotes && (
-                  <span className="text-xs text-[var(--text-muted)]">Сохраняю…</span>
-                )}
-              </div>
+            <NotesSection
+              notes={notes}
+              savingNotes={savingNotes}
+              onNotesChange={setNotes}
+              onBlur={handleSaveNotes}
+            />
 
-              <textarea
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                onBlur={handleSaveNotes}
-                className="mt-4 min-h-[160px] w-full rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 text-sm leading-6 text-[var(--text)] outline-none transition focus:border-[var(--accent)]"
-                placeholder="Внутренний контекст, договорённости, замечания по процессу."
-              />
-            </section>
-
-            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                    Исходный файл
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
-                    PDF заявления
-                  </h2>
-                </div>
-                <label className="cursor-pointer rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-2 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]">
-                  {pdfUploading ? 'Загружаю…' : application.pdf_filename ? 'Заменить PDF' : 'Загрузить PDF'}
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    className="hidden"
-                    onChange={handlePdfReupload}
-                    disabled={pdfUploading}
-                  />
-                </label>
-              </div>
-
-              <div className="mt-4 rounded-[24px] bg-[var(--panel-strong)] p-4 text-sm leading-6 text-[var(--text-soft)]">
-                {application.pdf_filename || 'PDF пока не прикреплён'}
-              </div>
-            </section>
+            <PdfSection
+              applicationId={id}
+              pdfFilename={application.pdf_filename}
+              pdfUploading={pdfUploading}
+              onPdfReupload={handlePdfReupload}
+            />
           </div>
         </section>
       </div>

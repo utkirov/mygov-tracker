@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 
@@ -19,6 +20,61 @@ import {
 } from '@/lib/sync-engine';
 import type { Application, Project, StatusType } from '@/types';
 import { getApplicationChangeFieldLabel, getStatusType } from '@/types';
+
+// Lazy-loaded sections
+const RecentChangesSection = dynamic(
+  () => import('@/components/dashboard/RecentChangesSection'),
+  {
+    loading: () => (
+      <div className="h-96 rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+        <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+        <div className="mt-4 space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-[24px] bg-[var(--panel-strong)] animate-pulse" />
+          ))}
+        </div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
+const AttentionSection = dynamic(
+  () => import('@/components/dashboard/AttentionSection'),
+  {
+    loading: () => (
+      <div className="h-72 rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+        <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+        <div className="mt-4 space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 rounded-[24px] bg-[var(--panel-strong)] animate-pulse" />
+          ))}
+        </div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
+const FiltersSection = dynamic(
+  () => import('@/components/dashboard/FiltersSection'),
+  {
+    loading: () => (
+      <div className="h-80 rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+        <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+        <div className="mt-4 space-y-3">
+          <div className="h-10 rounded-[20px] bg-[var(--panel-strong)] animate-pulse" />
+          <div className="flex flex-wrap gap-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-8 w-24 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
 
 type StatusFilter = 'all' | StatusType;
 
@@ -252,174 +308,27 @@ export default function DashboardPage() {
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-          <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                  Что изменилось
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
-                  {sectionTitle(changedApplications.length, 'заявление с новым движением', 'заявлений с новым движением')}
-                </h2>
-              </div>
-              <span className="rounded-full bg-[var(--panel-strong)] px-3 py-1 text-xs font-medium text-[var(--text-soft)]">
-                Акцент на последнем изменении
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {changedApplications.length === 0 && (
-                <div className="rounded-[24px] bg-[var(--panel-strong)] p-5 text-sm leading-6 text-[var(--text-soft)]">
-                  После следующего изменения карточки появятся здесь. Лента показывает только то, что реально изменилось при последней проверке.
-                </div>
-              )}
-
-              {changedApplications.slice(0, 5).map((application) => (
-                <Link
-                  key={application.id}
-                  href={`/applications/${application.id}`}
-                  className="block rounded-[24px] border border-[var(--border)] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_10%,var(--panel))_0%,var(--panel)_100%)] p-4 transition hover:border-[var(--border-strong)]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[var(--text)]">
-                        {application.object_name || application.service_name}
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-[var(--accent)]">
-                        {getChangeHeadline(application)}
-                      </p>
-                      <p className="mt-3 text-xs uppercase tracking-[0.22em] text-[var(--text-muted)]">
-                        Последнее изменение
-                      </p>
-                      <p className="mt-1 text-xl font-semibold text-[var(--text)]">
-                        {formatDate(application.last_changed_date)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">
-                        {application.last_change_fields.length} пол.
-                      </span>
-                      <p className="mt-2 text-xs text-[var(--text-muted)]">
-                        Найдено {formatDate(application.last_detected_change_at)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {application.last_change_fields.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {application.last_change_fields.map((field) => (
-                        <span
-                          key={field}
-                          className="rounded-full bg-white/70 px-2.5 py-1 text-[11px] font-medium text-[var(--text)] dark:bg-white/8"
-                        >
-                          {getApplicationChangeFieldLabel(field)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <ul className="mt-4 space-y-2 text-sm text-[var(--text-soft)]">
-                    {application.last_change_summary.slice(0, 3).map((line) => (
-                      <li key={line} className="rounded-2xl bg-[var(--panel-strong)] px-3 py-2 leading-6">
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <RecentChangesSection
+            changedApplications={changedApplications}
+            onNavigate={() => {}}
+          />
 
           <div className="space-y-6">
-            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                Требуют внимания
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
-                {attentionApplications.length === 0 ? 'Нет активных блокеров' : `Сейчас ${attentionApplications.length} кейсов с ответом заявителя`}
-              </h2>
-              <div className="mt-4 space-y-3">
-                {attentionApplications.length === 0 && (
-                  <p className="rounded-[24px] bg-[var(--panel-strong)] p-4 text-sm leading-6 text-[var(--text-soft)]">
-                    Когда `Действует` переключится на заявителя, карточка появится здесь.
-                  </p>
-                )}
-                {attentionApplications.slice(0, 4).map((application) => (
-                  <Link
-                    key={application.id}
-                    href={`/applications/${application.id}`}
-                    className="block rounded-[24px] border border-[var(--border)] bg-[var(--panel)] p-4 transition hover:border-[var(--border-strong)]"
-                  >
-                    <p className="text-sm font-semibold text-[var(--text)]">
-                      {application.object_name || application.service_name}
-                    </p>
-                    <p className="mt-1 text-sm text-[var(--text-soft)]">
-                      {application.current_action || application.status}
-                    </p>
-                    <p className="mt-2 text-xs text-[var(--text-muted)]">
-                      Последнее изменение: {formatDate(application.last_changed_date)}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            </section>
+            <AttentionSection
+              attentionApplications={attentionApplications}
+              onNavigate={() => {}}
+            />
 
-            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                Быстрые фильтры
-              </p>
-              <div className="mt-4 space-y-3">
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Поиск по номеру, объекту, услуге"
-                  className="w-full rounded-[20px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--accent)]"
-                />
-
-                <div className="flex flex-wrap gap-2">
-                  {statusFilters.map((filter) => (
-                    <button
-                      key={filter.key}
-                      onClick={() => setStatusFilter(filter.key)}
-                      className={`rounded-full px-3 py-2 text-xs font-medium transition ${
-                        statusFilter === filter.key
-                          ? 'bg-[var(--accent)] text-white'
-                          : 'bg-[var(--panel-strong)] text-[var(--text-soft)]'
-                      }`}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-
-                {projects.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => setProjectFilter(null)}
-                      className={`rounded-full px-3 py-2 text-xs font-medium transition ${
-                        projectFilter === null
-                          ? 'bg-[var(--accent)] text-white'
-                          : 'bg-[var(--panel-strong)] text-[var(--text-soft)]'
-                      }`}
-                    >
-                      Все проекты
-                    </button>
-                    {projects.map((project) => (
-                      <button
-                        key={project.id}
-                        onClick={() => setProjectFilter(project.id)}
-                        className="rounded-full px-3 py-2 text-xs font-medium text-white transition"
-                        style={{
-                          backgroundColor: projectFilter === project.id ? project.color : `${project.color}B3`,
-                        }}
-                      >
-                        {project.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
+            <FiltersSection
+              search={search}
+              statusFilter={statusFilter}
+              statusFilters={statusFilters}
+              projects={projects}
+              projectFilter={projectFilter}
+              onSearchChange={setSearch}
+              onStatusFilterChange={setStatusFilter}
+              onProjectFilterChange={setProjectFilter}
+            />
           </div>
         </section>
 
