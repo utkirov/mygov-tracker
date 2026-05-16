@@ -55,6 +55,7 @@
       "public/**/*",
       ".env.local",
       "electron/**/*",
+      "scripts/**/*",
       "package.json"
     ],
     "directories": {

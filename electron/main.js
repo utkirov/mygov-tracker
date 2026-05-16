@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, Tray } = require('electron');
 const isDev = require('electron-is-dev');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const http = require('http');
 
 let mainWindow;
@@ -10,6 +10,21 @@ let nextServer;
 let serverReady = false;
 let tray = null;
 app.isQuitting = false;
+
+// Single instance lock - only allow one app instance
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // Someone tried to run a second instance; we should focus our window.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
 
 function resolveStandaloneServerPath(appDir) {
   const directPath = path.join(appDir, '.next', 'standalone', 'server.js');
@@ -31,6 +46,67 @@ function resolveStandaloneServerPath(appDir) {
   }
 
   throw new Error('Standalone server.js not found');
+}
+
+// Функция для регистрации автозапуска
+function registerAutoStart() {
+  try {
+    // Windows registry key for startup applications
+    const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+    const appName = 'my.gov tracker';
+
+    // Get the app's executable path
+    const exePath = app.getPath('exe');
+
+    // PowerShell command to add registry entry
+    const psCommand = `
+      $regPath = '${regKey.replace(/\\/g, '\\\\')}'
+      $appName = '${appName}'
+      $exePath = '${exePath.replace(/\\/g, '\\\\')}'
+
+      if (-not (Test-Path $regPath)) {
+        New-Item -Path $regPath -Force | Out-Null
+      }
+
+      New-ItemProperty -Path $regPath -Name $appName -Value $exePath -PropertyType String -Force | Out-Null
+    `;
+
+    // Run PowerShell command to register
+    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, {
+      stdio: 'ignore',
+    });
+
+    console.log('✅ Auto-start registered successfully');
+    return true;
+  } catch (error) {
+    console.warn('⚠️  Failed to register auto-start:', error.message);
+    return false;
+  }
+}
+
+// Функция для удаления автозапуска
+function unregisterAutoStart() {
+  try {
+    const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+    const appName = 'my.gov tracker';
+
+    const psCommand = `
+      $regPath = '${regKey.replace(/\\/g, '\\\\')}'
+      $appName = '${appName}'
+
+      Remove-ItemProperty -Path $regPath -Name $appName -ErrorAction SilentlyContinue
+    `;
+
+    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, {
+      stdio: 'ignore',
+    });
+
+    console.log('✅ Auto-start unregistered successfully');
+    return true;
+  } catch (error) {
+    console.warn('⚠️  Failed to unregister auto-start:', error.message);
+    return false;
+  }
 }
 
 // Функция для создания системного трея
@@ -287,6 +363,12 @@ app.on('ready', async () => {
 
   try {
     console.log('⏳ Инициализация приложения...');
+
+    // Register auto-start on Windows
+    if (process.platform === 'win32') {
+      registerAutoStart();
+    }
+
     await startNextServer();
     console.log('✅ Сервер готов!\n');
 
