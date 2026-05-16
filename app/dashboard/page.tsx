@@ -7,6 +7,7 @@ import {
   useEffectEvent,
   useMemo,
   useState,
+  Suspense,
 } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -18,6 +19,7 @@ import {
   syncEngineEvents,
   useSyncEngineSnapshot,
 } from '@/lib/sync-engine';
+import { formatDate, getChangeHeadline, sectionTitle } from '@/lib/format-utils';
 import type { Application, Project, StatusType } from '@/types';
 import { getApplicationChangeFieldLabel, getStatusType } from '@/types';
 
@@ -56,64 +58,40 @@ const AttentionSection = dynamic(
   }
 );
 
+const createFiltersSectionLoading = (projectsPresent: boolean) => () => (
+  <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+    <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+    <div className="mt-4 space-y-3">
+      {/* Search input skeleton */}
+      <div className="h-10 rounded-[20px] bg-[var(--panel-strong)] animate-pulse" />
+
+      {/* Status filters skeleton */}
+      <div className="flex flex-wrap gap-2">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-8 w-24 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+        ))}
+      </div>
+
+      {/* Project filters skeleton - only if projects exist */}
+      {projectsPresent && (
+        <div className="flex flex-wrap gap-2">
+          <div className="h-8 w-24 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+          <div className="h-8 w-20 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+          <div className="h-8 w-28 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 const FiltersSection = dynamic(
   () => import('@/components/dashboard/FiltersSection'),
   {
-    loading: () => (
-      <div className="h-80 rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-        <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
-        <div className="mt-4 space-y-3">
-          <div className="h-10 rounded-[20px] bg-[var(--panel-strong)] animate-pulse" />
-          <div className="flex flex-wrap gap-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-8 w-24 rounded-full bg-[var(--panel-strong)] animate-pulse" />
-            ))}
-          </div>
-        </div>
-      </div>
-    ),
     ssr: false,
   }
 );
 
 type StatusFilter = 'all' | StatusType;
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return '—';
-  }
-
-  return new Date(value).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function sectionTitle(count: number, singular: string, plural: string) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function getChangeHeadline(application: Application) {
-  if (application.last_change_fields.includes('last_changed_date')) {
-    return 'Обновилась дата последнего движения';
-  }
-
-  if (application.last_change_fields.includes('status')) {
-    return 'Изменился статус';
-  }
-
-  if (application.last_change_fields.includes('acting_party')) {
-    return 'Сменилась действующая сторона';
-  }
-
-  if (application.last_change_fields.includes('current_action')) {
-    return 'Обновилось текущее действие';
-  }
-
-  return 'Зафиксировано новое изменение';
-}
 
 export default function DashboardPage() {
   const sync = useSyncEngineSnapshot();
@@ -319,16 +297,18 @@ export default function DashboardPage() {
               onNavigate={() => {}}
             />
 
-            <FiltersSection
-              search={search}
-              statusFilter={statusFilter}
-              statusFilters={statusFilters}
-              projects={projects}
-              projectFilter={projectFilter}
-              onSearchChange={setSearch}
-              onStatusFilterChange={setStatusFilter}
-              onProjectFilterChange={setProjectFilter}
-            />
+            <Suspense fallback={createFiltersSectionLoading(projects.length > 0)()}>
+              <FiltersSection
+                search={search}
+                statusFilter={statusFilter}
+                statusFilters={statusFilters}
+                projects={projects}
+                projectFilter={projectFilter}
+                onSearchChange={setSearch}
+                onStatusFilterChange={setStatusFilter}
+                onProjectFilterChange={setProjectFilter}
+              />
+            </Suspense>
           </div>
         </section>
 

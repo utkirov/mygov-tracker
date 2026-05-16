@@ -3,43 +3,7 @@
 import Link from 'next/link';
 import type { Application } from '@/types';
 import { getApplicationChangeFieldLabel } from '@/types';
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return '—';
-  }
-
-  return new Date(value).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function sectionTitle(count: number, singular: string, plural: string) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function getChangeHeadline(application: Application) {
-  if (application.last_change_fields.includes('last_changed_date')) {
-    return 'Обновилась дата последнего движения';
-  }
-
-  if (application.last_change_fields.includes('status')) {
-    return 'Изменился статус';
-  }
-
-  if (application.last_change_fields.includes('acting_party')) {
-    return 'Сменилась действующая сторона';
-  }
-
-  if (application.last_change_fields.includes('current_action')) {
-    return 'Обновилось текущее действие';
-  }
-
-  return 'Зафиксировано новое изменение';
-}
+import { formatDate, getChangeHeadline, sectionTitle } from '@/lib/format-utils';
 
 interface Props {
   changedApplications: Application[];

@@ -11,6 +11,7 @@ import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 
 import { requestImmediateSyncRun, syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
+import { formatDate, getChangeHeadline } from '@/lib/format-utils';
 import type { Application, StatusHistory as TStatusHistory } from '@/types';
 import {
   getApplicationChangeFieldLabel,
@@ -78,40 +79,6 @@ const OperationalDataSection = dynamic(
     ssr: false,
   }
 );
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return '—';
-  }
-
-  return new Date(value).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function getChangeHeadline(application: Application) {
-  if (application.last_change_fields.includes('last_changed_date')) {
-    return 'Новая дата последнего движения';
-  }
-
-  if (application.last_change_fields.includes('status')) {
-    return 'Изменился статус';
-  }
-
-  if (application.last_change_fields.includes('acting_party')) {
-    return 'Сменилась действующая сторона';
-  }
-
-  if (application.last_change_fields.includes('current_action')) {
-    return 'Изменилось текущее действие';
-  }
-
-  return 'Последнее найденное изменение';
-}
 
 export default function DetailPage() {
   const { id } = useParams<{ id: string }>();
