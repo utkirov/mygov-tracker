@@ -1,13 +1,13 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { app, BrowserWindow, Menu, Tray, dialog } = require('electron');
 const isDev = require('electron-is-dev');
 const path = require('path');
 const fs = require('fs');
-const { spawn, execSync } = require('child_process');
+const { spawn } = require('child_process');
 const http = require('http');
 
 let mainWindow;
 let nextServer;
-let serverReady = false;
 let tray = null;
 app.isQuitting = false;
 
@@ -97,7 +97,11 @@ function createTrayMenu() {
   // Show/hide window on tray icon double-click
   tray.on('double-click', () => {
     if (!mainWindow) return;
-    mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
+    if (mainWindow.isVisible()) {
+      mainWindow.hide();
+    } else {
+      mainWindow.show();
+    }
   });
 
   return tray;
@@ -107,9 +111,8 @@ function createTrayMenu() {
 function checkServerReady() {
   return new Promise((resolve) => {
     const checkInterval = setInterval(() => {
-      const req = http.get('http://localhost:3000', (res) => {
+      const req = http.get('http://localhost:3000', () => {
         clearInterval(checkInterval);
-        serverReady = true;
         resolve();
       });
       req.on('error', () => {

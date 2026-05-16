@@ -8,7 +8,6 @@ interface Props {
 }
 
 export default function PdfSection({
-  applicationId,
   pdfFilename,
   pdfUploading,
   onPdfReupload,

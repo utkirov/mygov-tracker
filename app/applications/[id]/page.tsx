@@ -2,8 +2,8 @@
 
 import {
   startTransition,
+  useCallback,
   useEffect,
-  useEffectEvent,
   useMemo,
   useState,
 } from 'react';
@@ -92,7 +92,7 @@ export default function DetailPage() {
   const [togglingArchive, setTogglingArchive] = useState(false);
   const [pdfUploading, setPdfUploading] = useState(false);
 
-  const loadApplication = useEffectEvent(async () => {
+  const loadApplication = useCallback(async () => {
     const response = await fetch(`/api/applications/${id}`, { cache: 'no-store' });
     const payload = await response.json() as { application: Application; history: TStatusHistory[] };
 
@@ -101,7 +101,7 @@ export default function DetailPage() {
       setHistory(payload.history);
       setNotes(payload.application.notes);
     });
-  });
+  }, [id]);
 
   useEffect(() => {
     void loadApplication();
@@ -114,7 +114,7 @@ export default function DetailPage() {
     return () => {
       window.removeEventListener(syncEngineEvents.applications, handleApplicationsUpdated);
     };
-  }, []);
+  }, [loadApplication]);
 
   async function handleCheck() {
     setChecking(true);

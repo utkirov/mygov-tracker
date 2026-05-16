@@ -2,15 +2,14 @@
 
 import {
   startTransition,
+  useCallback,
   useDeferredValue,
   useEffect,
-  useEffectEvent,
   useMemo,
   useState,
   Suspense,
 } from 'react';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 
 import { ApplicationCard } from '@/components/ApplicationCard';
@@ -19,9 +18,9 @@ import {
   syncEngineEvents,
   useSyncEngineSnapshot,
 } from '@/lib/sync-engine';
-import { formatDate, getChangeHeadline, sectionTitle } from '@/lib/format-utils';
+import { formatDate } from '@/lib/format-utils';
 import type { Application, Project, StatusType } from '@/types';
-import { getApplicationChangeFieldLabel, getStatusType } from '@/types';
+import { getStatusType } from '@/types';
 
 // Lazy-loaded sections
 const RecentChangesSection = dynamic(
@@ -58,31 +57,35 @@ const AttentionSection = dynamic(
   }
 );
 
-const createFiltersSectionLoading = (projectsPresent: boolean) => () => (
-  <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-    <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
-    <div className="mt-4 space-y-3">
-      {/* Search input skeleton */}
-      <div className="h-10 rounded-[20px] bg-[var(--panel-strong)] animate-pulse" />
+const createFiltersSectionLoading = (projectsPresent: boolean) => {
+  const LoadingComponent = () => (
+    <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+      <div className="h-6 w-40 rounded-lg bg-[var(--panel-strong)] animate-pulse" />
+      <div className="mt-4 space-y-3">
+        {/* Search input skeleton */}
+        <div className="h-10 rounded-[20px] bg-[var(--panel-strong)] animate-pulse" />
 
-      {/* Status filters skeleton */}
-      <div className="flex flex-wrap gap-2">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-8 w-24 rounded-full bg-[var(--panel-strong)] animate-pulse" />
-        ))}
-      </div>
-
-      {/* Project filters skeleton - only if projects exist */}
-      {projectsPresent && (
+        {/* Status filters skeleton */}
         <div className="flex flex-wrap gap-2">
-          <div className="h-8 w-24 rounded-full bg-[var(--panel-strong)] animate-pulse" />
-          <div className="h-8 w-20 rounded-full bg-[var(--panel-strong)] animate-pulse" />
-          <div className="h-8 w-28 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-8 w-24 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+          ))}
         </div>
-      )}
+
+        {/* Project filters skeleton - only if projects exist */}
+        {projectsPresent && (
+          <div className="flex flex-wrap gap-2">
+            <div className="h-8 w-24 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+            <div className="h-8 w-20 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+            <div className="h-8 w-28 rounded-full bg-[var(--panel-strong)] animate-pulse" />
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+  LoadingComponent.displayName = 'FiltersSectionLoading';
+  return LoadingComponent;
+};
 
 const FiltersSection = dynamic(
   () => import('@/components/dashboard/FiltersSection'),
@@ -102,7 +105,7 @@ export default function DashboardPage() {
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
 
-  const loadData = useEffectEvent(async () => {
+  const loadData = useCallback(async () => {
     const [applicationsResponse, projectsResponse] = await Promise.all([
       fetch('/api/applications', { cache: 'no-store' }),
       fetch('/api/projects', { cache: 'no-store' }),
@@ -117,7 +120,7 @@ export default function DashboardPage() {
       setApplications(applicationsPayload);
       setProjects(projectsPayload);
     });
-  });
+  }, []);
 
   useEffect(() => {
     void loadData();
@@ -130,7 +133,7 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener(syncEngineEvents.applications, handleApplicationsUpdated);
     };
-  }, []);
+  }, [loadData]);
 
   const activeApplications = useMemo(
     () => applications.filter((application) => !application.archived),

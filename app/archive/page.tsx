@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
 
 import { ApplicationCard } from '@/components/ApplicationCard';
 import type { Application, Project } from '@/types';
@@ -10,7 +10,7 @@ export default function ArchivePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
 
-  const loadData = useEffectEvent(async () => {
+  const loadData = useCallback(async () => {
     const [applicationsResponse, projectsResponse] = await Promise.all([
       fetch('/api/applications?archived=true', { cache: 'no-store' }),
       fetch('/api/projects', { cache: 'no-store' }),
@@ -21,13 +21,15 @@ export default function ArchivePage() {
       projectsResponse.json() as Promise<Project[]>,
     ]);
 
-    setApplications(applicationsPayload);
-    setProjects(projectsPayload);
-  });
+    startTransition(() => {
+      setApplications(applicationsPayload);
+      setProjects(projectsPayload);
+    });
+  }, []);
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [loadData]);
 
   const filtered = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();

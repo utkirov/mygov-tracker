@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
 
 import { requestImmediateSyncRun, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import { showToast } from '@/lib/toast';
@@ -65,17 +65,19 @@ export default function SettingsPage() {
   const [savingMode, setSavingMode] = useState<SaveMode | null>(null);
   const [testing, setTesting] = useState(false);
 
-  const loadSettings = useEffectEvent(async () => {
+  const loadSettings = useCallback(async () => {
     const response = await fetch('/api/settings', { cache: 'no-store' });
     const payload = await response.json() as Record<string, unknown>;
     const nextForm = buildForm(payload);
-    setForm(nextForm);
-    setInitialForm(nextForm);
-  });
+    startTransition(() => {
+      setForm(nextForm);
+      setInitialForm(nextForm);
+    });
+  }, []);
 
   useEffect(() => {
     void loadSettings();
-  }, []);
+  }, [loadSettings]);
 
   const queueDraft = useMemo(
     () => ({
