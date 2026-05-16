@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog } = require('electron');
 const isDev = require('electron-is-dev');
 const path = require('path');
 const fs = require('fs');
@@ -46,67 +46,6 @@ function resolveStandaloneServerPath(appDir) {
   }
 
   throw new Error('Standalone server.js not found');
-}
-
-// Функция для регистрации автозапуска
-function registerAutoStart() {
-  try {
-    // Windows registry key for startup applications
-    const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
-    const appName = 'my.gov tracker';
-
-    // Get the app's executable path
-    const exePath = app.getPath('exe');
-
-    // PowerShell command to add registry entry
-    const psCommand = `
-      $regPath = '${regKey.replace(/\\/g, '\\\\')}'
-      $appName = '${appName}'
-      $exePath = '${exePath.replace(/\\/g, '\\\\')}'
-
-      if (-not (Test-Path $regPath)) {
-        New-Item -Path $regPath -Force | Out-Null
-      }
-
-      New-ItemProperty -Path $regPath -Name $appName -Value $exePath -PropertyType String -Force | Out-Null
-    `;
-
-    // Run PowerShell command to register
-    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, {
-      stdio: 'ignore',
-    });
-
-    console.log('✅ Auto-start registered successfully');
-    return true;
-  } catch (error) {
-    console.warn('⚠️  Failed to register auto-start:', error.message);
-    return false;
-  }
-}
-
-// Функция для удаления автозапуска
-function unregisterAutoStart() {
-  try {
-    const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
-    const appName = 'my.gov tracker';
-
-    const psCommand = `
-      $regPath = '${regKey.replace(/\\/g, '\\\\')}'
-      $appName = '${appName}'
-
-      Remove-ItemProperty -Path $regPath -Name $appName -ErrorAction SilentlyContinue
-    `;
-
-    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, {
-      stdio: 'ignore',
-    });
-
-    console.log('✅ Auto-start unregistered successfully');
-    return true;
-  } catch (error) {
-    console.warn('⚠️  Failed to unregister auto-start:', error.message);
-    return false;
-  }
 }
 
 // Функция для создания системного трея
@@ -338,7 +277,6 @@ function createMenu() {
         {
           label: 'О приложении',
           click: () => {
-            const { dialog } = require('electron');
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'my.gov tracker',
@@ -364,9 +302,10 @@ app.on('ready', async () => {
   try {
     console.log('⏳ Инициализация приложения...');
 
-    // Register auto-start on Windows
+    // Dynamic import of the ES module for auto-start
     if (process.platform === 'win32') {
-      registerAutoStart();
+      const { registerAutoStart: registerAutoStartFn } = await import('../scripts/register-autostart.mjs');
+      registerAutoStartFn();
     }
 
     await startNextServer();
