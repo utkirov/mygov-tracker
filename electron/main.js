@@ -35,13 +35,14 @@ function resolveStandaloneServerPath(appDir) {
 
 // Функция для создания системного трея
 function createTrayMenu() {
-  const iconPath = path.join(__dirname, '../public/favicon.ico');
+  const iconPath = path.join(__dirname, '../app/favicon.ico');
   tray = new Tray(iconPath);
 
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Show',
       click: () => {
+        if (!mainWindow) return;
         mainWindow.show();
         mainWindow.focus();
       },
@@ -50,12 +51,14 @@ function createTrayMenu() {
       label: 'Check Now',
       click: () => {
         // Send IPC message to renderer to trigger sync
+        if (!mainWindow) return;
         mainWindow.webContents.send('sync-check-now');
       },
     },
     {
       label: 'Settings',
       click: () => {
+        if (!mainWindow) return;
         mainWindow.show();
         mainWindow.focus();
         // Navigate to settings if needed
@@ -74,9 +77,11 @@ function createTrayMenu() {
   ]);
 
   tray.setContextMenu(contextMenu);
+  tray.setToolTip('my.gov tracker');
 
   // Show/hide window on tray icon double-click
   tray.on('double-click', () => {
+    if (!mainWindow) return;
     mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
   });
 
@@ -168,9 +173,12 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
-    icon: path.join(__dirname, '../public/favicon.ico'),
+    icon: path.join(__dirname, '../app/favicon.ico'),
     show: false,
   });
+
+  // Create system tray immediately after window creation
+  createTrayMenu();
 
   // Загружаем приложение
   mainWindow.loadURL('http://localhost:3000');
@@ -190,29 +198,26 @@ function createWindow() {
     console.error('❌ Ошибка загрузки страницы');
     // Пытаемся переагрузить через 2 секунды
     setTimeout(() => {
-      mainWindow.reload();
+      if (mainWindow) mainWindow.reload();
     }, 2000);
   });
 
   // Hide window when minimized (instead of closing)
   mainWindow.on('minimize', () => {
-    mainWindow.hide();
+    if (mainWindow) mainWindow.hide();
   });
 
   // Close button minimizes to tray instead of quitting
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
-      mainWindow.hide();
+      if (mainWindow) mainWindow.hide();
     }
   });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-
-  // Create system tray
-  createTrayMenu();
 }
 
 // Меню приложения
