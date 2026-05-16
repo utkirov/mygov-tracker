@@ -1,29 +1,25 @@
-import type { Metadata, Viewport } from 'next';
-import { Manrope } from 'next/font/google';
-import { AppShell } from '@/components/AppShell';
+import type { Metadata } from 'next';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ToastProvider } from '@/components/ToastProvider';
 import './globals.css';
 
-const manrope = Manrope({ subsets: ['latin', 'cyrillic'] });
-
 export const metadata: Metadata = {
-  title: 'my.gov tracker',
-  description: 'Трекер заявок my.gov.uz',
+  title: 'my.gov tracker — Local Monitor',
+  description: 'Track my.gov.uz applications locally',
+  icons: '/favicon.ico',
 };
 
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className={manrope.className}>
+      <body>
         <ThemeProvider>
           <ToastProvider>
-            <AppShell>{children}</AppShell>
+            {children}
           </ToastProvider>
         </ThemeProvider>
       </body>
