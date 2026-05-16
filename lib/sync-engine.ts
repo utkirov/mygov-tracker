@@ -31,6 +31,11 @@ export interface SyncEngineSnapshot {
 const DEFAULT_INTERVAL_MINUTES = 15;
 const DEFAULT_DELAY_BETWEEN_CHECKS_MS = 2500;
 const DEFAULT_CONCURRENCY_LIMIT = 1;
+/**
+ * Debounce delay for listener notifications (ms)
+ * Trade-off: 300ms reduces excessive re-renders during rapid updates (queue processing)
+ * but means UI updates may be delayed up to 300ms during high-activity periods
+ */
 const DEBOUNCE_DELAY_MS = 300;
 const SETTINGS_ENDPOINT = '/api/settings';
 const APPLICATIONS_ENDPOINT = '/api/applications';
@@ -44,7 +49,6 @@ let scheduledTimer: number | null = null;
 let runningCycle: Promise<void> | null = null;
 let pendingImmediateRun = false;
 let lastNotifiedRunError: string | null = null;
-let emitTimeoutId: number | null = null;
 
 let snapshot: SyncEngineSnapshot = {
   enabled: false,
@@ -61,18 +65,23 @@ let snapshot: SyncEngineSnapshot = {
 };
 
 /**
- * Debounce helper that defers function execution
+ * Generic debounce function that delays and coalesces function calls.
+ * Useful for reducing excessive listener notifications during rapid state changes.
+ * Returns a debounced function with a cancel method to clear pending calls.
  * @param func Function to debounce
  * @param wait Delay in milliseconds
- * @returns Debounced function
+ * @returns Debounced function with cancel method
  */
 function debounce<Args extends unknown[]>(
   func: (...args: Args) => void,
   wait: number
-): (...args: Args) => void {
+): {
+  (...args: Args): void;
+  cancel(): void;
+} {
   let timeoutId: number | null = null;
 
-  return (...args: Args) => {
+  const debounced = (...args: Args) => {
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
@@ -81,6 +90,15 @@ function debounce<Args extends unknown[]>(
       timeoutId = null;
     }, wait);
   };
+
+  debounced.cancel = () => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  };
+
+  return debounced;
 }
 
 /**
@@ -434,6 +452,7 @@ export function stopSyncEngine() {
   started = false;
   pendingImmediateRun = false;
   clearScheduledTimer();
+  debouncedEmit.cancel(); // Cancel any pending listener notifications
 }
 
 export function subscribeSyncEngine(listener: SyncEngineListener) {
