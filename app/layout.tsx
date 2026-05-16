@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ToastProvider } from '@/components/ToastProvider';
+import { TrayListeners } from '@/components/TrayListeners';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({
     <html lang="ru" suppressHydrationWarning>
       <body>
         <ThemeProvider>
+          <TrayListeners />
           <ToastProvider>
             {children}
           </ToastProvider>
