@@ -3,6 +3,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { ToastProvider } from '@/components/ToastProvider';
 import { TrayListeners } from '@/components/TrayListeners';
 import { SyncEngineProvider } from '@/components/SyncEngineProvider';
+import { SoundNotificationProvider } from '@/components/SoundNotificationProvider';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export default function RootLayout({
         <ThemeProvider>
           <SyncEngineProvider />
           <TrayListeners />
+          <SoundNotificationProvider />
           <ToastProvider>
             {children}
           </ToastProvider>

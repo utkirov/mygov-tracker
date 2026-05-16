@@ -405,6 +405,13 @@ async function runCycle(trigger: 'scheduled' | 'immediate' | 'start') {
         nextRunAt: buildNextRunAt(finishedAt, settings.intervalMinutes),
         lastRunError,
       });
+
+      // Emit completion/error events
+      if (errorCount > 0) {
+        window.dispatchEvent(new Event(syncEngineEvents.error));
+      } else {
+        window.dispatchEvent(new Event(syncEngineEvents.complete));
+      }
     } catch (error) {
       const finishedAt = new Date().toISOString();
 
@@ -417,6 +424,9 @@ async function runCycle(trigger: 'scheduled' | 'immediate' | 'start') {
         nextRunAt: buildNextRunAt(finishedAt, settings.intervalMinutes),
         lastRunError: error instanceof Error ? error.message : 'Background sync failed',
       });
+
+      // Emit error event
+      window.dispatchEvent(new Event(syncEngineEvents.error));
     }
   })();
 
@@ -498,6 +508,8 @@ export function useSyncEngineSnapshot(): SyncEngineSnapshot {
 export const syncEngineEvents = {
   engine: ENGINE_EVENT,
   applications: APPLICATIONS_EVENT,
+  complete: 'sync-engine:cycle-complete',
+  error: 'sync-engine:cycle-error',
 };
 
 if (typeof window !== 'undefined') {
