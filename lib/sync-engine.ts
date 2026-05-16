@@ -31,6 +31,7 @@ export interface SyncEngineSnapshot {
 const DEFAULT_INTERVAL_MINUTES = 15;
 const DEFAULT_DELAY_BETWEEN_CHECKS_MS = 2500;
 const DEFAULT_CONCURRENCY_LIMIT = 1;
+const DEBOUNCE_DELAY_MS = 300;
 const SETTINGS_ENDPOINT = '/api/settings';
 const APPLICATIONS_ENDPOINT = '/api/applications';
 const ENGINE_EVENT = 'sync-engine:updated';
@@ -43,6 +44,7 @@ let scheduledTimer: number | null = null;
 let runningCycle: Promise<void> | null = null;
 let pendingImmediateRun = false;
 let lastNotifiedRunError: string | null = null;
+let emitTimeoutId: number | null = null;
 
 let snapshot: SyncEngineSnapshot = {
   enabled: false,
@@ -58,14 +60,51 @@ let snapshot: SyncEngineSnapshot = {
   lastRunError: null,
 };
 
-function emit() {
+/**
+ * Debounce helper that defers function execution
+ * @param func Function to debounce
+ * @param wait Delay in milliseconds
+ * @returns Debounced function
+ */
+function debounce<Args extends unknown[]>(
+  func: (...args: Args) => void,
+  wait: number
+): (...args: Args) => void {
+  let timeoutId: number | null = null;
+
+  return (...args: Args) => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = window.setTimeout(() => {
+      func(...args);
+      timeoutId = null;
+    }, wait);
+  };
+}
+
+/**
+ * Emit listener notifications with debouncing to prevent excessive re-renders
+ */
+function emitListenerNotifications() {
   for (const listener of listeners) {
     listener();
   }
+}
+
+/**
+ * Debounced emit that prevents excessive listener notifications during rapid updates
+ */
+const debouncedEmit = debounce(() => {
+  emitListenerNotifications();
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(ENGINE_EVENT, { detail: snapshot }));
   }
+}, DEBOUNCE_DELAY_MS);
+
+function emit() {
+  debouncedEmit();
 }
 
 function updateSnapshot(patch: Partial<SyncEngineSnapshot>) {
