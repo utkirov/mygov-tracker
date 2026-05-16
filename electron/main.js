@@ -1,12 +1,35 @@
 const { app, BrowserWindow, Menu } = require('electron');
 const isDev = require('electron-is-dev');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const http = require('http');
 
 let mainWindow;
 let nextServer;
 let serverReady = false;
+
+function resolveStandaloneServerPath(appDir) {
+  const directPath = path.join(appDir, '.next', 'standalone', 'server.js');
+  if (fs.existsSync(directPath)) {
+    return directPath;
+  }
+
+  const worktreesDir = path.join(appDir, '.next', 'standalone', '.worktrees');
+  if (fs.existsSync(worktreesDir)) {
+    const nestedServer = fs
+      .readdirSync(worktreesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(worktreesDir, entry.name, 'server.js'))
+      .find((candidate) => fs.existsSync(candidate));
+
+    if (nestedServer) {
+      return nestedServer;
+    }
+  }
+
+  throw new Error('Standalone server.js not found');
+}
 
 // Функция для проверки доступности сервера
 function checkServerReady() {
@@ -47,8 +70,9 @@ function startNextServer() {
     } else {
       // Production - запускаем Next.js standalone сервер
       command = 'node';
-      args = [path.join(appDir, '.next/standalone/server.js')];
+      args = [resolveStandaloneServerPath(appDir)];
       env.PORT = '3000';
+      env.LOCAL_APP_ROOT = appDir;
     }
 
     console.log(`🚀 Запускаю сервер: ${command} ${args.join(' ')}`);

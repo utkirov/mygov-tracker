@@ -1,169 +1,515 @@
 'use client';
-import { useEffect, useState } from 'react';
+
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+} from 'react';
 import { useParams, useRouter } from 'next/navigation';
+
+import { requestImmediateSyncRun, syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import type { Application, StatusHistory as TStatusHistory } from '@/types';
-import { getStatusType } from '@/types';
-import { StatusBadge } from '@/components/StatusBadge';
-import { StatusHistory } from '@/components/StatusHistory';
+import {
+  getApplicationChangeFieldLabel,
+  getStatusType,
+  isApplicationCheckable,
+} from '@/types';
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return '—';
+  }
+
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getChangeHeadline(application: Application) {
+  if (application.last_change_fields.includes('last_changed_date')) {
+    return 'Новая дата последнего движения';
+  }
+
+  if (application.last_change_fields.includes('status')) {
+    return 'Изменился статус';
+  }
+
+  if (application.last_change_fields.includes('acting_party')) {
+    return 'Сменилась действующая сторона';
+  }
+
+  if (application.last_change_fields.includes('current_action')) {
+    return 'Изменилось текущее действие';
+  }
+
+  return 'Последнее найденное изменение';
+}
 
 export default function DetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [app, setApp] = useState<Application | null>(null);
+  const sync = useSyncEngineSnapshot();
+  const [application, setApplication] = useState<Application | null>(null);
   const [history, setHistory] = useState<TStatusHistory[]>([]);
   const [notes, setNotes] = useState('');
   const [checking, setChecking] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [togglingArchive, setTogglingArchive] = useState(false);
   const [pdfUploading, setPdfUploading] = useState(false);
 
-  async function handlePdfReupload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPdfUploading(true);
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch(`/api/applications/${id}/pdf`, { method: 'POST', body: fd });
-    if (res.ok) {
-      setApp(prev => prev ? { ...prev, pdf_filename: file.name } : prev);
-    }
-    setPdfUploading(false);
-    e.target.value = '';
-  }
+  const loadApplication = useEffectEvent(async () => {
+    const response = await fetch(`/api/applications/${id}`, { cache: 'no-store' });
+    const payload = await response.json() as { application: Application; history: TStatusHistory[] };
+
+    startTransition(() => {
+      setApplication(payload.application);
+      setHistory(payload.history);
+      setNotes(payload.application.notes);
+    });
+  });
 
   useEffect(() => {
-    fetch(`/api/applications/${id}`)
-      .then(r => r.json())
-      .then(({ application, history }) => {
-        setApp(application);
-        setHistory(history);
-        setNotes(application.notes);
-      });
-  }, [id]);
+    void loadApplication();
+
+    const handleApplicationsUpdated = () => {
+      void loadApplication();
+    };
+
+    window.addEventListener(syncEngineEvents.applications, handleApplicationsUpdated);
+    return () => {
+      window.removeEventListener(syncEngineEvents.applications, handleApplicationsUpdated);
+    };
+  }, []);
 
   async function handleCheck() {
     setChecking(true);
-    const res = await fetch(`/api/applications/${id}/check`, { method: 'POST' });
-    if (res.ok) {
-      const { application: updated, statusChanged } = await res.json();
-      setApp(updated);
-      if (statusChanged) {
-        fetch(`/api/applications/${id}`)
-          .then(r => r.json())
-          .then(({ history }) => setHistory(history));
-      }
+    try {
+      await fetch(`/api/applications/${id}/check`, { method: 'POST' });
+      requestImmediateSyncRun();
+      await loadApplication();
+    } finally {
+      setChecking(false);
     }
-    setChecking(false);
   }
 
   async function handleSaveNotes() {
-    setSaving(true);
-    await fetch(`/api/applications/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes }),
-    });
-    setSaving(false);
+    if (!application) {
+      return;
+    }
+
+    setSavingNotes(true);
+    try {
+      await fetch(`/api/applications/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      });
+      await loadApplication();
+    } finally {
+      setSavingNotes(false);
+    }
   }
 
-  if (!app) return <div className="p-8 text-center text-[var(--text2)]">Загрузка...</div>;
+  async function handleToggleArchive() {
+    if (!application) {
+      return;
+    }
 
-  const fields = [
-    { label: 'Наименование услуги', value: app.service_name },
-    { label: 'Организация', value: app.organization },
-    { label: 'Дата подачи', value: app.submission_date ? new Date(app.submission_date).toLocaleString('ru-RU') : '—' },
-    { label: 'Последнее изменение', value: app.last_changed_date ? new Date(app.last_changed_date).toLocaleString('ru-RU') : '—' },
-    { label: 'Пароль для проверки', value: app.verification_password },
-    { label: 'SMS-телефон', value: app.sms_phone },
-  ];
+    setTogglingArchive(true);
+    try {
+      await fetch(`/api/applications/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: !application.archived }),
+      });
+      router.push(application.archived ? '/dashboard' : '/archive');
+    } finally {
+      setTogglingArchive(false);
+    }
+  }
+
+  async function handlePdfReupload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setPdfUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      await fetch(`/api/applications/${id}/pdf`, { method: 'POST', body: formData });
+      await loadApplication();
+    } finally {
+      setPdfUploading(false);
+      event.target.value = '';
+    }
+  }
+
+  const timelineItems = useMemo(() => {
+    return history.map((entry, index) => {
+      const matchesCurrentStatus = application ? entry.status === application.status : false;
+      const matchesCurrentAction = application ? entry.current_action === application.current_action : false;
+      const isCurrentSnapshot = index === 0 || (matchesCurrentStatus && matchesCurrentAction);
+
+      return {
+        ...entry,
+        isCurrentSnapshot,
+      };
+    });
+  }, [application, history]);
+
+  if (!application) {
+    return <div className="px-6 py-10 text-sm text-[var(--text-soft)]">Загрузка заявления…</div>;
+  }
+
+  const checkable = isApplicationCheckable(application);
+  const statusType = getStatusType(application.acting_party, application.status);
+  const statusTone = {
+    action_required: 'text-red-700 dark:text-red-300',
+    in_progress: 'text-amber-800 dark:text-amber-200',
+    completed: 'text-emerald-700 dark:text-emerald-300',
+  }[statusType];
 
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
-      <div className="bg-[var(--surface)] border-b border-[var(--border)] px-4 md:px-6 py-3 md:py-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => router.back()} className="text-[var(--text2)] text-lg md:text-xl hover:text-[var(--text)]">←</button>
-          <h1 className="font-bold text-base md:text-lg font-mono text-[var(--text)] truncate">№ {app.application_number}</h1>
-        </div>
-        <button
-          onClick={() => router.push(`/applications/${id}/edit`)}
-          className="text-sm text-[var(--text2)] border border-[var(--border)] px-3 py-1.5 rounded-lg hover:bg-[var(--surface2)] transition shrink-0"
-        >
-          Изменить
-        </button>
-      </div>
-
-      <div className="max-w-2xl mx-auto px-4 md:px-6 py-5 md:py-6 flex flex-col gap-5">
-        <StatusBadge status={app.status} acting_party={app.acting_party} />
-
-        {app.current_action && (
-          <div className="card bg-[var(--surface2)] p-4 border border-[var(--border)]">
-            <p className="text-sm text-[var(--text2)] mb-1">Текущее действие</p>
-            <p className="text-[var(--text)] font-medium">{app.current_action}</p>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-3 md:flex-row md:gap-3">
-          <button
-            onClick={handleCheck}
-            disabled={checking}
-            className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-sm px-4 py-2.5 rounded-lg font-medium transition"
-          >
-            {checking ? '...' : '↻ Проверить'}
-          </button>
-          <a
-            href={`/api/applications/${id}/preview`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 text-center border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm px-4 py-2.5 rounded-lg hover:bg-[var(--surface2)] transition"
-          >
-            Оригинал ↗
-          </a>
-        </div>
-
-        <div className="card bg-[var(--surface)] border border-[var(--border)] p-4 md:p-5 flex flex-col gap-4">
-          {fields.map(f => (
-            <div key={f.label}>
-              <div className="text-xs text-[var(--text3)] uppercase tracking-wide mb-1">{f.label}</div>
-              <div className="text-sm text-[var(--text)]">{f.value || '—'}</div>
+    <div className="px-4 py-5 md:px-6 lg:px-10 lg:py-8">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <button
+                onClick={() => router.back()}
+                className="rounded-full bg-[var(--panel-strong)] px-3 py-1.5 text-sm text-[var(--text-soft)] transition hover:text-[var(--text)]"
+              >
+                Назад
+              </button>
+              <p className="mt-4 text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                Заявление № {application.application_number}
+              </p>
+              <h1 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[var(--text)]">
+                {application.object_name || application.service_name}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-[var(--text-soft)] md:text-base">
+                {application.object_name ? application.service_name : application.organization}
+              </p>
             </div>
-          ))}
-        </div>
 
-        <div className="card bg-[var(--surface)] border border-[var(--border)] px-4 py-3 flex items-center gap-3">
-          <span>📄</span>
-          {app.pdf_filename ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:w-[360px]">
+              <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                  Последнее изменение
+                </p>
+                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+                  {formatDate(application.last_changed_date)}
+                </p>
+              </div>
+              <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                  Последняя проверка
+                </p>
+                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+                  {formatDate(application.last_checked_at)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-4">
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] p-4">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                Статус
+              </p>
+              <p className={`mt-3 text-lg font-semibold ${statusTone}`}>
+                {application.status}
+              </p>
+            </div>
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] p-4">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                Действует
+              </p>
+              <p className="mt-3 text-lg font-semibold text-[var(--text)]">
+                {application.acting_party || '—'}
+              </p>
+            </div>
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] p-4">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                Следующая проверка
+              </p>
+              <p className="mt-3 text-lg font-semibold text-[var(--text)]">
+                {formatDate(application.next_check_at)}
+              </p>
+            </div>
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] p-4">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                Состояние цикла
+              </p>
+              <p className="mt-3 text-lg font-semibold text-[var(--text)]">
+                {application.sync_state}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            {checkable ? (
+              <button
+                onClick={handleCheck}
+                disabled={checking}
+                className="rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-60"
+              >
+                {checking ? 'Проверяю…' : 'Проверить сейчас'}
+              </button>
+            ) : (
+              <div className="rounded-2xl bg-[var(--panel-strong)] px-5 py-3 text-sm text-[var(--text-soft)]">
+                Архивные и завершённые заявления больше не участвуют в очереди.
+              </div>
+            )}
+
+            <a
+              href={`/api/applications/${id}/preview`}
+              className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-5 py-3 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]"
+            >
+              Открыть оригинал
+            </a>
             <a
               href={`/api/applications/${id}/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 text-sm font-medium text-[var(--accent)] hover:underline truncate"
+              className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-5 py-3 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]"
             >
-              {app.pdf_filename}
+              Открыть PDF
             </a>
-          ) : (
-            <span className="flex-1 text-sm text-[var(--text2)]">PDF не прикреплён</span>
-          )}
-          <label className="shrink-0 cursor-pointer text-xs text-[var(--text2)] hover:text-[var(--accent)] border border-[var(--border)] rounded-lg px-2 py-1 transition">
-            {pdfUploading ? '...' : app.pdf_filename ? '↑ Заменить' : '↑ Загрузить'}
-            <input type="file" accept=".pdf" className="hidden" onChange={handlePdfReupload} disabled={pdfUploading} />
-          </label>
-        </div>
+            <button
+              onClick={handleToggleArchive}
+              disabled={togglingArchive}
+              className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-5 py-3 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)] disabled:opacity-60"
+            >
+              {togglingArchive
+                ? 'Сохраняю…'
+                : application.archived
+                  ? 'Вернуть в активные'
+                  : 'Переместить в архив'}
+            </button>
+            <button
+              onClick={() => router.push(`/applications/${id}/edit`)}
+              className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-5 py-3 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]"
+            >
+              Изменить данные
+            </button>
+          </div>
+        </section>
 
-        <div className="card bg-[var(--surface)] border border-[var(--border)] p-4 md:p-5">
-          <label className="text-xs text-[var(--text3)] uppercase tracking-wide block mb-3">Заметки</label>
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            onBlur={handleSaveNotes}
-            className="w-full text-sm text-[var(--text)] bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--accent)] min-h-[80px]"
-            placeholder="Добавьте заметку..."
-          />
-          {saving && <p className="text-xs text-[var(--text2)] mt-2">Сохраняю...</p>}
-        </div>
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(300px,0.92fr)]">
+          <div className="space-y-6">
+            <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                Последнее найденное изменение
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                {application.last_change_summary.length > 0 ? getChangeHeadline(application) : 'Изменения пока не зафиксированы'}
+              </h2>
 
-        <div className="card bg-[var(--surface)] border border-[var(--border)] p-4 md:p-5">
-          <h2 className="text-xs text-[var(--text3)] uppercase tracking-wide mb-4">История статусов</h2>
-          <StatusHistory history={history} />
-        </div>
+              <div className="mt-4 rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_12%,var(--panel-strong))_0%,var(--panel-strong)_100%)] p-5">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                      Последнее изменение в заявлении
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                      {formatDate(application.last_changed_date)}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">
+                      {application.last_change_summary[0] || 'После следующего реального изменения здесь появится краткое объяснение, что именно поменялось.'}
+                    </p>
+                  </div>
+
+                  <div className="md:text-right">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                      Обнаружено системой
+                    </p>
+                    <p className="mt-2 text-base font-semibold text-[var(--text)]">
+                      {formatDate(application.last_detected_change_at)}
+                    </p>
+                  </div>
+                </div>
+
+                {application.last_change_fields.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {application.last_change_fields.map((field) => (
+                      <span
+                        key={field}
+                        className="rounded-full bg-white/75 px-3 py-1.5 text-xs font-medium text-[var(--text)] dark:bg-white/8"
+                      >
+                        {getApplicationChangeFieldLabel(field)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {application.last_change_summary.length === 0 && (
+                  <div className="rounded-[24px] bg-[var(--panel-strong)] p-4 text-sm leading-6 text-[var(--text-soft)]">
+                    После следующего реального изменения здесь появится разница по полям: статус, текущее действие, действующая сторона и дата последнего изменения.
+                  </div>
+                )}
+
+                {application.last_change_summary.map((line) => (
+                  <div key={line} className="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] p-4 text-sm leading-6 text-[var(--text-soft)]">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                    История статусов
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                    Хронология движения
+                  </h2>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                {timelineItems.length === 0 && (
+                  <p className="rounded-[24px] bg-[var(--panel-strong)] p-4 text-sm leading-6 text-[var(--text-soft)]">
+                    История статусов пока пустая.
+                  </p>
+                )}
+
+                {timelineItems.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className={`rounded-[24px] border p-4 ${
+                      entry.isCurrentSnapshot
+                        ? 'border-[color:color-mix(in_oklab,var(--accent)_35%,var(--border))] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_10%,var(--panel))_0%,var(--panel)_100%)]'
+                        : 'border-[var(--border)] bg-[var(--panel)]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text)]">
+                          {entry.status}
+                        </p>
+                        <p className="mt-1 text-sm text-[var(--text-soft)]">
+                          {entry.current_action || 'Без дополнительного действия'}
+                        </p>
+                        <p className="mt-2 text-xs text-[var(--text-muted)]">
+                          {entry.acting_party || 'Без действующей стороны'}
+                        </p>
+                      </div>
+                      {entry.isCurrentSnapshot && (
+                        <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--accent)]">
+                          Текущий срез
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-3 text-xs text-[var(--text-muted)]">
+                      {formatDate(entry.recorded_at)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                Операционные данные
+              </p>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
+                  <span className="text-[var(--text-soft)]">Организация</span>
+                  <p className="mt-2 font-medium text-[var(--text)]">{application.organization || '—'}</p>
+                </div>
+                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
+                  <span className="text-[var(--text-soft)]">Дата подачи</span>
+                  <p className="mt-2 font-medium text-[var(--text)]">{formatDate(application.submission_date)}</p>
+                </div>
+                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
+                  <span className="text-[var(--text-soft)]">Пароль для проверки</span>
+                  <p className="mt-2 font-medium text-[var(--text)]">{application.verification_password || '—'}</p>
+                </div>
+                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
+                  <span className="text-[var(--text-soft)]">SMS-телефон</span>
+                  <p className="mt-2 font-medium text-[var(--text)]">{application.sms_phone || '—'}</p>
+                </div>
+                <div className="rounded-[24px] bg-[var(--panel-strong)] p-4">
+                  <span className="text-[var(--text-soft)]">Состояние фоновой очереди</span>
+                  <p className="mt-2 font-medium text-[var(--text)]">
+                    {sync.isRunning && sync.currentApplicationId === application.id
+                      ? 'Сейчас проверяется этим циклом'
+                      : application.archived
+                        ? 'Архивировано'
+                        : checkable
+                          ? 'Под наблюдением'
+                          : 'Исключено из цикла'}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                    Заметки
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                    Контекст по заявлению
+                  </h2>
+                </div>
+                {savingNotes && (
+                  <span className="text-xs text-[var(--text-muted)]">Сохраняю…</span>
+                )}
+              </div>
+
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                onBlur={handleSaveNotes}
+                className="mt-4 min-h-[160px] w-full rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 text-sm leading-6 text-[var(--text)] outline-none transition focus:border-[var(--accent)]"
+                placeholder="Внутренний контекст, договорённости, замечания по процессу."
+              />
+            </section>
+
+            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                    Исходный файл
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                    PDF заявления
+                  </h2>
+                </div>
+                <label className="cursor-pointer rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-2 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]">
+                  {pdfUploading ? 'Загружаю…' : application.pdf_filename ? 'Заменить PDF' : 'Загрузить PDF'}
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={handlePdfReupload}
+                    disabled={pdfUploading}
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 rounded-[24px] bg-[var(--panel-strong)] p-4 text-sm leading-6 text-[var(--text-soft)]">
+                {application.pdf_filename || 'PDF пока не прикреплён'}
+              </div>
+            </section>
+          </div>
+        </section>
       </div>
     </div>
   );

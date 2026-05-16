@@ -1,6 +1,8 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+
+import { resolveLocalProjectRoot } from './local-paths';
 
 export type LocalPlanId = 'free' | 'standard' | 'pro';
 export type LocalDbSyncState = 'idle' | 'queued' | 'checking' | 'success' | 'error';
@@ -106,8 +108,8 @@ export interface LocalDb {
 
 const LOCAL_DB_RELATIVE_PATH = path.join('data', 'local-db.json');
 
-export function getLocalDbFilePath(rootPath: string = process.cwd()): string {
-  return path.join(rootPath, LOCAL_DB_RELATIVE_PATH);
+export function getLocalDbFilePath(rootPath?: string): string {
+  return path.join(resolveLocalProjectRoot(rootPath), LOCAL_DB_RELATIVE_PATH);
 }
 
 export function createDefaultLocalDb(): LocalDb {
@@ -133,10 +135,10 @@ export function createDefaultLocalDb(): LocalDb {
         chat_id: '',
       },
       auto_check: {
-        enabled: false,
-        interval_minutes: null,
-        delay_between_checks_ms: null,
-        concurrency_limit: null,
+        enabled: true,
+        interval_minutes: 15,
+        delay_between_checks_ms: 2500,
+        concurrency_limit: 1,
       },
     },
   };
@@ -381,6 +383,21 @@ async function cleanupTempFile(tempFilePath: string): Promise<void> {
   await rm(tempFilePath, { force: true });
 }
 
+async function replaceFileWithFallback(tempFilePath: string, filePath: string): Promise<void> {
+  const backupFilePath = `${filePath}.${randomUUID()}.bak`;
+
+  try {
+    await rename(filePath, backupFilePath);
+    await rename(tempFilePath, filePath);
+  } catch {
+    await cleanupTempFile(backupFilePath);
+    await copyFile(tempFilePath, filePath);
+  } finally {
+    await cleanupTempFile(tempFilePath);
+    await cleanupTempFile(backupFilePath);
+  }
+}
+
 async function destinationExists(filePath: string): Promise<boolean> {
   try {
     await stat(filePath);
@@ -401,7 +418,7 @@ export interface WriteLocalDbOptions {
 
 export async function writeLocalDb(
   db: LocalDb,
-  rootPath: string = process.cwd(),
+  rootPath?: string,
   options: WriteLocalDbOptions = {}
 ): Promise<void> {
   const filePath = getLocalDbFilePath(rootPath);
@@ -433,19 +450,17 @@ export async function writeLocalDb(
     }
 
     const hasExistingFile = await destinationExists(filePath);
-    await cleanupTempFile(tempFilePath);
 
     if (!hasExistingFile) {
+      await cleanupTempFile(tempFilePath);
       throw error;
     }
 
-    throw new Error(
-      `Atomic replacement is not available for ${path.basename(filePath)} on this platform; existing file was preserved.`
-    );
+    await replaceFileWithFallback(tempFilePath, filePath);
   }
 }
 
-export async function readLocalDb(rootPath: string = process.cwd()): Promise<LocalDb> {
+export async function readLocalDb(rootPath?: string): Promise<LocalDb> {
   const filePath = getLocalDbFilePath(rootPath);
 
   try {

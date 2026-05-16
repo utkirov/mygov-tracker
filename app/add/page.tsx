@@ -1,9 +1,13 @@
 'use client';
+
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ParsedPdf } from '@/types';
+
 import { PdfUpload } from '@/components/PdfUpload';
 import { ProjectSelector } from '@/components/ProjectSelector';
+import { requestImmediateSyncRun } from '@/lib/sync-engine';
+import { showToast } from '@/lib/toast';
+import type { ParsedPdf } from '@/types';
 
 export default function AddPage() {
   const router = useRouter();
@@ -24,7 +28,9 @@ export default function AddPage() {
   }, [pdfStorageKey]);
 
   async function cleanupTempPdf(pdfKey: string) {
-    if (!pdfKey) return;
+    if (!pdfKey) {
+      return;
+    }
 
     try {
       await fetch('/api/applications/parse-pdf', {
@@ -32,8 +38,8 @@ export default function AddPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfStorageKey: pdfKey }),
       });
-    } catch (cleanupError) {
-      console.error('Failed to cleanup temporary PDF:', cleanupError);
+    } catch {
+      // Ignore cleanup errors, the temp file can be removed later manually if needed.
     }
   }
 
@@ -52,13 +58,17 @@ export default function AddPage() {
   useEffect(() => {
     const handlePageHide = () => {
       const currentPdfStorageKey = pdfStorageKeyRef.current;
-      if (createdApplicationRef.current || !currentPdfStorageKey) return;
+      if (createdApplicationRef.current || !currentPdfStorageKey) {
+        return;
+      }
+
       beaconCleanupTempPdf(currentPdfStorageKey);
     };
 
     window.addEventListener('pagehide', handlePageHide);
     return () => {
       window.removeEventListener('pagehide', handlePageHide);
+
       const currentPdfStorageKey = pdfStorageKeyRef.current;
       if (!createdApplicationRef.current && currentPdfStorageKey) {
         beaconCleanupTempPdf(currentPdfStorageKey);
@@ -66,14 +76,16 @@ export default function AddPage() {
     };
   }, []);
 
-  function handleParsed(fields: ParsedPdf, name: string, storageKey: string) {
+  function handleParsed(fields: ParsedPdf, nextFilename: string, storageKey: string) {
     if (!createdApplicationRef.current && pdfStorageKey && pdfStorageKey !== storageKey) {
       void cleanupTempPdf(pdfStorageKey);
     }
 
     setParsed(fields);
-    setFilename(name);
+    setFilename(nextFilename);
     setPdfStorageKey(storageKey);
+    setError('');
+    setStatus('');
   }
 
   async function resetUnsavedUpload() {
@@ -85,122 +97,205 @@ export default function AddPage() {
     setParsed(null);
     setFilename('');
     setPdfStorageKey('');
+    setObjectName('');
+    setNotes('');
+    setProjectId(null);
     setError('');
     setStatus('');
   }
 
   async function handleSave() {
     if (!parsed || !pdfStorageKey) {
-      setError('Нужно сначала загрузить PDF');
+      setError('Сначала загрузите PDF заявления');
       return;
     }
+
     setSaving(true);
     setError('');
+    setStatus('Сохраняю заявление…');
 
-    const res = await fetch('/api/applications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...parsed,
-        object_name: objectName,
-        notes,
-        pdf_filename: filename,
-        pdf_storage_key: pdfStorageKey,
-        project_id: projectId,
-      }),
-    });
+    try {
+      const response = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...parsed,
+          object_name: objectName.trim(),
+          notes: notes.trim(),
+          pdf_filename: filename,
+          pdf_storage_key: pdfStorageKey,
+          project_id: projectId,
+        }),
+      });
+      const payload = await response.json().catch(() => null) as { id?: string; error?: string } | null;
 
-    if (!res.ok) {
-      const { error: msg } = await res.json();
-      setError(msg ?? 'Ошибка сохранения');
+      if (!response.ok || !payload?.id) {
+        throw new Error(payload?.error ?? 'Не удалось сохранить заявление');
+      }
+
+      createdApplicationRef.current = true;
+      setStatus('Заявление сохранено. Фоновая проверка запускается отдельно.');
+
+      void fetch(`/api/applications/${payload.id}/check`, { method: 'POST' }).catch(() => {
+        showToast({
+          title: 'Заявление сохранено',
+          description: 'Первичная проверка не стартовала сразу. Очередь подхватит её автоматически.',
+          tone: 'warning',
+        });
+      });
+
+      requestImmediateSyncRun();
+      showToast({
+        title: 'Заявление добавлено',
+        description: 'Запись появилась в общем мониторинге.',
+        tone: 'success',
+      });
+      router.push('/dashboard');
+    } catch (saveError) {
+      setStatus('');
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : 'Не удалось сохранить заявление'
+      );
+    } finally {
       setSaving(false);
-      return;
     }
-
-    const { id } = await res.json();
-    createdApplicationRef.current = true;
-    setStatus('Проверяю статус на my.gov.uz...');
-    await fetch(`/api/applications/${id}/check`, { method: 'POST' });
-    router.push('/dashboard');
   }
 
   const fields = [
-    { label: 'Номер заявки', key: 'application_number' },
-    { label: 'Наименование услуги', key: 'service_name' },
+    { label: 'Номер заявления', key: 'application_number' },
+    { label: 'Услуга', key: 'service_name' },
     { label: 'Организация', key: 'organization' },
-    { label: 'Состояние', key: 'status' },
+    { label: 'Статус из PDF', key: 'status' },
     { label: 'Дата подачи', key: 'submission_date' },
     { label: 'Текущее действие', key: 'current_action' },
-    { label: 'Пароль для проверки', key: 'verification_password' },
+    { label: 'Пароль проверки', key: 'verification_password' },
   ] as const;
 
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
-      <div className="bg-[var(--surface)] border-b border-[var(--border)] px-4 py-3 md:py-4 flex items-center gap-3">
-        <button onClick={() => router.back()} className="text-[var(--text2)] text-lg md:text-xl hover:text-[var(--text)]">←</button>
-        <h1 className="font-bold text-lg md:text-xl text-[var(--text)]">Новая заявка</h1>
-      </div>
+    <div className="px-4 py-5 md:px-6 lg:px-10 lg:py-8">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+        <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
+          <button
+            onClick={() => router.back()}
+            className="rounded-full bg-[var(--panel-strong)] px-3 py-1.5 text-sm text-[var(--text-soft)] transition hover:text-[var(--text)]"
+          >
+            Назад
+          </button>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 md:py-8 flex flex-col gap-5">
+          <p className="mt-4 text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+            New intake
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[var(--text)]">
+            Добавить заявление в общий мониторинг
+          </h1>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--text-soft)] md:text-base">
+            Сначала разбираем исходный PDF, затем дополняем его внутренним контекстом и
+            сохраняем запись в общую очередь фоновых проверок.
+          </p>
+        </section>
+
         {!parsed ? (
-          <PdfUpload onParsed={handleParsed} />
+          <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
+            <PdfUpload onParsed={handleParsed} />
+          </section>
         ) : (
           <>
-            <div className="card bg-[var(--surface2)] border border-[var(--border)] p-4 md:p-5">
-              <p className="text-[var(--text)] font-semibold text-sm mb-4">✓ Данные извлечены из PDF</p>
-              <div className="flex flex-col gap-2.5">
-                {fields.map(f => (
-                  <div key={f.key} className="flex justify-between gap-3 text-sm">
-                    <span className="text-[var(--text2)] shrink-0">{f.label}</span>
-                    <span className="text-[var(--text)] font-medium text-right break-words">{parsed[f.key] || '—'}</span>
+            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                    Извлечено из PDF
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                    Базовые данные уже готовы
+                  </h2>
+                </div>
+                <button
+                  onClick={() => {
+                    void resetUnsavedUpload();
+                  }}
+                  className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-2 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]"
+                >
+                  Заменить PDF
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                {fields.map((field) => (
+                  <div key={field.key} className="rounded-[24px] bg-[var(--panel-strong)] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+                      {field.label}
+                    </p>
+                    <p className="mt-2 text-sm font-medium leading-6 text-[var(--text)]">
+                      {parsed[field.key] || '—'}
+                    </p>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
-            <div>
-              <label className="text-sm font-medium text-[var(--text)] block mb-2">Название объекта</label>
-              <input
-                value={objectName}
-                onChange={e => setObjectName(e.target.value)}
-                placeholder="Жилой дом по ул. Навои 12..."
-                className="w-full border border-[var(--border)] bg-[var(--surface2)] text-[var(--text)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-              />
-            </div>
+            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
+              <div className="grid gap-5">
+                <label className="block">
+                  <span className="text-sm font-medium text-[var(--text)]">Название объекта</span>
+                  <input
+                    value={objectName}
+                    onChange={(event) => setObjectName(event.target.value)}
+                    placeholder="Например, жилой дом, участок, помещение"
+                    className="mt-2 w-full rounded-[20px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                  />
+                </label>
 
-            <div>
-              <label className="text-sm font-medium text-[var(--text)] block mb-2">Проект</label>
-              <ProjectSelector value={projectId} onChange={setProjectId} />
-            </div>
+                <div>
+                  <span className="text-sm font-medium text-[var(--text)]">Проект</span>
+                  <div className="mt-2">
+                    <ProjectSelector value={projectId} onChange={setProjectId} />
+                  </div>
+                </div>
 
-            <div>
-              <label className="text-sm font-medium text-[var(--text)] block mb-2">Заметка (необязательно)</label>
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Контекст, дополнительная информация..."
-                className="w-full border border-[var(--border)] bg-[var(--surface2)] text-[var(--text)] rounded-lg px-3 py-2 text-sm h-20 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-              />
-            </div>
+                <label className="block">
+                  <span className="text-sm font-medium text-[var(--text)]">Внутренняя заметка</span>
+                  <textarea
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Контекст, договорённости, важные детали по кейсу"
+                    className="mt-2 min-h-[140px] w-full rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 text-sm leading-6 text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                  />
+                </label>
+              </div>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            {status && <p className="text-[var(--accent)] text-sm">{status}</p>}
+              {(error || status) && (
+                <div
+                  className={`mt-5 rounded-[24px] px-4 py-3 text-sm ${
+                    error
+                      ? 'border border-red-300/40 bg-red-50 text-red-900 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-100'
+                      : 'border border-emerald-300/40 bg-emerald-50 text-emerald-900 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-100'
+                  }`}
+                >
+                  {error || status}
+                </div>
+              )}
 
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => { void resetUnsavedUpload(); }}
-                className="flex-1 border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] rounded-lg py-3 text-sm font-medium hover:bg-[var(--surface2)] transition"
-              >
-                Загрузить другой PDF
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white rounded-lg py-3 text-sm font-semibold transition"
-              >
-                {saving ? (status || 'Сохраняю...') : 'Сохранить заявку'}
-              </button>
-            </div>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <button
+                  onClick={() => {
+                    void resetUnsavedUpload();
+                  }}
+                  className="flex-1 rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-5 py-3 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]"
+                >
+                  Начать заново
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-60"
+                >
+                  {saving ? 'Сохраняю…' : 'Сохранить и поставить в очередь'}
+                </button>
+              </div>
+            </section>
           </>
         )}
       </div>

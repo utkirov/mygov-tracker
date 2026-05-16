@@ -2,6 +2,8 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+import { resolveLocalProjectRoot } from './local-paths';
+
 const PDF_STORAGE_RELATIVE_PATH = path.join('data', 'pdfs');
 
 function sanitizeExtension(originalName?: string): string {
@@ -21,18 +23,18 @@ function toBuffer(contents: Buffer | Uint8Array | ArrayBuffer): Buffer {
   return Buffer.from(contents);
 }
 
-export function getPdfStorageDir(rootPath: string = process.cwd()): string {
-  return path.join(rootPath, PDF_STORAGE_RELATIVE_PATH);
+export function getPdfStorageDir(rootPath?: string): string {
+  return path.join(resolveLocalProjectRoot(rootPath), PDF_STORAGE_RELATIVE_PATH);
 }
 
-function getPdfFilePath(filename: string, rootPath: string = process.cwd()): string {
+function getPdfFilePath(filename: string, rootPath?: string): string {
   return path.join(getPdfStorageDir(rootPath), filename);
 }
 
 export async function savePdfFile(
   contents: Buffer | Uint8Array | ArrayBuffer,
   originalName?: string,
-  rootPath: string = process.cwd()
+  rootPath?: string
 ): Promise<string> {
   const storageDir = getPdfStorageDir(rootPath);
   const filename = `${Date.now()}-${randomUUID()}${sanitizeExtension(originalName)}`;
@@ -43,7 +45,7 @@ export async function savePdfFile(
   return filename;
 }
 
-export async function readPdfFile(filename: string, rootPath: string = process.cwd()): Promise<Buffer | null> {
+export async function readPdfFile(filename: string, rootPath?: string): Promise<Buffer | null> {
   try {
     return await readFile(getPdfFilePath(filename, rootPath));
   } catch (error) {
@@ -56,7 +58,7 @@ export async function readPdfFile(filename: string, rootPath: string = process.c
   }
 }
 
-export async function deletePdfFile(filename: string, rootPath: string = process.cwd()): Promise<boolean> {
+export async function deletePdfFile(filename: string, rootPath?: string): Promise<boolean> {
   try {
     await rm(getPdfFilePath(filename, rootPath));
     return true;

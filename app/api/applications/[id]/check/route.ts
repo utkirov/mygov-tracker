@@ -9,6 +9,13 @@ import {
   type LocalDbApplicationChangeField,
 } from '@/lib/local-db';
 import { fetchApplicationStatus } from '@/lib/status-checker';
+import {
+  buildApplicationChangeMessage,
+  buildApplicationErrorMessage,
+  isTelegramConfigured,
+  sendTelegramMessage,
+} from '@/lib/telegram';
+import { getStatusType, isCompletedStatus } from '@/types';
 
 function parseMyGovDate(value: string | undefined | null): string | null {
   if (!value) return null;
@@ -41,7 +48,7 @@ function getNextCheckAt(
 }
 
 function formatChangeValue(value: string | null): string {
-  return value && value.trim() ? value : 'empty';
+  return value && value.trim() ? value : 'пусто';
 }
 
 function buildChangeSummary(
@@ -50,13 +57,13 @@ function buildChangeSummary(
   nextValue: string | null
 ): string {
   const labels: Record<LocalDbApplicationChangeField, string> = {
-    status: 'Status',
-    current_action: 'Current action',
-    acting_party: 'Acting party',
-    last_changed_date: 'Last changed date',
+    status: 'Статус',
+    current_action: 'Текущее действие',
+    acting_party: 'Действует',
+    last_changed_date: 'Последнее изменение',
   };
 
-  return `${labels[field]} changed from "${formatChangeValue(previousValue)}" to "${formatChangeValue(nextValue)}"`;
+  return `${labels[field]}: "${formatChangeValue(previousValue)}" → "${formatChangeValue(nextValue)}"`;
 }
 
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -68,10 +75,37 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: 'Application not found' }, { status: 404 });
   }
 
-  const checked = await fetchApplicationStatus(
-    application.application_number,
-    application.verification_password
-  );
+  if (application.archived || getStatusType(application.acting_party, application.status) === 'completed') {
+    application.sync_state = 'idle';
+    application.next_check_at = null;
+    application.last_error = '';
+    application.updated_at = new Date().toISOString();
+    db.meta.updated_at = application.updated_at;
+    await writeLocalDb(db);
+
+    return NextResponse.json(
+      { error: 'Archived and completed applications are excluded from checks' },
+      { status: 409 }
+    );
+  }
+
+  const startedAt = new Date().toISOString();
+  application.sync_state = 'checking';
+  application.last_error = '';
+  application.updated_at = startedAt;
+  db.meta.updated_at = startedAt;
+  await writeLocalDb(db);
+
+  let checked: Awaited<ReturnType<typeof fetchApplicationStatus>> = null;
+
+  try {
+    checked = await fetchApplicationStatus(
+      application.application_number,
+      application.verification_password
+    );
+  } catch {
+    checked = null;
+  }
   const now = new Date().toISOString();
   const nextCheckAt = getNextCheckAt(now, db.settings.auto_check);
 
@@ -83,6 +117,17 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     application.updated_at = now;
     db.meta.updated_at = now;
     await writeLocalDb(db);
+
+    if (isTelegramConfigured(db.settings)) {
+      try {
+        await sendTelegramMessage(
+          db.settings,
+          buildApplicationErrorMessage(application, application.last_error)
+        );
+      } catch {
+        // Ignore Telegram delivery errors and keep the primary API response.
+      }
+    }
 
     return NextResponse.json(
       { error: application.last_error },
@@ -132,6 +177,11 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   if (changedFields.length > 0) {
     application.last_detected_change_at = now;
   }
+  if (isCompletedStatus(application.status)) {
+    application.archived = true;
+    application.sync_state = 'idle';
+    application.next_check_at = null;
+  }
   application.updated_at = now;
 
   if (statusChanged) {
@@ -147,6 +197,22 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   db.meta.updated_at = now;
   await writeLocalDb(db);
+
+  if (changedFields.length > 0 && isTelegramConfigured(db.settings)) {
+    try {
+      await sendTelegramMessage(
+        db.settings,
+        buildApplicationChangeMessage({
+          application,
+          changedFields,
+          previousValues,
+          nextValues,
+        })
+      );
+    } catch {
+      // Ignore Telegram delivery errors and keep the primary API response.
+    }
+  }
 
   return NextResponse.json({ application, statusChanged });
 }

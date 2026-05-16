@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Manrope } from 'next/font/google';
+import { AppShell } from '@/components/AppShell';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { ToastProvider } from '@/components/ToastProvider';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin', 'cyrillic'] });
+const manrope = Manrope({ subsets: ['latin', 'cyrillic'] });
 
 export const metadata: Metadata = {
   title: 'my.gov tracker',
@@ -13,14 +15,17 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ThemeProvider>{children}</ThemeProvider>
+      <body className={manrope.className}>
+        <ThemeProvider>
+          <ToastProvider>
+            <AppShell>{children}</AppShell>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

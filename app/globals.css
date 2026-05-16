@@ -3,40 +3,65 @@
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  --bg: #f5f5f7;
-  --surface: #ffffff;
-  --surface2: #f0f0f3;
-  --border: #e5e5ea;
-  --text: #1c1c1e;
-  --text2: #6e6e73;
-  --text3: #aeaeb2;
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
+  --bg: #f3efe6;
+  --shell: #f7f3eb;
+  --surface: #fffdf8;
+  --surface2: #f4eee3;
+  --panel: rgba(255, 253, 248, 0.82);
+  --panel-strong: #fffaf1;
+  --border: rgba(88, 74, 53, 0.12);
+  --border-strong: rgba(88, 74, 53, 0.26);
+  --text: #1f241d;
+  --text-soft: #5d6358;
+  --text-muted: #8f9487;
+  --text2: var(--text-soft);
+  --text3: var(--text-muted);
+  --accent: #0e7c66;
+  --accent-soft: rgba(14, 124, 102, 0.12);
+  --accent-hover: #0b6d5a;
+  --danger-soft: rgba(176, 58, 51, 0.12);
+  --shadow-card: 0 18px 40px rgba(63, 48, 31, 0.08);
 }
 
 .dark {
-  --bg: #000000;
-  --surface: #1c1c1e;
-  --surface2: #2c2c2e;
-  --border: #38383a;
-  --text: #f5f5f7;
-  --text2: #aeaeb2;
-  --text3: #636366;
-  --accent: #0a84ff;
-  --accent-hover: #409cff;
+  --bg: #121511;
+  --shell: #161a15;
+  --surface: #1d221c;
+  --surface2: #232922;
+  --panel: rgba(29, 34, 28, 0.88);
+  --panel-strong: #202620;
+  --border: rgba(224, 232, 214, 0.09);
+  --border-strong: rgba(224, 232, 214, 0.2);
+  --text: #f4f1e8;
+  --text-soft: #bcc4b2;
+  --text-muted: #7f8878;
+  --text2: var(--text-soft);
+  --text3: var(--text-muted);
+  --accent: #33b18f;
+  --accent-soft: rgba(51, 177, 143, 0.16);
+  --accent-hover: #47c7a2;
+  --danger-soft: rgba(235, 87, 87, 0.18);
+  --shadow-card: 0 22px 50px rgba(0, 0, 0, 0.28);
 }
 
 * { box-sizing: border-box; }
 
+html {
+  background:
+    radial-gradient(circle at top left, rgba(14, 124, 102, 0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(176, 125, 33, 0.08), transparent 26%),
+    var(--bg);
+}
+
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 24px;
+  box-shadow: var(--shadow-card);
 }

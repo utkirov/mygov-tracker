@@ -66,11 +66,43 @@ export interface ParsedPdf {
 
 export type StatusType = 'action_required' | 'in_progress' | 'completed';
 
+const TERMINAL_STATUS_MARKERS = [
+  'РѕРґРѕР±СЂРµРЅРѕ',
+  'Р·Р°РІРµСЂС€РµРЅРѕ',
+  'РІС‹РґР°РЅРѕ',
+  'РѕС‚РєР°Р·Р°РЅРѕ',
+  'tasdiqlangan',
+  'bekor',
+];
+
+export function isCompletedStatus(status: string): boolean {
+  const normalized = status.toLowerCase();
+  return TERMINAL_STATUS_MARKERS.some(marker => normalized.includes(marker));
+}
+
 export function getStatusType(acting_party: string, status: string): StatusType {
-  const terminalStatuses = ['одобрено', 'завершено', 'выдано', 'отказано', 'tasdiqlangan', 'bekor'];
-  if (terminalStatuses.some(s => status.toLowerCase().includes(s))) return 'completed';
-  if (acting_party.toLowerCase().includes('заявитель') || acting_party.toLowerCase().includes('ariza beruvchi')) return 'action_required';
+  if (isCompletedStatus(status)) return 'completed';
+  if (acting_party.toLowerCase().includes('Р·Р°СЏРІРёС‚РµР»СЊ') || acting_party.toLowerCase().includes('ariza beruvchi')) return 'action_required';
   return 'in_progress';
+}
+
+export function isApplicationCheckable(input: Pick<Application, 'acting_party' | 'status' | 'archived'>): boolean {
+  return !input.archived && getStatusType(input.acting_party, input.status) !== 'completed';
+}
+
+export function getApplicationChangeFieldLabel(field: ApplicationChangeField): string {
+  switch (field) {
+    case 'status':
+      return 'Статус';
+    case 'current_action':
+      return 'Текущее действие';
+    case 'acting_party':
+      return 'Действует';
+    case 'last_changed_date':
+      return 'Последнее изменение';
+    default:
+      return field;
+  }
 }
 
 export const PROJECT_COLORS = [

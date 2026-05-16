@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { deletePdfFile } from '@/lib/local-storage';
 import { readLocalDb, writeLocalDb, type LocalDbApplication } from '@/lib/local-db';
+import { getStatusType } from '@/types';
 
 function sortHistory(history: Array<{ recorded_at: string }>) {
   return [...history].sort((left, right) => right.recorded_at.localeCompare(left.recorded_at));
@@ -65,6 +66,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     if (key === 'archived') {
       application.archived = body.archived === true;
+      if (application.archived) {
+        application.sync_state = 'idle';
+        application.next_check_at = null;
+        application.last_error = '';
+      }
       continue;
     }
 
@@ -75,6 +81,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   application.updated_at = new Date().toISOString();
+  if (getStatusType(application.acting_party, application.status) === 'completed') {
+    application.next_check_at = null;
+  }
   db.meta.updated_at = application.updated_at;
 
   await writeLocalDb(db);
