@@ -1,9 +1,5 @@
-import { app } from 'electron';
 import { execSync } from 'child_process';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { Buffer } from 'buffer';
 
 export function registerAutoStart() {
   try {
@@ -11,14 +7,14 @@ export function registerAutoStart() {
     const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
     const appName = 'my.gov tracker';
 
-    // Get the app's executable path
-    const exePath = process.argv[1] || path.join(app.getPath('exe'));
+    // Use process.execPath which returns the actual Electron executable path
+    const exePath = process.execPath;
 
     // PowerShell command to add registry entry
     const psCommand = `
       $regPath = '${regKey}'
       $appName = '${appName}'
-      $exePath = '${exePath}'
+      $exePath = '${exePath.replace(/'/g, "''")}'
 
       if (-not (Test-Path $regPath)) {
         New-Item -Path $regPath -Force | Out-Null
@@ -27,9 +23,12 @@ export function registerAutoStart() {
       New-ItemProperty -Path $regPath -Name $appName -Value $exePath -PropertyType String -Force | Out-Null
     `;
 
+    // Encode command in base64 for safe execution via -EncodedCommand parameter
+    const encodedCommand = Buffer.from(psCommand, 'utf-16le').toString('base64');
+
     // Run PowerShell command to register
-    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand.replace(/"/g, '\\"')}"`, {
-      stdio: 'inherit',
+    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedCommand}`, {
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     console.log('Auto-start registered successfully');
@@ -52,8 +51,11 @@ export function unregisterAutoStart() {
       Remove-ItemProperty -Path $regPath -Name $appName -ErrorAction SilentlyContinue
     `;
 
-    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand.replace(/"/g, '\\"')}"`, {
-      stdio: 'inherit',
+    // Encode command in base64 for safe execution via -EncodedCommand parameter
+    const encodedCommand = Buffer.from(psCommand, 'utf-16le').toString('base64');
+
+    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedCommand}`, {
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     console.log('Auto-start unregistered successfully');

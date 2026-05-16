@@ -305,7 +305,10 @@ app.on('ready', async () => {
     // Dynamic import of the ES module for auto-start
     if (process.platform === 'win32') {
       const { registerAutoStart: registerAutoStartFn } = await import('../scripts/register-autostart.mjs');
-      registerAutoStartFn();
+      const success = registerAutoStartFn();
+      if (!success) {
+        console.warn('Warning: Auto-start registration failed, but app will continue running');
+      }
     }
 
     await startNextServer();
