@@ -1,30 +1,33 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { syncEngineEvents } from '@/lib/sync-engine';
-import { useSoundNotification } from '@/lib/sound-notification';
+import { soundNotificationManager } from '@/lib/sound-notification';
 
 export function SoundNotificationProvider() {
-  const sound = useSoundNotification();
+  const loaded = useRef(false);
 
   useEffect(() => {
-    const handleSyncComplete = () => {
-      sound.success();
-    };
+    if (loaded.current) return;
+    loaded.current = true;
+    fetch('/api/settings', { cache: 'no-store' })
+      .then(r => r.json())
+      .then((data: { sound_enabled?: boolean }) => {
+        soundNotificationManager.setEnabled(data.sound_enabled !== false);
+      })
+      .catch(() => {});
+  }, []);
 
-    const handleSyncError = () => {
-      sound.error();
-    };
-
-    window.addEventListener(syncEngineEvents.complete, handleSyncComplete);
-    window.addEventListener(syncEngineEvents.error, handleSyncError);
-
+  useEffect(() => {
+    const handleComplete = () => soundNotificationManager.playSound('success');
+    const handleError = () => soundNotificationManager.playSound('error');
+    window.addEventListener(syncEngineEvents.complete, handleComplete);
+    window.addEventListener(syncEngineEvents.error, handleError);
     return () => {
-      window.removeEventListener(syncEngineEvents.complete, handleSyncComplete);
-      window.removeEventListener(syncEngineEvents.error, handleSyncError);
+      window.removeEventListener(syncEngineEvents.complete, handleComplete);
+      window.removeEventListener(syncEngineEvents.error, handleError);
     };
-  }, [sound]);
+  }, []);
 
-  // This component renders nothing, just sets up listeners
   return null;
 }

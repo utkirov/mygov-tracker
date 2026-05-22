@@ -1,5 +1,17 @@
 import type { Application } from '@/types';
 
+export function formatTimeAgo(value: string | null): string {
+  if (!value) return '—';
+  const diffMs = Date.now() - new Date(value).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return 'только что';
+  if (mins < 60) return `${mins} мин назад`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} ч назад`;
+  const days = Math.floor(hrs / 24);
+  return `${days} д назад`;
+}
+
 export function formatDate(value: string | null): string {
   if (!value) {
     return '—';

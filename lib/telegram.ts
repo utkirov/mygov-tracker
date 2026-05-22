@@ -106,6 +106,34 @@ export function buildApplicationErrorMessage(application: LocalDbApplication, er
   ].join('\n');
 }
 
+export function buildApplicationCompletedMessage(application: LocalDbApplication): string {
+  const title = application.object_name || application.service_name || `Заявление ${application.application_number}`;
+  const isRejected = application.status.toLowerCase().includes('отклон') || application.status.toLowerCase().includes('аннулир');
+
+  return [
+    isRejected ? '❌ <b>Заявление завершено (отказ)</b>' : '✅ <b>Заявление завершено!</b>',
+    `🧾 <b>№</b> ${escapeHtml(application.application_number)}`,
+    `🏷 <b>Объект</b> ${escapeHtml(title)}`,
+    `📌 <b>Итоговый статус</b> ${escapeHtml(application.status)}`,
+    application.current_action ? `🔄 <b>Последнее действие</b> ${escapeHtml(application.current_action)}` : '',
+    `🗓 <b>Дата изменения</b> ${escapeHtml(formatDate(application.last_changed_date))}`,
+    `🕒 <b>Проверено</b> ${escapeHtml(formatDate(application.last_checked_at))}`,
+  ].filter(Boolean).join('\n');
+}
+
+export function buildManualCheckResultMessage(application: LocalDbApplication): string {
+  const title = application.object_name || application.service_name || `Заявление ${application.application_number}`;
+
+  return [
+    '🔍 <b>Ручная проверка завершена</b>',
+    `🧾 <b>№</b> ${escapeHtml(application.application_number)}`,
+    `🏷 <b>Объект</b> ${escapeHtml(title)}`,
+    `📌 <b>Статус</b> ${escapeHtml(application.status)}`,
+    `ℹ️ Изменений не обнаружено`,
+    `🕒 <b>Проверено</b> ${escapeHtml(formatDate(application.last_checked_at))}`,
+  ].join('\n');
+}
+
 export function buildCycleSummaryMessage(args: {
   checkedCount: number;
   changedCount: number;
@@ -123,6 +151,8 @@ export function buildCycleSummaryMessage(args: {
     '',
     errorCount > 0
       ? 'Обрати внимание: в этом цикле были ошибки, проверь детали в приложении.'
-      : 'Цикл завершён. Новые изменения уже сохранены в приложении.',
+      : changedCount > 0
+        ? 'Новые изменения уже сохранены в приложении.'
+        : 'Изменений нет, всё тихо.',
   ].join('\n');
 }

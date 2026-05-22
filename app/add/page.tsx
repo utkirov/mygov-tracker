@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 
 import { PdfUpload } from '@/components/PdfUpload';
 import { ProjectSelector } from '@/components/ProjectSelector';
@@ -9,18 +10,34 @@ import { requestImmediateSyncRun } from '@/lib/sync-engine';
 import { showToast } from '@/lib/toast';
 import type { ParsedPdf } from '@/types';
 
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function Section({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-[14px] border p-4 md:p-5"
+      style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─── page ─────────────────────────────────────────────────────────────────────
+
 export default function AddPage() {
   const router = useRouter();
-  const [parsed, setParsed] = useState<ParsedPdf | null>(null);
-  const [filename, setFilename] = useState('');
-  const [pdfStorageKey, setPdfStorageKey] = useState('');
-  const [objectName, setObjectName] = useState('');
-  const [notes, setNotes] = useState('');
-  const [projectId, setProjectId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState('');
-  const pdfStorageKeyRef = useRef('');
+  const [parsed,         setParsed]         = useState<ParsedPdf | null>(null);
+  const [filename,       setFilename]       = useState('');
+  const [pdfStorageKey,  setPdfStorageKey]  = useState('');
+  const [objectName,     setObjectName]     = useState('');
+  const [notes,          setNotes]          = useState('');
+  const [projectId,      setProjectId]      = useState<string | null>(null);
+  const [saving,         setSaving]         = useState(false);
+  const [status,         setStatus]         = useState('');
+  const [error,          setError]          = useState('');
+  const [confirmReset,   setConfirmReset]   = useState(false);
+  const pdfStorageKeyRef      = useRef('');
   const createdApplicationRef = useRef(false);
 
   useEffect(() => {
@@ -28,51 +45,33 @@ export default function AddPage() {
   }, [pdfStorageKey]);
 
   async function cleanupTempPdf(pdfKey: string) {
-    if (!pdfKey) {
-      return;
-    }
-
+    if (!pdfKey) return;
     try {
       await fetch('/api/applications/parse-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfStorageKey: pdfKey }),
       });
-    } catch {
-      // Ignore cleanup errors, the temp file can be removed later manually if needed.
-    }
+    } catch { /* ignore */ }
   }
 
   function beaconCleanupTempPdf(pdfKey: string) {
-    if (!pdfKey || typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') {
-      return;
-    }
-
-    const payload = new Blob([JSON.stringify({ pdfStorageKey: pdfKey })], {
-      type: 'application/json',
-    });
-
+    if (!pdfKey || typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return;
+    const payload = new Blob([JSON.stringify({ pdfStorageKey: pdfKey })], { type: 'application/json' });
     navigator.sendBeacon('/api/applications/parse-pdf', payload);
   }
 
   useEffect(() => {
     const handlePageHide = () => {
-      const currentPdfStorageKey = pdfStorageKeyRef.current;
-      if (createdApplicationRef.current || !currentPdfStorageKey) {
-        return;
-      }
-
-      beaconCleanupTempPdf(currentPdfStorageKey);
+      const key = pdfStorageKeyRef.current;
+      if (createdApplicationRef.current || !key) return;
+      beaconCleanupTempPdf(key);
     };
-
     window.addEventListener('pagehide', handlePageHide);
     return () => {
       window.removeEventListener('pagehide', handlePageHide);
-
-      const currentPdfStorageKey = pdfStorageKeyRef.current;
-      if (!createdApplicationRef.current && currentPdfStorageKey) {
-        beaconCleanupTempPdf(currentPdfStorageKey);
-      }
+      const key = pdfStorageKeyRef.current;
+      if (!createdApplicationRef.current && key) beaconCleanupTempPdf(key);
     };
   }, []);
 
@@ -80,7 +79,6 @@ export default function AddPage() {
     if (!createdApplicationRef.current && pdfStorageKey && pdfStorageKey !== storageKey) {
       void cleanupTempPdf(pdfStorageKey);
     }
-
     setParsed(fields);
     setFilename(nextFilename);
     setPdfStorageKey(storageKey);
@@ -89,213 +87,217 @@ export default function AddPage() {
   }
 
   async function resetUnsavedUpload() {
-    const currentPdfStorageKey = pdfStorageKeyRef.current;
-    if (!createdApplicationRef.current && currentPdfStorageKey) {
-      await cleanupTempPdf(currentPdfStorageKey);
-    }
-
-    setParsed(null);
-    setFilename('');
-    setPdfStorageKey('');
-    setObjectName('');
-    setNotes('');
-    setProjectId(null);
-    setError('');
-    setStatus('');
+    const key = pdfStorageKeyRef.current;
+    if (!createdApplicationRef.current && key) await cleanupTempPdf(key);
+    setParsed(null); setFilename(''); setPdfStorageKey('');
+    setObjectName(''); setNotes(''); setProjectId(null);
+    setError(''); setStatus('');
   }
 
   async function handleSave() {
-    if (!parsed || !pdfStorageKey) {
-      setError('Сначала загрузите PDF заявления');
-      return;
-    }
-
-    setSaving(true);
-    setError('');
-    setStatus('Сохраняю заявление…');
-
+    if (!parsed || !pdfStorageKey) { setError('Сначала загрузите PDF заявления'); return; }
+    setSaving(true); setError(''); setStatus('Сохраняю заявление…');
     try {
       const response = await fetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...parsed,
-          object_name: objectName.trim(),
-          notes: notes.trim(),
-          pdf_filename: filename,
-          pdf_storage_key: pdfStorageKey,
-          project_id: projectId,
+          object_name:      objectName.trim(),
+          notes:            notes.trim(),
+          pdf_filename:     filename,
+          pdf_storage_key:  pdfStorageKey,
+          project_id:       projectId,
         }),
       });
       const payload = await response.json().catch(() => null) as { id?: string; error?: string } | null;
-
-      if (!response.ok || !payload?.id) {
-        throw new Error(payload?.error ?? 'Не удалось сохранить заявление');
-      }
-
+      if (!response.ok || !payload?.id) throw new Error(payload?.error ?? 'Не удалось сохранить заявление');
       createdApplicationRef.current = true;
       setStatus('Заявление сохранено. Фоновая проверка запускается отдельно.');
-
       void fetch(`/api/applications/${payload.id}/check`, { method: 'POST' }).catch(() => {
-        showToast({
-          title: 'Заявление сохранено',
-          description: 'Первичная проверка не стартовала сразу. Очередь подхватит её автоматически.',
-          tone: 'warning',
-        });
+        showToast({ title: 'Заявление сохранено', description: 'Первичная проверка не стартовала сразу.', tone: 'warning' });
       });
-
       requestImmediateSyncRun();
-      showToast({
-        title: 'Заявление добавлено',
-        description: 'Запись появилась в общем мониторинге.',
-        tone: 'success',
-      });
+      showToast({ title: 'Заявление добавлено', description: 'Запись появилась в общем мониторинге.', tone: 'success' });
       router.push('/dashboard');
     } catch (saveError) {
       setStatus('');
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : 'Не удалось сохранить заявление'
-      );
+      setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить заявление');
     } finally {
       setSaving(false);
     }
   }
 
   const fields = [
-    { label: 'Номер заявления', key: 'application_number' },
-    { label: 'Услуга', key: 'service_name' },
-    { label: 'Организация', key: 'organization' },
-    { label: 'Статус из PDF', key: 'status' },
-    { label: 'Дата подачи', key: 'submission_date' },
-    { label: 'Текущее действие', key: 'current_action' },
-    { label: 'Пароль проверки', key: 'verification_password' },
+    { label: 'Номер заявления',   key: 'application_number' },
+    { label: 'Услуга',            key: 'service_name' },
+    { label: 'Организация',       key: 'organization' },
+    { label: 'Статус из PDF',     key: 'status' },
+    { label: 'Дата подачи',       key: 'submission_date' },
+    { label: 'Текущее действие',  key: 'current_action' },
+    { label: 'Пароль проверки',   key: 'verification_password' },
   ] as const;
 
+  const inputCls = "w-full rounded-[9px] border px-3 py-2.5 text-[13px] outline-none transition focus:border-[var(--accent)]";
+  const inputSty = { background: 'var(--panel)', borderColor: 'var(--border)', color: 'var(--text)' };
+
   return (
-    <div className="px-4 py-5 md:px-6 lg:px-10 lg:py-8">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-        <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
-          <button
-            onClick={() => router.back()}
-            className="rounded-full bg-[var(--panel-strong)] px-3 py-1.5 text-sm text-[var(--text-soft)] transition hover:text-[var(--text)]"
-          >
-            Назад
-          </button>
+    <div className="overflow-y-auto px-3 py-4 md:px-5 md:py-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
 
-          <p className="mt-4 text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-            New intake
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[var(--text)]">
-            Добавить заявление в общий мониторинг
-          </h1>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--text-soft)] md:text-base">
-            Сначала разбираем исходный PDF, затем дополняем его внутренним контекстом и
-            сохраняем запись в общую очередь фоновых проверок.
-          </p>
-        </section>
+        {/* ── Header ── */}
+        <Section>
+          <div className="flex items-start gap-3">
+            <button
+              onClick={() => router.back()}
+              className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition hover:bg-[var(--panel)]"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                Новое заявление
+              </p>
+              <h1 className="mt-1 text-[18px] font-bold leading-[1.3] md:text-xl" style={{ color: 'var(--text)' }}>
+                Добавить в мониторинг
+              </h1>
+              <p className="mt-1.5 text-[12px] leading-[1.6]" style={{ color: 'var(--text-soft)' }}>
+                Загрузите PDF заявления — данные извлекутся автоматически.
+              </p>
+            </div>
+          </div>
+        </Section>
 
+        {/* ── PDF upload or parsed data ── */}
         {!parsed ? (
-          <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
+          <Section>
             <PdfUpload onParsed={handleParsed} />
-          </section>
+          </Section>
         ) : (
           <>
-            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
-              <div className="flex items-center justify-between gap-3">
+            {/* Extracted fields */}
+            <Section>
+              <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
                     Извлечено из PDF
                   </p>
-                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
-                    Базовые данные уже готовы
+                  <h2 className="mt-1 text-[15px] font-bold" style={{ color: 'var(--text)' }}>
+                    Базовые данные готовы
                   </h2>
                 </div>
                 <button
-                  onClick={() => {
-                    void resetUnsavedUpload();
-                  }}
-                  className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-2 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]"
+                  onClick={() => { void resetUnsavedUpload(); }}
+                  className="rounded-[9px] border px-3 py-1.5 text-[12px] font-medium transition hover:border-[var(--border-strong)]"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-soft)' }}
                 >
                   Заменить PDF
                 </button>
               </div>
 
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                {fields.map((field) => (
-                  <div key={field.key} className="rounded-[24px] bg-[var(--panel-strong)] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">
+              <div className="grid gap-2 md:grid-cols-2">
+                {fields.map(field => (
+                  <div key={field.key} className="rounded-[9px] p-3" style={{ background: 'var(--panel)' }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
                       {field.label}
                     </p>
-                    <p className="mt-2 text-sm font-medium leading-6 text-[var(--text)]">
+                    <p className="mt-1.5 text-[13px] font-medium leading-[1.4]" style={{ color: 'var(--text)' }}>
                       {parsed[field.key] || '—'}
                     </p>
                   </div>
                 ))}
               </div>
-            </section>
+            </Section>
 
-            <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
-              <div className="grid gap-5">
+            {/* Extra fields */}
+            <Section>
+              <div className="space-y-4">
+                <h2 className="text-[13px] font-bold" style={{ color: 'var(--text)' }}>Дополнить запись</h2>
+
                 <label className="block">
-                  <span className="text-sm font-medium text-[var(--text)]">Название объекта</span>
+                  <span className="text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>Название объекта</span>
                   <input
                     value={objectName}
-                    onChange={(event) => setObjectName(event.target.value)}
-                    placeholder="Например, жилой дом, участок, помещение"
-                    className="mt-2 w-full rounded-[20px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                    onChange={e => setObjectName(e.target.value)}
+                    placeholder="Напр.: жилой дом, участок, помещение"
+                    className={`mt-1.5 ${inputCls}`}
+                    style={inputSty}
                   />
                 </label>
 
                 <div>
-                  <span className="text-sm font-medium text-[var(--text)]">Проект</span>
-                  <div className="mt-2">
+                  <span className="text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>Проект</span>
+                  <div className="mt-1.5">
                     <ProjectSelector value={projectId} onChange={setProjectId} />
                   </div>
                 </div>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-[var(--text)]">Внутренняя заметка</span>
+                  <span className="text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>Внутренняя заметка</span>
                   <textarea
                     value={notes}
-                    onChange={(event) => setNotes(event.target.value)}
-                    placeholder="Контекст, договорённости, важные детали по кейсу"
-                    className="mt-2 min-h-[140px] w-full rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 text-sm leading-6 text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="Контекст, договорённости, важные детали…"
+                    className={`mt-1.5 min-h-[120px] resize-none ${inputCls}`}
+                    style={inputSty}
                   />
                 </label>
               </div>
 
               {(error || status) && (
                 <div
-                  className={`mt-5 rounded-[24px] px-4 py-3 text-sm ${
+                  className={`mt-4 rounded-[9px] px-3.5 py-2.5 text-[12px] font-medium ${
                     error
-                      ? 'border border-red-300/40 bg-red-50 text-red-900 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-100'
-                      : 'border border-emerald-300/40 bg-emerald-50 text-emerald-900 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-100'
+                      ? 'border border-red-400/20 bg-red-400/10 text-red-400'
+                      : 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-400'
                   }`}
                 >
                   {error || status}
                 </div>
               )}
 
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <button
-                  onClick={() => {
-                    void resetUnsavedUpload();
-                  }}
-                  className="flex-1 rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-5 py-3 text-sm font-medium text-[var(--text)] transition hover:border-[var(--border-strong)]"
-                >
-                  Начать заново
-                </button>
+              <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
+                {confirmReset ? (
+                  <div className="flex flex-1 items-center gap-2 rounded-[10px] border px-3 py-2"
+                    style={{ borderColor: 'var(--warning)', background: 'var(--warning-soft)' }}>
+                    <span className="flex-1 text-[12px] font-medium" style={{ color: 'var(--warning)' }}>
+                      Данные будут сброшены. Продолжить?
+                    </span>
+                    <button
+                      onClick={() => setConfirmReset(false)}
+                      className="rounded-[7px] px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/10"
+                      style={{ color: 'var(--text-soft)' }}
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      onClick={() => { setConfirmReset(false); void resetUnsavedUpload(); }}
+                      className="rounded-[7px] px-2.5 py-1 text-[11px] font-semibold transition"
+                      style={{ background: 'var(--warning)', color: '#fff' }}
+                    >
+                      Сбросить
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmReset(true)}
+                    className="flex-1 rounded-[10px] border px-4 py-2.5 text-[13px] font-medium transition hover:border-[var(--border-strong)]"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-soft)' }}
+                  >
+                    Начать заново
+                  </button>
+                )}
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex-1 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-60"
+                  className="flex-1 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
+                  style={{ background: 'var(--accent)' }}
                 >
                   {saving ? 'Сохраняю…' : 'Сохранить и поставить в очередь'}
                 </button>
               </div>
-            </section>
+            </Section>
           </>
         )}
       </div>

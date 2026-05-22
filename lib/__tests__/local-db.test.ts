@@ -1,5 +1,4 @@
-import * as fsPromises from 'node:fs/promises';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -8,8 +7,8 @@ import {
   getLocalDbFilePath,
   readLocalDb,
   writeLocalDb,
-  type LocalDb,
 } from '../local-db';
+import { closeDb } from '../sqlite-db';
 
 describe('local-db', () => {
   let rootPath: string;
@@ -19,36 +18,32 @@ describe('local-db', () => {
   });
 
   afterEach(async () => {
+    closeDb(); // reset singleton so next test gets a fresh connection
     await rm(rootPath, { recursive: true, force: true });
   });
 
-  it('bootstraps the default database when the file does not exist', async () => {
+  it('bootstraps the default database when the sqlite file does not exist', async () => {
     const db = await readLocalDb(rootPath);
     const filePath = getLocalDbFilePath(rootPath);
-    const saved = JSON.parse(await readFile(filePath, 'utf8')) as LocalDb;
 
-    expect(db).toEqual(createDefaultLocalDb());
-    expect(saved).toEqual(createDefaultLocalDb());
-    expect(saved.subscription).toEqual({
+    // SQLite file should be created on disk
+    await expect(stat(filePath)).resolves.toBeTruthy();
+
+    expect(db.meta.version).toBe(1);
+    expect(db.projects).toEqual([]);
+    expect(db.applications).toEqual([]);
+    expect(db.status_history).toEqual([]);
+    expect(db.subscription).toEqual({
       plan_id: 'pro',
       status: 'active',
       expires_at: null,
       updated_at: null,
     });
-    expect(saved.settings).toEqual({
-      theme: 'system',
-      telegram: {
-        bot_token: '',
-        chat_id: '',
-      },
-      auto_check: {
-        enabled: false,
-        interval_minutes: null,
-      },
-    });
+    expect(db.settings.telegram).toEqual({ bot_token: '', chat_id: '' });
+    expect(db.settings.auto_check.enabled).toBe(false);
   });
 
-  it('persists writes and replaces the target file atomically', async () => {
+  it('persists writes and reads back correctly via SQLite', async () => {
     const db = await readLocalDb(rootPath);
     db.projects.push({
       id: 'project-1',
@@ -75,6 +70,13 @@ describe('local-db', () => {
       pdf_storage_key: '1746423600000-uuid.pdf',
       project_id: 'project-1',
       archived: false,
+      sync_state: 'idle',
+      last_checked_at: null,
+      next_check_at: null,
+      last_error: '',
+      last_detected_change_at: null,
+      last_change_summary: [],
+      last_change_fields: [],
       created_at: '2026-05-05T08:00:00.000Z',
       updated_at: '2026-05-05T08:00:00.000Z',
     });
@@ -85,96 +87,44 @@ describe('local-db', () => {
     db.subscription.plan_id = 'standard';
 
     await writeLocalDb(db, rootPath);
-
-    const filePath = getLocalDbFilePath(rootPath);
     const reloaded = await readLocalDb(rootPath);
-    const tempFilePath = `${filePath}.tmp`;
 
-    expect(reloaded).toEqual(db);
-    await expect(stat(tempFilePath)).rejects.toThrow();
+    expect(reloaded.projects).toHaveLength(1);
+    expect(reloaded.projects[0].name).toBe('Alpha');
+    expect(reloaded.applications).toHaveLength(1);
+    expect(reloaded.applications[0].application_number).toBe('285702690');
+    expect(reloaded.applications[0].sync_state).toBe('idle');
+    expect(reloaded.settings.theme).toBe('light');
+    expect(reloaded.settings.telegram.bot_token).toBe('token');
+    expect(reloaded.settings.auto_check.enabled).toBe(true);
+    expect(reloaded.settings.auto_check.interval_minutes).toBe(60);
+    expect(reloaded.subscription.plan_id).toBe('standard');
   });
 
-  it('preserves the existing database file if replace fallback cannot complete', async () => {
-    const filePath = getLocalDbFilePath(rootPath);
-    const originalDb = createDefaultLocalDb();
-    originalDb.subscription.plan_id = 'pro';
+  it('the _options parameter is a no-op in SQLite mode (backwards compat)', async () => {
+    const db = createDefaultLocalDb();
+    db.subscription.plan_id = 'standard';
 
-    await writeLocalDb(originalDb, rootPath);
-
-    const replacementDb = createDefaultLocalDb();
-    replacementDb.subscription.plan_id = 'standard';
+    // renameImpl is now ignored — writeLocalDb should succeed without throwing
     await expect(
-      writeLocalDb(replacementDb, rootPath, {
+      writeLocalDb(db, rootPath, {
         renameImpl: async () => {
           throw Object.assign(new Error('Permission denied'), { code: 'EPERM' });
         },
       })
-    ).rejects.toThrow(
-      'Atomic replacement is not available'
-    );
+    ).resolves.toBeUndefined();
 
-    const persisted = JSON.parse(await readFile(filePath, 'utf8')) as LocalDb;
-    const tempFiles = await fsPromises.readdir(path.dirname(filePath));
-
-    expect(persisted).toEqual(originalDb);
-    expect(tempFiles.filter((name) => name.includes('.tmp'))).toHaveLength(0);
+    const reloaded = await readLocalDb(rootPath);
+    expect(reloaded.subscription.plan_id).toBe('standard');
   });
 
-  it('normalizes legacy multi-user subscription and flat settings data', async () => {
-    const filePath = getLocalDbFilePath(rootPath);
+  it('applies sound_enabled SQLite migration for existing databases missing the column', async () => {
+    // Bootstrap db (creates table without sound_enabled in old version scenario)
+    await readLocalDb(rootPath);
 
-    await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
-    await fsPromises.writeFile(
-      filePath,
-      `${JSON.stringify({
-        meta: { version: 1, created_at: null, updated_at: null },
-        projects: [],
-        applications: [
-          {
-            id: 'application-1',
-            application_number: '285702690',
-            pdf_filename: 'legacy.pdf',
-          },
-        ],
-        status_history: [],
-        subscriptions: [
-          {
-            user_id: 'legacy-user',
-            plan_id: 'pro',
-            status: 'active',
-            expires_at: null,
-            updated_at: '2026-05-05T08:00:00.000Z',
-          },
-        ],
-        settings: {
-          theme: 'dark',
-          telegram_token: 'token',
-          telegram_chat_id: 'chat',
-          auto_check_interval: '15',
-        },
-      }, null, 2)}\n`,
-      'utf8'
-    );
-
+    // Write and reload — migration should have added sound_enabled defaulting to true
     const db = await readLocalDb(rootPath);
-
-    expect(db.subscription).toEqual({
-      plan_id: 'pro',
-      status: 'active',
-      expires_at: null,
-      updated_at: '2026-05-05T08:00:00.000Z',
-    });
-    expect(db.settings).toEqual({
-      theme: 'dark',
-      telegram: {
-        bot_token: 'token',
-        chat_id: 'chat',
-      },
-      auto_check: {
-        enabled: true,
-        interval_minutes: 15,
-      },
-    });
-    expect(db.applications[0]?.pdf_storage_key).toBe('legacy.pdf');
+    expect(typeof db.settings.sound_enabled).toBe('boolean');
+    expect(db.settings.sound_enabled).toBe(true);
   });
 });

@@ -22,21 +22,21 @@ interface Props {
 
 export default function HistorySection({ timelineItems }: Props) {
   return (
-    <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)] md:p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
+          <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
             История статусов
           </p>
-          <h2 className="mt-2 text-2xl font-semibold text-[var(--text)]">
+          <h2 className="mt-1 text-base font-bold text-[var(--text)]">
             Хронология движения
           </h2>
         </div>
       </div>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-4 space-y-2.5">
         {timelineItems.length === 0 && (
-          <p className="rounded-[24px] bg-[var(--panel-strong)] p-4 text-sm leading-6 text-[var(--text-soft)]">
+          <p className="rounded-[10px] bg-[var(--panel)] p-3 text-xs leading-5 text-[var(--text-muted)]">
             История статусов пока пустая.
           </p>
         )}
@@ -44,7 +44,7 @@ export default function HistorySection({ timelineItems }: Props) {
         {timelineItems.map((entry) => (
           <div
             key={entry.id}
-            className={`rounded-[24px] border p-4 ${
+            className={`rounded-[10px] border p-3 ${
               entry.isCurrentSnapshot
                 ? 'border-[color:color-mix(in_oklab,var(--accent)_35%,var(--border))] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_10%,var(--panel))_0%,var(--panel)_100%)]'
                 : 'border-[var(--border)] bg-[var(--panel)]'

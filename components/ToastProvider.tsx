@@ -63,7 +63,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const timers = toasts.map((toast) =>
       window.setTimeout(() => {
         setToasts((current) => current.filter((entry) => entry.id !== toast.id));
-      }, 4200)
+      }, 6000)
     );
 
     return () => {

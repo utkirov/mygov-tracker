@@ -7,101 +7,99 @@ import type { Application, Project } from '@/types';
 
 export default function ArchivePage() {
   const [applications, setApplications] = useState<Application[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [search, setSearch] = useState('');
+  const [projects,     setProjects]     = useState<Project[]>([]);
+  const [search,       setSearch]       = useState('');
 
   const loadData = useCallback(async () => {
-    const [applicationsResponse, projectsResponse] = await Promise.all([
+    const [appRes, projRes] = await Promise.all([
       fetch('/api/applications?archived=true', { cache: 'no-store' }),
-      fetch('/api/projects', { cache: 'no-store' }),
+      fetch('/api/projects',                   { cache: 'no-store' }),
     ]);
-
-    const [applicationsPayload, projectsPayload] = await Promise.all([
-      applicationsResponse.json() as Promise<Application[]>,
-      projectsResponse.json() as Promise<Project[]>,
+    const [apps, projs] = await Promise.all([
+      appRes.json()  as Promise<Application[]>,
+      projRes.json() as Promise<Project[]>,
     ]);
-
     startTransition(() => {
-      setApplications(applicationsPayload);
-      setProjects(projectsPayload);
+      setApplications(apps);
+      setProjects(projs);
     });
   }, []);
 
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
+  useEffect(() => { void loadData(); }, [loadData]);
 
   const filtered = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const q = search.trim().toLowerCase();
     return applications
-      .filter((application) => {
-        if (!normalizedSearch) {
-          return true;
-        }
-
-        return [
-          application.application_number,
-          application.object_name,
-          application.service_name,
-          application.organization,
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(normalizedSearch);
+      .filter(a => {
+        if (!q) return true;
+        return [a.application_number, a.object_name, a.service_name, a.organization]
+          .join(' ').toLowerCase().includes(q);
       })
-      .sort((left, right) => (right.last_changed_date ?? right.updated_at).localeCompare(left.last_changed_date ?? left.updated_at));
+      .sort((a, b) =>
+        (b.last_changed_date ?? b.updated_at).localeCompare(a.last_changed_date ?? a.updated_at),
+      );
   }, [applications, search]);
 
   return (
-    <div className="px-4 py-5 md:px-6 lg:px-10 lg:py-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] md:p-8">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-muted)]">
-            Archive workspace
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[var(--text)]">
-            Архив завершённых и отложенных кейсов
-          </h1>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--text-soft)] md:text-base">
-            Здесь остаются записи вне активного мониторинга. Они доступны для поиска, просмотра истории и возврата обратно в рабочий поток.
-          </p>
-
-          <div className="mt-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
+    <div className="flex h-[calc(100svh-52px)] flex-col overflow-hidden">
+      {/* ── Header ── */}
+      <div
+        className="border-b px-3 py-2.5 md:px-5 md:py-3"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h1 className="text-[13px] font-bold md:text-sm" style={{ color: 'var(--text)' }}>
+              Архив
+            </h1>
+            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              <span className="tabular">{applications.length}</span> завершённых и отложенных
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className="rounded-[6px] px-2 py-[3px] text-[10px] font-semibold tabular"
+              style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+            >
+              {applications.length}
+            </span>
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Поиск по архиву"
-              className="w-full rounded-[20px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Поиск…"
+              className="w-28 rounded-[9px] px-2.5 py-1.5 text-[12px] outline-none transition md:w-44"
+              style={{
+                background: 'var(--panel)',
+                border:     '1px solid var(--border)',
+                color:      'var(--text)',
+              }}
             />
-            <div className="rounded-[24px] bg-[var(--panel-strong)] px-4 py-3 text-sm text-[var(--text-soft)]">
-              В архиве: <span className="font-semibold text-[var(--text)]">{applications.length}</span>
-            </div>
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
-          <div className="space-y-4">
-            {filtered.length === 0 && (
-              <div className="rounded-[24px] bg-[var(--panel-strong)] p-6 text-sm leading-6 text-[var(--text-soft)]">
-                Архив пока пуст или под текущий поиск ничего не подошло.
-              </div>
-            )}
-
-            {filtered.map((application) => {
-              const project = application.project_id
-                ? projects.find((entry) => entry.id === application.project_id)
-                : undefined;
-
-              return (
-                <ApplicationCard
-                  key={application.id}
-                  application={application}
-                  project={project}
-                />
-              );
-            })}
+      {/* ── List ── */}
+      <div className="flex-1 overflow-y-auto p-3 md:p-5">
+        {filtered.length === 0 ? (
+          <div
+            className="flex items-center justify-center py-16 text-[13px]"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            {search ? 'Ничего не найдено.' : 'Архив пуст.'}
           </div>
-        </section>
+        ) : (
+          <div className="mx-auto grid max-w-5xl gap-2.5 md:grid-cols-2 md:gap-3 xl:grid-cols-3">
+            {filtered.map(application => (
+              <ApplicationCard
+                key={application.id}
+                application={application}
+                project={application.project_id
+                  ? projects.find(p => p.id === application.project_id)
+                  : undefined}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

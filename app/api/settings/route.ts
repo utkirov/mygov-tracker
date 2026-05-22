@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { readLocalDb, writeLocalDb, type LocalDbSettings } from '@/lib/local-db';
+import { reschedule } from '@/lib/server-scheduler';
 
 function parseInteger(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -89,6 +90,7 @@ function toFlatSettings(settings: LocalDbSettings) {
     auto_check_interval: settings.auto_check.interval_minutes,
     auto_check_delay_ms: settings.auto_check.delay_between_checks_ms,
     auto_check_concurrency: settings.auto_check.concurrency_limit,
+    sound_enabled: settings.sound_enabled,
   };
 }
 
@@ -171,6 +173,11 @@ function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>):
         ? true
         : current.auto_check.enabled;
 
+  const soundEnabled =
+    hasOwn('sound_enabled')
+      ? (parseBoolean(body.sound_enabled) ?? current.sound_enabled)
+      : current.sound_enabled;
+
   return {
     theme: nextTheme,
     telegram: {
@@ -183,6 +190,7 @@ function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>):
       delay_between_checks_ms: parsedDelay,
       concurrency_limit: parsedConcurrency,
     },
+    sound_enabled: soundEnabled,
   };
 }
 
@@ -205,6 +213,7 @@ export async function POST(request: NextRequest) {
   db.meta.updated_at = new Date().toISOString();
 
   await writeLocalDb(db);
+  reschedule();
 
   return NextResponse.json({ ok: true });
 }

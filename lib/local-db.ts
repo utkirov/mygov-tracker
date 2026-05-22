@@ -1,8 +1,7 @@
-import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 
 import { resolveLocalProjectRoot } from './local-paths';
+import { openDb } from './sqlite-db';
 
 export type LocalPlanId = 'free' | 'standard' | 'pro';
 export type LocalDbSyncState = 'idle' | 'queued' | 'checking' | 'success' | 'error';
@@ -91,6 +90,7 @@ export interface LocalDbSettings {
   theme: 'system' | 'light' | 'dark';
   telegram: LocalDbTelegramSettings;
   auto_check: LocalDbAutoCheckSettings;
+  sound_enabled: boolean;
 }
 
 export interface LocalDb {
@@ -106,10 +106,9 @@ export interface LocalDb {
   settings: LocalDbSettings;
 }
 
-const LOCAL_DB_RELATIVE_PATH = path.join('data', 'local-db.json');
-
+// kept for tests / helpers that import this path directly
 export function getLocalDbFilePath(rootPath?: string): string {
-  return path.join(resolveLocalProjectRoot(rootPath), LOCAL_DB_RELATIVE_PATH);
+  return path.join(resolveLocalProjectRoot(rootPath), 'data', 'local-db.sqlite');
 }
 
 export function createDefaultLocalDb(): LocalDb {
@@ -140,340 +139,271 @@ export function createDefaultLocalDb(): LocalDb {
         delay_between_checks_ms: 2500,
         concurrency_limit: 1,
       },
+      sound_enabled: true,
     },
   };
 }
 
-function normalizeTheme(value: unknown): LocalDbSettings['theme'] {
-  return value === 'light' || value === 'dark' || value === 'system' ? value : 'system';
-}
-
-function normalizeNullableString(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
-}
-
-function normalizeString(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback;
-}
-
-function normalizeInteger(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.trunc(value);
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const parsed = Number.parseInt(trimmed, 10);
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-
-  return null;
-}
-
-function normalizePositiveInteger(value: unknown): number | null {
-  const parsed = normalizeInteger(value);
-  return parsed !== null && parsed > 0 ? parsed : null;
-}
-
-function normalizeNonNegativeInteger(value: unknown): number | null {
-  const parsed = normalizeInteger(value);
-  return parsed !== null && parsed >= 0 ? parsed : null;
-}
-
-function normalizeBoolean(value: unknown): boolean | null {
-  if (typeof value === 'boolean') {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'true' || normalized === '1') {
-      return true;
-    }
-
-    if (normalized === 'false' || normalized === '0') {
-      return false;
-    }
-  }
-
-  if (typeof value === 'number') {
-    if (value === 1) {
-      return true;
-    }
-
-    if (value === 0) {
-      return false;
-    }
-  }
-
-  return null;
-}
+// ── helpers ────────────────────────────────────────────────────────────────
 
 function normalizeSyncState(value: unknown): LocalDbSyncState {
-  return value === 'queued' ||
-    value === 'checking' ||
-    value === 'success' ||
-    value === 'error' ||
-    value === 'idle'
+  return value === 'queued' || value === 'checking' || value === 'success' || value === 'error' || value === 'idle'
     ? value
     : 'idle';
 }
 
-function normalizeChangeFields(value: unknown): LocalDbApplicationChangeField[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.filter(
-    (field): field is LocalDbApplicationChangeField =>
-      field === 'status' ||
-      field === 'current_action' ||
-      field === 'acting_party' ||
-      field === 'last_changed_date'
-  );
+function boolFromSqlite(value: unknown): boolean {
+  return value === 1 || value === true || value === '1' || value === 'true';
 }
 
-function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.filter((entry): entry is string => typeof entry === 'string');
+function nullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-function normalizeSettings(value: unknown): LocalDbSettings {
-  const defaults = createDefaultLocalDb().settings;
-  if (!value || typeof value !== 'object') {
-    return defaults;
+function parseJsonArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) as T[]; } catch { /* ignore */ }
   }
+  return [];
+}
 
-  const raw = value as Record<string, unknown>;
-  const telegram = raw.telegram && typeof raw.telegram === 'object'
-    ? raw.telegram as Record<string, unknown>
-    : {};
-  const autoCheck = raw.auto_check && typeof raw.auto_check === 'object'
-    ? raw.auto_check as Record<string, unknown>
-    : {};
-  const intervalMinutes = normalizePositiveInteger(autoCheck.interval_minutes ?? raw.auto_check_interval);
-  const delayBetweenChecksMs = normalizeNonNegativeInteger(
-    autoCheck.delay_between_checks_ms ??
-    raw.auto_check_delay_ms ??
-    raw.auto_check_delay_between_checks_ms
-  );
-  const concurrencyLimit = normalizePositiveInteger(
-    autoCheck.concurrency_limit ??
-    raw.auto_check_concurrency ??
-    raw.auto_check_concurrency_limit
-  );
-  const enabled =
-    normalizeBoolean(autoCheck.enabled ?? raw.auto_check_enabled) ??
-    (intervalMinutes !== null ? intervalMinutes > 0 : defaults.auto_check.enabled);
-
+function rowToApplication(row: Record<string, unknown>): LocalDbApplication {
   return {
-    theme: normalizeTheme(raw.theme),
-    telegram: {
-      bot_token: normalizeString(telegram.bot_token ?? raw.telegram_token, defaults.telegram.bot_token),
-      chat_id: normalizeString(telegram.chat_id ?? raw.telegram_chat_id, defaults.telegram.chat_id),
-    },
-    auto_check: {
-      enabled,
-      interval_minutes: intervalMinutes,
-      delay_between_checks_ms: delayBetweenChecksMs,
-      concurrency_limit: concurrencyLimit,
-    },
+    id: String(row.id ?? ''),
+    application_number: String(row.application_number ?? ''),
+    object_name: String(row.object_name ?? ''),
+    service_name: String(row.service_name ?? ''),
+    organization: String(row.organization ?? ''),
+    status: String(row.status ?? ''),
+    submission_date: nullableString(row.submission_date),
+    last_changed_date: nullableString(row.last_changed_date),
+    current_action: String(row.current_action ?? ''),
+    acting_party: String(row.acting_party ?? ''),
+    verification_password: String(row.verification_password ?? ''),
+    sms_phone: String(row.sms_phone ?? ''),
+    notes: String(row.notes ?? ''),
+    pdf_filename: String(row.pdf_filename ?? ''),
+    pdf_storage_key: nullableString(row.pdf_storage_key),
+    project_id: nullableString(row.project_id),
+    archived: boolFromSqlite(row.archived),
+    sync_state: normalizeSyncState(row.sync_state),
+    last_checked_at: nullableString(row.last_checked_at),
+    next_check_at: nullableString(row.next_check_at),
+    last_error: String(row.last_error ?? ''),
+    last_detected_change_at: nullableString(row.last_detected_change_at),
+    last_change_summary: parseJsonArray<string>(row.last_change_summary),
+    last_change_fields: parseJsonArray<LocalDbApplicationChangeField>(row.last_change_fields),
+    created_at: String(row.created_at ?? ''),
+    updated_at: String(row.updated_at ?? ''),
   };
 }
 
-function normalizeSubscription(value: unknown): LocalDbSubscription {
-  const defaults = createDefaultLocalDb().subscription;
-  if (Array.isArray(value)) {
-    return normalizeSubscription(value[0]);
-  }
+// ── public API ─────────────────────────────────────────────────────────────
 
-  if (!value || typeof value !== 'object') {
-    return defaults;
-  }
-
-  const raw = value as Partial<LocalDbSubscription>;
-
-  return {
-    plan_id: raw.plan_id === 'standard' || raw.plan_id === 'pro' ? raw.plan_id : 'free',
-    status: raw.status ?? defaults.status,
-    expires_at: raw.expires_at ?? defaults.expires_at,
-    updated_at: raw.updated_at ?? defaults.updated_at,
-  };
+export interface WriteLocalDbOptions {
+  // kept for backwards compat — no-op in SQLite mode
+  renameImpl?: unknown;
 }
 
-function normalizeApplications(value: unknown): LocalDbApplicationCollection {
-  if (!Array.isArray(value)) {
-    return [] as LocalDbApplicationCollection;
-  }
+export async function readLocalDb(rootPath?: string): Promise<LocalDb> {
+  const db = await openDb(rootPath);
 
-  return value.map((application) => {
-    const raw = application as Partial<LocalDbApplication>;
+  const meta = db.prepare('SELECT * FROM meta WHERE id = 1').get() as Record<string, unknown> | undefined;
+  const projects = db.prepare('SELECT * FROM projects ORDER BY created_at').all() as LocalDbProject[];
+  const applications = (db.prepare('SELECT * FROM applications ORDER BY created_at').all() as Record<string, unknown>[])
+    .map(rowToApplication) as LocalDbApplicationCollection;
+  const statusHistory = db.prepare('SELECT * FROM status_history ORDER BY recorded_at').all() as LocalDbStatusHistory[];
+  const sub = db.prepare('SELECT * FROM subscription WHERE id = 1').get() as Record<string, unknown> | undefined;
+  const settings = db.prepare('SELECT * FROM settings WHERE id = 1').get() as Record<string, unknown> | undefined;
 
-    return {
-      id: raw.id ?? '',
-      application_number: raw.application_number ?? '',
-      object_name: raw.object_name ?? '',
-      service_name: raw.service_name ?? '',
-      organization: raw.organization ?? '',
-      status: raw.status ?? '',
-      submission_date: raw.submission_date ?? null,
-      last_changed_date: raw.last_changed_date ?? null,
-      current_action: raw.current_action ?? '',
-      acting_party: raw.acting_party ?? '',
-      verification_password: raw.verification_password ?? '',
-      sms_phone: raw.sms_phone ?? '',
-      notes: raw.notes ?? '',
-      pdf_filename: raw.pdf_filename ?? '',
-      pdf_storage_key: raw.pdf_storage_key ?? raw.pdf_filename ?? null,
-      project_id: raw.project_id ?? null,
-      archived: raw.archived ?? false,
-      sync_state: normalizeSyncState(raw.sync_state),
-      last_checked_at: normalizeNullableString(raw.last_checked_at),
-      next_check_at: normalizeNullableString(raw.next_check_at),
-      last_error: normalizeString(raw.last_error, ''),
-      last_detected_change_at: normalizeNullableString(raw.last_detected_change_at),
-      last_change_summary: normalizeStringArray(raw.last_change_summary),
-      last_change_fields: normalizeChangeFields(raw.last_change_fields),
-      created_at: raw.created_at ?? '',
-      updated_at: raw.updated_at ?? '',
-    };
-  }) as LocalDbApplicationCollection;
-}
-
-function normalizeLocalDb(value: unknown): LocalDb {
   const defaults = createDefaultLocalDb();
-  if (!value || typeof value !== 'object') {
-    return defaults;
-  }
-
-  const raw = value as Partial<LocalDb>;
 
   return {
     meta: {
       version: 1,
-      created_at: raw.meta?.created_at ?? defaults.meta.created_at,
-      updated_at: raw.meta?.updated_at ?? defaults.meta.updated_at,
+      created_at: nullableString(meta?.created_at),
+      updated_at: nullableString(meta?.updated_at),
     },
-    projects: Array.isArray(raw.projects) ? raw.projects : defaults.projects,
-    applications: normalizeApplications(raw.applications),
-    status_history: Array.isArray(raw.status_history) ? raw.status_history : defaults.status_history,
-    subscription: normalizeSubscription(
-      raw.subscription ?? (raw as Record<string, unknown>).subscriptions
-    ),
-    settings: normalizeSettings(raw.settings),
+    projects,
+    applications,
+    status_history: statusHistory,
+    subscription: {
+      plan_id: (sub?.plan_id === 'standard' || sub?.plan_id === 'pro' ? sub.plan_id : 'free') as LocalPlanId,
+      status: (sub?.status ?? defaults.subscription.status) as LocalDbSubscription['status'],
+      expires_at: nullableString(sub?.expires_at),
+      updated_at: nullableString(sub?.updated_at),
+    },
+    settings: {
+      theme: (settings?.theme === 'light' || settings?.theme === 'dark' ? settings.theme : 'system') as LocalDbSettings['theme'],
+      telegram: {
+        bot_token: String(settings?.telegram_bot_token ?? ''),
+        chat_id: String(settings?.telegram_chat_id ?? ''),
+      },
+      auto_check: {
+        enabled: settings?.auto_check_enabled !== undefined
+          ? boolFromSqlite(settings.auto_check_enabled)
+          : defaults.settings.auto_check.enabled,
+        interval_minutes: settings?.auto_check_interval_minutes != null
+          ? Number(settings.auto_check_interval_minutes) || null
+          : defaults.settings.auto_check.interval_minutes,
+        delay_between_checks_ms: settings?.auto_check_delay_between_checks_ms != null
+          ? Number(settings.auto_check_delay_between_checks_ms) || null
+          : defaults.settings.auto_check.delay_between_checks_ms,
+        concurrency_limit: settings?.auto_check_concurrency_limit != null
+          ? Number(settings.auto_check_concurrency_limit) || null
+          : defaults.settings.auto_check.concurrency_limit,
+      },
+      sound_enabled: settings?.sound_enabled !== undefined
+        ? boolFromSqlite(settings.sound_enabled)
+        : defaults.settings.sound_enabled,
+    },
   };
-}
-
-async function ensureParentDirectory(filePath: string): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-}
-
-function createTempFilePath(filePath: string): string {
-  return `${filePath}.${randomUUID()}.tmp`;
-}
-
-async function cleanupTempFile(tempFilePath: string): Promise<void> {
-  await rm(tempFilePath, { force: true });
-}
-
-async function replaceFileWithFallback(tempFilePath: string, filePath: string): Promise<void> {
-  const backupFilePath = `${filePath}.${randomUUID()}.bak`;
-
-  try {
-    await rename(filePath, backupFilePath);
-    await rename(tempFilePath, filePath);
-  } catch {
-    await cleanupTempFile(backupFilePath);
-    await copyFile(tempFilePath, filePath);
-  } finally {
-    await cleanupTempFile(tempFilePath);
-    await cleanupTempFile(backupFilePath);
-  }
-}
-
-async function destinationExists(filePath: string): Promise<boolean> {
-  try {
-    await stat(filePath);
-    return true;
-  } catch (error) {
-    const maybeNodeError = error as NodeJS.ErrnoException;
-    if (maybeNodeError.code === 'ENOENT') {
-      return false;
-    }
-
-    throw error;
-  }
-}
-
-export interface WriteLocalDbOptions {
-  renameImpl?: typeof rename;
 }
 
 export async function writeLocalDb(
   db: LocalDb,
   rootPath?: string,
-  options: WriteLocalDbOptions = {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _options: WriteLocalDbOptions = {}
 ): Promise<void> {
-  const filePath = getLocalDbFilePath(rootPath);
-  const renameImpl = options.renameImpl ?? rename;
-  const payload = normalizeLocalDb({
-    ...db,
-    meta: {
-      version: 1,
-      created_at: db.meta.created_at ?? null,
-      updated_at: db.meta.updated_at ?? null,
-    },
+  const sqlite = await openDb(rootPath);
+
+  const write = sqlite.transaction(() => {
+    // meta
+    sqlite.prepare(`
+      UPDATE meta SET version = 1, created_at = ?, updated_at = ? WHERE id = 1
+    `).run(db.meta.created_at ?? null, db.meta.updated_at ?? null);
+
+    // projects — replace all
+    sqlite.prepare('DELETE FROM projects').run();
+    const insertProject = sqlite.prepare(`
+      INSERT INTO projects (id, name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+    `);
+    for (const p of db.projects) {
+      insertProject.run(p.id, p.name, p.color, p.created_at, p.updated_at);
+    }
+
+    // applications — upsert
+    const upsertApp = sqlite.prepare(`
+      INSERT INTO applications (
+        id, application_number, object_name, service_name, organization, status,
+        submission_date, last_changed_date, current_action, acting_party,
+        verification_password, sms_phone, notes, pdf_filename, pdf_storage_key,
+        project_id, archived, sync_state, last_checked_at, next_check_at, last_error,
+        last_detected_change_at, last_change_summary, last_change_fields, created_at, updated_at
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        application_number = excluded.application_number,
+        object_name = excluded.object_name,
+        service_name = excluded.service_name,
+        organization = excluded.organization,
+        status = excluded.status,
+        submission_date = excluded.submission_date,
+        last_changed_date = excluded.last_changed_date,
+        current_action = excluded.current_action,
+        acting_party = excluded.acting_party,
+        verification_password = excluded.verification_password,
+        sms_phone = excluded.sms_phone,
+        notes = excluded.notes,
+        pdf_filename = excluded.pdf_filename,
+        pdf_storage_key = excluded.pdf_storage_key,
+        project_id = excluded.project_id,
+        archived = excluded.archived,
+        sync_state = excluded.sync_state,
+        last_checked_at = excluded.last_checked_at,
+        next_check_at = excluded.next_check_at,
+        last_error = excluded.last_error,
+        last_detected_change_at = excluded.last_detected_change_at,
+        last_change_summary = excluded.last_change_summary,
+        last_change_fields = excluded.last_change_fields,
+        updated_at = excluded.updated_at
+    `);
+
+    const appIds = new Set<string>();
+    for (const app of db.applications) {
+      appIds.add(app.id);
+      upsertApp.run(
+        app.id,
+        app.application_number,
+        app.object_name,
+        app.service_name,
+        app.organization,
+        app.status,
+        app.submission_date ?? null,
+        app.last_changed_date ?? null,
+        app.current_action,
+        app.acting_party,
+        app.verification_password,
+        app.sms_phone,
+        app.notes,
+        app.pdf_filename,
+        app.pdf_storage_key ?? null,
+        app.project_id ?? null,
+        app.archived ? 1 : 0,
+        app.sync_state,
+        app.last_checked_at ?? null,
+        app.next_check_at ?? null,
+        app.last_error,
+        app.last_detected_change_at ?? null,
+        JSON.stringify(app.last_change_summary),
+        JSON.stringify(app.last_change_fields),
+        app.created_at,
+        app.updated_at,
+      );
+    }
+
+    // remove deleted applications
+    const existing = sqlite.prepare('SELECT id FROM applications').all() as { id: string }[];
+    const deleteApp = sqlite.prepare('DELETE FROM applications WHERE id = ?');
+    for (const { id } of existing) {
+      if (!appIds.has(id)) deleteApp.run(id);
+    }
+
+    // status_history — upsert (append-only in practice)
+    const upsertHistory = sqlite.prepare(`
+      INSERT OR IGNORE INTO status_history (id, application_id, status, current_action, acting_party, recorded_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const h of db.status_history) {
+      upsertHistory.run(h.id, h.application_id, h.status, h.current_action, h.acting_party, h.recorded_at);
+    }
+
+    // subscription
+    sqlite.prepare(`
+      UPDATE subscription SET plan_id = ?, status = ?, expires_at = ?, updated_at = ? WHERE id = 1
+    `).run(
+      db.subscription.plan_id,
+      db.subscription.status,
+      db.subscription.expires_at ?? null,
+      db.subscription.updated_at ?? null,
+    );
+
+    // settings
+    sqlite.prepare(`
+      UPDATE settings SET
+        theme = ?,
+        telegram_bot_token = ?,
+        telegram_chat_id = ?,
+        auto_check_enabled = ?,
+        auto_check_interval_minutes = ?,
+        auto_check_delay_between_checks_ms = ?,
+        auto_check_concurrency_limit = ?,
+        sound_enabled = ?
+      WHERE id = 1
+    `).run(
+      db.settings.theme,
+      db.settings.telegram.bot_token,
+      db.settings.telegram.chat_id,
+      db.settings.auto_check.enabled ? 1 : 0,
+      db.settings.auto_check.interval_minutes ?? null,
+      db.settings.auto_check.delay_between_checks_ms ?? null,
+      db.settings.auto_check.concurrency_limit ?? null,
+      db.settings.sound_enabled ? 1 : 0,
+    );
   });
-  const tempFilePath = createTempFilePath(filePath);
 
-  await ensureParentDirectory(filePath);
-  await writeFile(tempFilePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-
-  try {
-    await renameImpl(tempFilePath, filePath);
-  } catch (error) {
-    const maybeNodeError = error as NodeJS.ErrnoException;
-    if (
-      maybeNodeError.code !== 'EEXIST' &&
-      maybeNodeError.code !== 'EPERM' &&
-      maybeNodeError.code !== 'EACCES'
-    ) {
-      await cleanupTempFile(tempFilePath);
-      throw error;
-    }
-
-    const hasExistingFile = await destinationExists(filePath);
-
-    if (!hasExistingFile) {
-      await cleanupTempFile(tempFilePath);
-      throw error;
-    }
-
-    await replaceFileWithFallback(tempFilePath, filePath);
-  }
-}
-
-export async function readLocalDb(rootPath?: string): Promise<LocalDb> {
-  const filePath = getLocalDbFilePath(rootPath);
-
-  try {
-    const raw = await readFile(filePath, 'utf8');
-    return normalizeLocalDb(JSON.parse(raw));
-  } catch (error) {
-    const maybeNodeError = error as NodeJS.ErrnoException;
-    if (maybeNodeError.code !== 'ENOENT') {
-      throw error;
-    }
-  }
-
-  const db = createDefaultLocalDb();
-  await writeLocalDb(db, rootPath);
-  return createDefaultLocalDb();
+  write();
 }

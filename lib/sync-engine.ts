@@ -455,6 +455,20 @@ export function startSyncEngine() {
   }
 
   started = true;
+
+  // Pre-load settings so the UI shows the real interval immediately
+  // instead of the hard-coded DEFAULT_INTERVAL_MINUTES default.
+  loadSettings()
+    .then(settings => {
+      updateSnapshot({
+        enabled: settings.enabled,
+        intervalMinutes: settings.intervalMinutes,
+        delayBetweenChecksMs: settings.delayBetweenChecksMs,
+        concurrencyLimit: settings.concurrencyLimit,
+      });
+    })
+    .catch(() => {/* first cycle will pick up settings anyway */});
+
   void runCycle('start');
 }
 
@@ -474,6 +488,32 @@ export function subscribeSyncEngine(listener: SyncEngineListener) {
 
 export function getSyncEngineSnapshot(): SyncEngineSnapshot {
   return snapshot;
+}
+
+/**
+ * Call this after saving settings so the client-side engine immediately
+ * adopts the new interval — mirrors what reschedule() does on the server.
+ */
+export function rescheduleSyncEngine(): void {
+  if (!started) return;
+  // Cancel the pending timer, re-read settings, then reschedule
+  clearScheduledTimer();
+  loadSettings()
+    .then(settings => {
+      updateSnapshot({
+        enabled: settings.enabled,
+        intervalMinutes: settings.intervalMinutes,
+        delayBetweenChecksMs: settings.delayBetweenChecksMs,
+        concurrencyLimit: settings.concurrencyLimit,
+      });
+      if (settings.enabled) {
+        scheduleNextCycle(settings.intervalMinutes * 60 * 1000);
+      }
+    })
+    .catch(() => {
+      // If settings failed to load, keep current interval
+      scheduleNextCycle(snapshot.intervalMinutes * 60 * 1000);
+    });
 }
 
 export function requestImmediateSyncRun() {

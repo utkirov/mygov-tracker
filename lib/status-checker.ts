@@ -11,13 +11,19 @@ export interface CheckedStatus {
   last_changed_date: string;
 }
 
-// Yii2 captcha hash: sum of char codes of the answer string
-function computeCaptchaAnswer(hash: number): number {
+// Yii2 captcha hash: sum of char codes of the answer string.
+// Precomputed reverse lookup: hash -> answer (built once, O(1) lookup).
+const _captchaTable: Map<number, number> = (() => {
+  const t = new Map<number, number>();
   for (let ans = 0; ans < 10000; ans++) {
-    const computed = String(ans).split('').reduce((s, c) => s + c.charCodeAt(0), 0);
-    if (computed === hash) return ans;
+    const h = String(ans).split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+    if (!t.has(h)) t.set(h, ans);
   }
-  return 0;
+  return t;
+})();
+
+function computeCaptchaAnswer(hash: number): number {
+  return _captchaTable.get(hash) ?? 0;
 }
 
 // Extract cookies from Set-Cookie headers into a single Cookie string
@@ -61,11 +67,22 @@ export async function fetchApplicationHtml(
   verificationPassword: string
 ): Promise<string | null> {
   try {
-    const headers = { 'User-Agent': 'Mozilla/5.0 (compatible; MyGovTracker/1.0)' };
+    // Full browser-like headers — some my.gov.uz applications return 500
+    // when headers like Accept or Accept-Language are missing.
+    const baseHeaders = {
+      'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control':   'no-cache',
+      'Pragma':          'no-cache',
+      'Connection':      'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+    };
 
-    const pageResp = await fetch(BASE, { headers });
+    const pageResp = await fetch(BASE, { headers: baseHeaders });
     if (!pageResp.ok) {
-      console.error('[Preview] Initial page fetch failed:', pageResp.status);
+      console.error('[StatusChecker] Initial page fetch failed:', pageResp.status);
       return null;
     }
 
@@ -74,17 +91,23 @@ export async function fetchApplicationHtml(
 
     const csrfMatch = html.match(/name="_csrf-myap"\s+value="([^"]+)"/);
     if (!csrfMatch) {
-      console.error('[Preview] CSRF token not found in page');
+      console.error('[StatusChecker] CSRF token not found in page');
       return null;
     }
     const csrf = csrfMatch[1];
 
     const captchaResp = await fetch(CAPTCHA_REFRESH, {
-      headers: { ...headers, Cookie: cookie, Referer: BASE, 'X-Requested-With': 'XMLHttpRequest' },
+      headers: {
+        ...baseHeaders,
+        Cookie: cookie,
+        Referer: BASE,
+        'X-Requested-With': 'XMLHttpRequest',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+      },
     });
 
     if (!captchaResp.ok) {
-      console.error('[Preview] CAPTCHA refresh failed:', captchaResp.status);
+      console.error('[StatusChecker] CAPTCHA refresh failed:', captchaResp.status);
       return null;
     }
 
@@ -101,31 +124,65 @@ export async function fetchApplicationHtml(
     const submitResp = await fetch(BASE, {
       method: 'POST',
       headers: {
-        ...headers,
+        ...baseHeaders,
         Cookie: cookie,
         Referer: BASE,
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Origin': 'https://oldmy.gov.uz:4433',
       },
       body: body.toString(),
     });
 
     if (!submitResp.ok) {
-      console.error('[Preview] Form submission failed:', submitResp.status);
+      console.error('[StatusChecker] Form submission failed:', submitResp.status);
       return null;
     }
 
     return await submitResp.text();
   } catch (err) {
-    console.error('[Preview] Error fetching application HTML:', err);
+    console.error('[StatusChecker] Error fetching application HTML:', err);
     return null;
   }
+}
+
+/**
+ * Detects known error pages returned by my.gov.uz and returns
+ * a human-readable Russian description, or null if the page looks normal.
+ */
+function detectMyGovErrorPage(html: string): string | null {
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/внутренняя ошибка сервера/i.test(text))
+    return 'Сервер my.gov.uz вернул внутреннюю ошибку для этого заявления. Данные могут быть недоступны в старой системе. Попробуйте проверить статус вручную на сайте oldmy.gov.uz:4433.';
+  if (/не удалось проверить переданные данные/i.test(text))
+    return 'Ошибка проверки безопасности (CSRF). Попробуйте снова через несколько секунд.';
+  if (/заявление не найдено|не найдено|not found/i.test(text))
+    return 'Заявление не найдено в базе my.gov.uz. Проверьте номер заявления и пароль.';
+  if (/неверный пароль|неверный код|код подтверждения/i.test(text))
+    return 'Неверный пароль проверки. Убедитесь, что пароль в настройках заявления совпадает с указанным на my.gov.uz.';
+  return null;
 }
 
 export async function fetchApplicationStatus(
   applicationNumber: string,
   verificationPassword: string
-): Promise<CheckedStatus | null> {
+): Promise<CheckedStatus> {
   const html = await fetchApplicationHtml(applicationNumber, verificationPassword);
-  if (!html) return null;
-  return parseStatusPage(html);
+  if (!html) {
+    throw new Error('Не удалось подключиться к my.gov.uz. Проверьте интернет-соединение.');
+  }
+
+  const errorDescription = detectMyGovErrorPage(html);
+  if (errorDescription) {
+    const snippet = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+    console.error(`[StatusChecker] Error page for #${applicationNumber}: ${snippet}`);
+    throw new Error(errorDescription);
+  }
+
+  const result = parseStatusPage(html);
+  if (!result) {
+    const snippet = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+    console.error(`[StatusChecker] parseStatusPage returned null for #${applicationNumber}. Page snippet: ${snippet}`);
+    throw new Error('Не удалось распознать страницу с результатом от my.gov.uz. Возможно, изменился формат сайта.');
+  }
+  return result;
 }

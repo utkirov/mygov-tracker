@@ -1,8 +1,6 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
-
   // TypeScript configuration
   typescript: {
     tsconfigPath: './tsconfig.json',
@@ -29,6 +27,8 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true, // Since we're local-only, can disable remote optimization
   },
+
+  serverExternalPackages: ['better-sqlite3'],
 
   // Experimental optimizations
   experimental: {

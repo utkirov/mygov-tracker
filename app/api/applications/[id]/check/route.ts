@@ -11,7 +11,9 @@ import {
 import { fetchApplicationStatus } from '@/lib/status-checker';
 import {
   buildApplicationChangeMessage,
+  buildApplicationCompletedMessage,
   buildApplicationErrorMessage,
+  buildManualCheckResultMessage,
   isTelegramConfigured,
   sendTelegramMessage,
 } from '@/lib/telegram';
@@ -66,8 +68,9 @@ function buildChangeSummary(
   return `${labels[field]}: "${formatChangeValue(previousValue)}" → "${formatChangeValue(nextValue)}"`;
 }
 
-export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const isManual = req.nextUrl.searchParams.get('manual') === 'true';
   const db = await readLocalDb();
   const application = db.applications.find((entry) => entry.id === id);
 
@@ -96,24 +99,27 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   db.meta.updated_at = startedAt;
   await writeLocalDb(db);
 
-  let checked: Awaited<ReturnType<typeof fetchApplicationStatus>> = null;
+  let checked: Awaited<ReturnType<typeof fetchApplicationStatus>> | null = null;
+  let fetchError: string | null = null;
 
   try {
     checked = await fetchApplicationStatus(
       application.application_number,
       application.verification_password
     );
-  } catch {
-    checked = null;
+  } catch (err) {
+    fetchError = err instanceof Error ? err.message : 'Неизвестная ошибка при проверке';
   }
+
   const now = new Date().toISOString();
   const nextCheckAt = getNextCheckAt(now, db.settings.auto_check);
 
   if (!checked) {
+    const errorMessage = fetchError ?? 'Не удалось получить статус от my.gov.uz';
     application.sync_state = 'error';
     application.last_checked_at = now;
     application.next_check_at = nextCheckAt;
-    application.last_error = 'Failed to fetch application status from my.gov.uz';
+    application.last_error = errorMessage;
     application.updated_at = now;
     db.meta.updated_at = now;
     await writeLocalDb(db);
@@ -130,7 +136,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     }
 
     return NextResponse.json(
-      { error: application.last_error },
+      { error: errorMessage },
       { status: 502 }
     );
   }
@@ -198,19 +204,20 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   db.meta.updated_at = now;
   await writeLocalDb(db);
 
-  if (changedFields.length > 0 && isTelegramConfigured(db.settings)) {
+  if (isTelegramConfigured(db.settings)) {
     try {
-      await sendTelegramMessage(
-        db.settings,
-        buildApplicationChangeMessage({
-          application,
-          changedFields,
-          previousValues,
-          nextValues,
-        })
-      );
-    } catch {
-      // Ignore Telegram delivery errors and keep the primary API response.
+      if (changedFields.length > 0) {
+        const isNowCompleted = isCompletedStatus(application.status) && !isCompletedStatus(previousValues.status ?? '');
+        const message = isNowCompleted
+          ? buildApplicationCompletedMessage(application)
+          : buildApplicationChangeMessage({ application, changedFields, previousValues, nextValues });
+        await sendTelegramMessage(db.settings, message);
+      } else if (isManual) {
+        await sendTelegramMessage(db.settings, buildManualCheckResultMessage(application));
+      }
+    } catch (err) {
+      console.error('[check route] Telegram error:', err);
+      // Keep the primary API response even when Telegram delivery fails.
     }
   }
 

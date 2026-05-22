@@ -66,23 +66,86 @@ export interface ParsedPdf {
 
 export type StatusType = 'action_required' | 'in_progress' | 'completed';
 
-const TERMINAL_STATUS_MARKERS = [
-  'РѕРґРѕР±СЂРµРЅРѕ',
-  'Р·Р°РІРµСЂС€РµРЅРѕ',
-  'РІС‹РґР°РЅРѕ',
-  'РѕС‚РєР°Р·Р°РЅРѕ',
-  'tasdiqlangan',
-  'bekor',
-];
+// Official my.gov.uz statuses
+export interface MyGovStatus {
+  label: string;
+  type: StatusType;
+  // Tailwind classes for the badge
+  badge: string;
+}
+
+const STATUS_MAP: Record<string, MyGovStatus> = {
+  'новое': {
+    label: 'Новое',
+    type: 'in_progress',
+    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
+  },
+  'в обработке': {
+    label: 'В обработке',
+    type: 'in_progress',
+    badge: 'bg-amber-100 text-amber-800 dark:bg-amber-400/20 dark:text-amber-200',
+  },
+  'обработано': {
+    label: 'Обработано',
+    type: 'completed',
+    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-200',
+  },
+  'отклонено': {
+    label: 'Отклонено',
+    type: 'completed',
+    badge: 'bg-red-100 text-red-800 dark:bg-red-400/20 dark:text-red-200',
+  },
+  'аннулировано': {
+    label: 'Аннулировано',
+    type: 'completed',
+    badge: 'bg-gray-100 text-gray-600 dark:bg-gray-400/20 dark:text-gray-300',
+  },
+  'переотправлена': {
+    label: 'Переотправлена',
+    type: 'in_progress',
+    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
+  },
+  'черновик': {
+    label: 'Черновик',
+    type: 'in_progress',
+    badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-400/20 dark:text-yellow-200',
+  },
+  'в ожидании другого заявителя': {
+    label: 'В ожидании другого заявителя',
+    type: 'action_required',
+    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
+  },
+  'в ожидании оплаты': {
+    label: 'В ожидании оплаты',
+    type: 'action_required',
+    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-400/20 dark:text-blue-200',
+  },
+};
+
+function normalizeStatus(status: string): string {
+  return status.trim().toLowerCase();
+}
+
+export function getMyGovStatus(status: string): MyGovStatus {
+  return STATUS_MAP[normalizeStatus(status)] ?? {
+    label: status,
+    type: 'in_progress' as StatusType,
+    badge: 'bg-[var(--panel-strong)] text-[var(--text-soft)]',
+  };
+}
 
 export function isCompletedStatus(status: string): boolean {
-  const normalized = status.toLowerCase();
-  return TERMINAL_STATUS_MARKERS.some(marker => normalized.includes(marker));
+  return getMyGovStatus(status).type === 'completed';
 }
 
 export function getStatusType(acting_party: string, status: string): StatusType {
-  if (isCompletedStatus(status)) return 'completed';
-  if (acting_party.toLowerCase().includes('Р·Р°СЏРІРёС‚РµР»СЊ') || acting_party.toLowerCase().includes('ariza beruvchi')) return 'action_required';
+  const mygovType = getMyGovStatus(status).type;
+  if (mygovType === 'completed') return 'completed';
+  // action_required from status map takes precedence
+  if (mygovType === 'action_required') return 'action_required';
+  // fallback: check acting_party for заявитель
+  const party = acting_party.toLowerCase();
+  if (party.includes('заявитель') || party.includes('ariza beruvchi')) return 'action_required';
   return 'in_progress';
 }
 
