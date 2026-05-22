@@ -1,9 +1,9 @@
 {
-  "running": false,
+  "running": true,
   "startedAt": "2026-05-22T13:10:49.516Z",
-  "lastCycleStartedAt": null,
+  "lastCycleStartedAt": "2026-05-22T13:40:52.230Z",
   "lastCycleFinishedAt": null,
-  "nextCycleAt": "2026-05-22T13:40:52.217Z",
+  "nextCycleAt": null,
   "lastSummary": null,
-  "heartbeatAt": "2026-05-22T13:10:52.223Z"
+  "heartbeatAt": "2026-05-22T13:40:52.234Z"
 }
