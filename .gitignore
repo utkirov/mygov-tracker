@@ -4,11 +4,6 @@
 /node_modules
 /.pnp
 .pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
 
 # testing
 /coverage
@@ -36,7 +31,7 @@ yarn-error.log*
 # vercel
 .vercel
 
-# Electron
+# Electron / packaged binaries
 /dist/
 /electron/dist/
 *.exe
@@ -50,20 +45,23 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# superpowers
+# superpowers / worktrees
 .superpowers/
 .worktrees/
+
+# local runtime data (not versioned)
 /data/local-db.json
+/data/local-db.sqlite
+/data/local-db.sqlite-shm
+/data/local-db.sqlite-wal
+/data/scheduler-status.json
 /data/pdfs/
 
-.vercel
+# autostart runtime artifacts
+autostart.log
+autostart-build.log
+autostart-server.log
+start-server.vbs
 
-# Electron
-/dist/
-/electron/dist/
-*.exe
-*.msi
-
-# IDE
-.vscode/
-.idea/
+# personal documents
+*.docx

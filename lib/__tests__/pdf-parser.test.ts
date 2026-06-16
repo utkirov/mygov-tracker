@@ -83,6 +83,38 @@ describe('extractFieldsFromText – real my.gov.uz format', () => {
   });
 });
 
+// ── Split-label password format (real PDF: "Пароль для\nпроверки\n11214") ────
+const SPLIT_LABEL_PDF_TEXT = `
+
+Выдача разрешения на объект для начала строительно-монтажных работ
+Номер заявки296284876
+Организация
+Инспекция по контролю в сфере строительства
+Дата подачи01.06.2026 08:47
+Дата последнего
+изменения
+01.06.2026 08:47
+СостояниеНовое
+Текущее действиеПринятие на рассмотрение
+Пароль для
+проверки
+11214
+`;
+
+describe('extractFieldsFromText – split password label', () => {
+  it('extracts verification password when label is split across two lines', () => {
+    expect(extractFieldsFromText(SPLIT_LABEL_PDF_TEXT).verification_password).toBe('11214');
+  });
+
+  it('extracts application number', () => {
+    expect(extractFieldsFromText(SPLIT_LABEL_PDF_TEXT).application_number).toBe('296284876');
+  });
+
+  it('extracts status', () => {
+    expect(extractFieldsFromText(SPLIT_LABEL_PDF_TEXT).status).toBe('Новое');
+  });
+});
+
 // ── Uzbek language PDF format ─────────────────────────────────────────────────
 const UZ_PDF_TEXT = `
 

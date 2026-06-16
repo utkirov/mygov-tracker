@@ -42,6 +42,18 @@ export function extractFieldsFromText(text: string): ParsedPdf {
   const lastUz = text.match(/Oxirgi o.zgartirish kiritilgan\s*\nsana\s*\n(.+?)(?=\n)/i);
   const last_changed_date = (lastRu?.[1] ?? lastUz?.[1] ?? '').trim();
 
+  // Verification password — label may be split across two lines:
+  // RU inline: "Пароль для проверки11214" or "Пароль для проверки 11214"
+  // RU split:  "Пароль для\nпроверки\n11214"
+  // UZ inline: "Tekshirish uchun parol11214"
+  // UZ split:  "Tekshirish uchun\nparol\n11214"
+  let verification_password = extractInline(text, LABELS.verification_password);
+  if (!verification_password) {
+    const pwRu = text.match(/Пароль для\s*\nпроверки\s*\n(.+?)(?=\n)/i);
+    const pwUz = text.match(/Tekshirish uchun\s*\nparol\s*\n(.+?)(?=\n)/i);
+    verification_password = (pwRu?.[1] ?? pwUz?.[1] ?? '').trim();
+  }
+
   return {
     application_number:   extractInline(text, LABELS.application_number),
     service_name,
@@ -51,7 +63,7 @@ export function extractFieldsFromText(text: string): ParsedPdf {
     last_changed_date,
     current_action:       extractInline(text, LABELS.current_action),
     acting_party:         extractInline(text, LABELS.acting_party),
-    verification_password: extractInline(text, LABELS.verification_password),
+    verification_password,
     sms_phone:            extractInline(text, LABELS.sms_phone),
   };
 }
