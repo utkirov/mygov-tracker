@@ -40,7 +40,15 @@
           "enableRemoteNotifications": true
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Камера нужна, чтобы отсканировать QR привязки с сайта трекера.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "scheme": "mygovtracker",
     "experiments": {

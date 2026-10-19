@@ -338,6 +338,72 @@ function SecuritySection() {
   );
 }
 
+interface PairingQr { link: string; expiresAt: string; svg: string }
+
+function AndroidSection() {
+  const [qr, setQr] = useState<PairingQr | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!qr) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [qr]);
+
+  async function showQr() {
+    setBusy(true);
+    try {
+      const response = await fetch('/api/auth/pair', { method: 'POST' });
+      const payload = await response.json().catch(() => ({})) as PairingQr & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Не удалось создать QR');
+      setQr(payload);
+      setNow(Date.now());
+    } catch (error) {
+      showToast({ title: 'QR не создан', description: error instanceof Error ? error.message : '', tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const leftMs = qr ? Date.parse(qr.expiresAt) - now : 0;
+  const expired = qr !== null && leftMs <= 0;
+  const left = `${Math.floor(Math.max(0, leftMs) / 60000)}:${String(Math.floor((Math.max(0, leftMs) % 60000) / 1000)).padStart(2, '0')}`;
+
+  return (
+    <SectionCard title="Приложение Android" subtitle="Привязка телефона без ввода пароля">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex h-[148px] w-[148px] shrink-0 items-center justify-center rounded-[10px] border p-2"
+          style={{ background: '#fff', borderColor: 'var(--border)' }}>
+          {qr && !expired ? (
+            // Server-rendered SVG from the `qrcode` package — markup we generate, not user input.
+            <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: qr.svg }} />
+          ) : (
+            <span className="px-2 text-center text-[11px]" style={{ color: '#8B8B94' }}>
+              {expired ? 'QR истёк' : 'QR появится здесь'}
+            </span>
+          )}
+        </div>
+        <div className="space-y-2">
+          <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Отсканируйте в приложении</p>
+          <p className="text-[12px] leading-[1.5]" style={{ color: 'var(--text-muted)' }}>
+            На экране входа нажмите «Войти по QR». Код действует 5 минут, один раз, и выдаёт
+            телефону собственный токен. Отозвать можно в «Активных устройствах».
+          </p>
+          {qr && !expired && (
+            <p className="font-mono text-[11px]" style={{ color: 'var(--text-soft)' }}>Действует ещё {left}</p>
+          )}
+          <button onClick={() => void showQr()} disabled={busy}
+            className="rounded-[8px] px-3 py-2 text-[12px] font-semibold disabled:opacity-60"
+            style={{ background: 'var(--text)', color: 'var(--surface)' }}>
+            {busy ? 'Создаю…' : qr ? 'Новый QR' : 'Показать QR'}
+          </button>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 export default function SettingsPage() {
   const sync = useSyncEngineSnapshot();
   const [lanIps, setLanIps] = useState<string[]>([]);
@@ -834,6 +900,7 @@ export default function SettingsPage() {
             </SectionCard>
 
             <SecuritySection />
+            <AndroidSection />
 
             <BackupSection />
 

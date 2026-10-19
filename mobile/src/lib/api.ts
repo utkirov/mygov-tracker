@@ -145,6 +145,23 @@ export async function login(username: string, password: string): Promise<void> {
   await setToken(payload.token);
 }
 
+/** Trades a QR code from the website's settings for this phone's own device token. */
+export async function pairWithCode(code: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/auth/pair/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ code, device: { name: Device.modelName ?? 'Android' } }),
+    });
+  } catch {
+    throw new NetworkError('Сервер недоступен — компьютер выключен или нет интернета');
+  }
+  const payload = await response.json().catch(() => ({})) as { token?: string; error?: string };
+  if (!response.ok || !payload.token) throw new Error(payload.error ?? 'Не удалось привязать телефон');
+  await setToken(payload.token);
+}
+
 export async function logout(): Promise<void> {
   try {
     await request('/api/auth/logout', { method: 'POST' });

@@ -26,7 +26,7 @@ function Gate() {
 
   useEffect(() => {
     if (!ready) return;
-    const onLogin = segments[0] === 'login';
+    const onLogin = segments[0] === 'login' || segments[0] === 'pair';
     if (!signedIn && !onLogin) router.replace('/login');
     else if (signedIn && onLogin) router.replace('/');
   }, [ready, signedIn, segments]);
@@ -56,6 +56,7 @@ function Gate() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="pair" options={{ title: 'Вход по QR' }} />
         <Stack.Screen name="application/[id]" options={{ title: 'Заявка' }} />
       </Stack>
     </>

@@ -12,7 +12,7 @@ import { isAllowedHost, isCrossSiteRequest, isPublicRequest } from '@/lib/reques
 import { readSessionToken, SESSION_COOKIE, verifySession } from '@/lib/session-token';
 
 // Reachable without a session from the internet: the login page and what it calls.
-const PUBLIC_PATHS = new Set(['/login', '/api/auth/login', '/api/auth/me', '/api/health']);
+const PUBLIC_PATHS = new Set(['/login', '/api/auth/login', '/api/auth/pair/claim', '/api/auth/me', '/api/health']);
 
 const TOKEN_COOKIE_NAME = 'app_token';
 const TOKEN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // ~1 year

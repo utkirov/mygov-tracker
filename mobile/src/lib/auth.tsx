@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { getToken, login as apiLogin, logout as apiLogout } from './api';
+import { getToken, login as apiLogin, logout as apiLogout, pairWithCode } from './api';
 import { registerForPush, unregisterPush } from './push';
 
 interface AuthState {
   ready: boolean;
   signedIn: boolean;
   signIn: (username: string, password: string) => Promise<void>;
+  signInWithCode: (code: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Called when the server answers 401 (session revoked elsewhere). */
   expire: () => void;
@@ -32,6 +33,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     registerForPush().catch(() => {});
   }, []);
 
+  const signInWithCode = useCallback(async (code: string) => {
+    await pairWithCode(code);
+    setSignedIn(true);
+    registerForPush().catch(() => {});
+  }, []);
+
   const signOut = useCallback(async () => {
     await unregisterPush();
     await apiLogout();
@@ -40,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const expire = useCallback(() => setSignedIn(false), []);
 
-  const value = useMemo(() => ({ ready, signedIn, signIn, signOut, expire }), [ready, signedIn, signIn, signOut, expire]);
+  const value = useMemo(() => ({ ready, signedIn, signIn, signInWithCode, signOut, expire }), [ready, signedIn, signIn, signInWithCode, signOut, expire]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -44,6 +45,12 @@ export default function LoginScreen() {
           <Field label="Пароль" value={password} onChangeText={setPassword} secureTextEntry onSubmitEditing={submit} />
           {error && <Text style={[styles.error, { color: t.danger }]}>{error}</Text>}
           <Button title="Войти" onPress={submit} busy={busy} disabled={!password} />
+          <View style={styles.orRow}>
+            <View style={[styles.orLine, { backgroundColor: t.border }]} />
+            <Text style={[styles.hint, { color: t.textMuted }]}>или</Text>
+            <View style={[styles.orLine, { backgroundColor: t.border }]} />
+          </View>
+          <Button title="Войти по QR с сайта" variant="secondary" onPress={() => router.push('/pair')} />
         </Card>
         <Text style={[styles.hint, { color: t.textMuted }]}>После 5 неверных попыток вход блокируется на 15 минут.</Text>
       </KeyboardAvoidingView>
@@ -62,4 +69,6 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: font.regular, fontSize: 13, lineHeight: 18 },
   error: { fontFamily: font.medium, fontSize: 13 },
   hint: { fontFamily: font.regular, fontSize: 12, textAlign: 'center' },
+  orRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  orLine: { flex: 1, height: StyleSheet.hairlineWidth },
 });
