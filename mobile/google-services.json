@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "415023395784",
+    "project_id": "mygov-tracker",
+    "storage_bucket": "mygov-tracker.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:415023395784:android:0d89eb460b162b29bd06fd",
+        "android_client_info": {
+          "package_name": "uz.turonproject.tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDL5GC4hI5WBXDlS8VfEwYlUKhF_NW5mQg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

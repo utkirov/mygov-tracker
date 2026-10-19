@@ -46,7 +46,16 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "https://tracker.turonproject.uz"
-    }
+      "apiBaseUrl": "https://tracker.turonproject.uz",
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "271d2f4d-6932-489a-8b12-a7a6dda37a9e"
+      }
+    },
+    "owner": "utkirov"
   }
 }
