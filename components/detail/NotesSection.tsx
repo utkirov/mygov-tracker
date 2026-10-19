@@ -1,5 +1,7 @@
 'use client';
 
+import SectionHeading from './SectionHeading';
+
 interface Props {
   notes: string;
   savingNotes: boolean;
@@ -10,13 +12,11 @@ interface Props {
 export default function NotesSection({ notes, savingNotes, onNotesChange, onBlur }: Props) {
   return (
     <section className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)] md:p-5">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Заметки</p>
-          <h2 className="mt-1 text-sm font-bold text-[var(--text)]">Контекст по заявлению</h2>
-        </div>
-        {savingNotes && <span className="text-[10px] text-[var(--text-muted)]">Сохраняю…</span>}
-      </div>
+      <SectionHeading
+        eyebrow="Заметки"
+        title="Контекст по заявлению"
+        action={savingNotes ? <span className="text-[10px] text-[var(--text-muted)]">Сохраняю…</span> : undefined}
+      />
 
       <textarea
         value={notes}

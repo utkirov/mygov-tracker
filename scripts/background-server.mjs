@@ -1,6 +1,7 @@
-import { createWriteStream, existsSync, openSync, statSync } from 'node:fs';
-import { appendFile, readdir, stat } from 'node:fs/promises';
+import { createWriteStream, existsSync, openSync, readFileSync } from 'node:fs';
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,12 +12,16 @@ const {
   MANAGED_DIR_NAMES,
   MANAGED_FILE_NAMES,
   formatLanUrls,
-  shouldRebuildFromEntries,
+  shouldRebuildFromHash,
 } = require('./autostart-lib.cjs');
 
 const projectDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const nextBinPath = join(projectDir, 'node_modules', 'next', 'dist', 'bin', 'next');
+// Served through server.mjs instead of `next start` so clients can't spoof x-forwarded-for.
+const serverScriptPath = join(projectDir, 'server.mjs');
 const buildMarkerPath = join(projectDir, '.next', 'BUILD_ID');
+const buildStampPath = join(projectDir, 'data', 'build-stamp.txt');
+const pidFilePath = join(projectDir, 'data', 'server.pid');
 const logPath = join(projectDir, 'autostart.log');
 const buildLogPath = join(projectDir, 'autostart-build.log');
 const serverLogPath = join(projectDir, 'autostart-server.log');
@@ -36,7 +41,7 @@ async function sleep(ms) {
   await new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function collectEntriesRecursively(targetPath, entries) {
+async function collectPathsRecursively(targetPath, paths) {
   const directoryEntries = await readdir(targetPath, { withFileTypes: true });
 
   for (const entry of directoryEntries) {
@@ -47,7 +52,7 @@ async function collectEntriesRecursively(targetPath, entries) {
     const fullPath = join(targetPath, entry.name);
 
     if (entry.isDirectory()) {
-      await collectEntriesRecursively(fullPath, entries);
+      await collectPathsRecursively(fullPath, paths);
       continue;
     }
 
@@ -55,16 +60,12 @@ async function collectEntriesRecursively(targetPath, entries) {
       continue;
     }
 
-    const stats = await stat(fullPath);
-    entries.push({
-      path: relative(projectDir, fullPath),
-      mtimeMs: stats.mtimeMs,
-    });
+    paths.push(relative(projectDir, fullPath));
   }
 }
 
-async function collectManagedSourceEntries() {
-  const entries = [];
+async function collectManagedSourcePaths() {
+  const paths = [];
 
   for (const directoryName of MANAGED_DIR_NAMES) {
     const fullPath = join(projectDir, directoryName);
@@ -72,23 +73,47 @@ async function collectManagedSourceEntries() {
       continue;
     }
 
-    await collectEntriesRecursively(fullPath, entries);
+    await collectPathsRecursively(fullPath, paths);
   }
 
   for (const fileName of MANAGED_FILE_NAMES) {
-    const fullPath = join(projectDir, fileName);
-    if (!existsSync(fullPath)) {
-      continue;
+    if (existsSync(join(projectDir, fileName))) {
+      paths.push(fileName);
     }
-
-    const fileStats = await stat(fullPath);
-    entries.push({
-      path: fileName,
-      mtimeMs: fileStats.mtimeMs,
-    });
   }
 
-  return entries;
+  return paths.sort();
+}
+
+/**
+ * Combined content hash of every managed source file (path + bytes). Used
+ * instead of mtimes so a touch-without-content-change (editor re-save, git
+ * checkout, AV scan) never forces a rebuild — only real content changes do.
+ */
+async function computeSourceHash() {
+  const paths = await collectManagedSourcePaths();
+  const hash = createHash('sha256');
+
+  for (const relativePath of paths) {
+    hash.update(relativePath);
+    hash.update(await readFile(join(projectDir, relativePath)));
+  }
+
+  return hash.digest('hex');
+}
+
+async function readBuildStamp() {
+  try {
+    const contents = await readFile(buildStampPath, 'utf8');
+    return contents.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeBuildStamp(hash) {
+  await mkdir(dirname(buildStampPath), { recursive: true });
+  await writeFile(buildStampPath, hash, 'utf8');
 }
 
 async function fetchJson(url) {
@@ -165,9 +190,18 @@ async function runNextCommand(args, logFilePath) {
   });
 }
 
-function startDetachedServer() {
+async function writePidFile(pid) {
+  try {
+    await mkdir(dirname(pidFilePath), { recursive: true });
+    await writeFile(pidFilePath, String(pid), 'utf8');
+  } catch (err) {
+    await log(`Failed to write PID file: ${err.message}`);
+  }
+}
+
+async function startDetachedServer() {
   const serverLogFd = openSync(serverLogPath, 'a');
-  const child = spawn(process.execPath, [nextBinPath, 'start', '-H', '0.0.0.0'], {
+  const child = spawn(process.execPath, [serverScriptPath], {
     cwd: projectDir,
     detached: true,
     stdio: ['ignore', serverLogFd, serverLogFd],
@@ -175,21 +209,27 @@ function startDetachedServer() {
   });
 
   child.unref();
+
+  if (child.pid) {
+    await writePidFile(child.pid);
+  }
+
   return child.pid;
 }
 
 async function ensureBuildIsFresh() {
-  const sourceEntries = await collectManagedSourceEntries();
   const buildExists = existsSync(buildMarkerPath);
-  const buildMtimeMs = buildExists ? statSync(buildMarkerPath).mtimeMs : 0;
+  const currentHash = await computeSourceHash();
+  const previousHash = buildExists ? await readBuildStamp() : null;
 
-  if (!shouldRebuildFromEntries({ buildExists, buildMtimeMs, sourceEntries })) {
+  if (!shouldRebuildFromHash({ buildExists, previousHash, currentHash })) {
     await log('Existing build is fresh enough for autostart.');
     return;
   }
 
   await log('Build is missing or stale; starting next build.');
   await runNextCommand(['build'], buildLogPath);
+  await writeBuildStamp(currentHash);
   await log('Build finished successfully.');
 }
 
@@ -207,6 +247,43 @@ async function waitForHealthyServer(timeoutMs = 90_000) {
   return false;
 }
 
+function openBrowser(url) {
+  spawn('cmd', ['/c', 'start', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+}
+
+/** Reads APP_TOKEN=... out of .env.local so the auto-opened tab is pre-authenticated. */
+function readAppToken() {
+  const envPath = join(projectDir, '.env.local');
+  if (!existsSync(envPath)) return null;
+
+  try {
+    const contents = readFileSync(envPath, 'utf8');
+    const match = contents.match(/^APP_TOKEN=(.*)$/m);
+    return match ? match[1].trim() || null : null;
+  } catch {
+    return null;
+  }
+}
+
+async function notifyTelegram() {
+  try {
+    const Database = require('better-sqlite3');
+    const dbPath = join(projectDir, 'data', 'local-db.sqlite');
+    if (!existsSync(dbPath)) return;
+    const db = new Database(dbPath, { readonly: true });
+    const row = db.prepare('SELECT telegram_bot_token, telegram_chat_id FROM settings LIMIT 1').get();
+    db.close();
+    if (!row?.telegram_bot_token || !row?.telegram_chat_id) return;
+    await fetch(`https://api.telegram.org/bot${row.telegram_bot_token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: row.telegram_chat_id, text: '✅ Сервер запущен и работает — http://localhost:3000', parse_mode: 'HTML' }),
+    });
+  } catch (e) {
+    await log(`Telegram notify failed: ${e.message}`);
+  }
+}
+
 async function main() {
   if (!existsSync(nextBinPath)) {
     throw new Error(`Next.js binary not found at ${nextBinPath}`);
@@ -220,7 +297,7 @@ async function main() {
   }
 
   await ensureBuildIsFresh();
-  const pid = startDetachedServer();
+  const pid = await startDetachedServer();
   await log(`Detached Next.js server launched with PID ${pid}.`);
 
   const healthy = await waitForHealthyServer();
@@ -235,6 +312,10 @@ async function main() {
   } else {
     await log('LAN URLs were not detected.');
   }
+
+  const token = readAppToken();
+  openBrowser(token ? `http://localhost:${port}?token=${token}` : `http://localhost:${port}`);
+  await notifyTelegram();
 }
 
 main().catch(async error => {

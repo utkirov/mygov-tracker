@@ -7,8 +7,8 @@
  *   npm run autostart:remove — remove
  */
 
-import { execSync } from 'node:child_process';
-import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -23,16 +23,37 @@ const VBS_PATH = join(PROJECT_DIR, 'start-server.vbs');
 const LOG_PATH = join(PROJECT_DIR, 'autostart.log');
 const LAUNCHER_PATH = join(PROJECT_DIR, 'scripts', 'background-server.mjs');
 const RUN_REGISTRY_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+const PID_FILE_PATH = join(PROJECT_DIR, 'data', 'server.pid');
 
-function run(cmd) {
+// argv-array form — no shell string interpolation/quoting to get wrong.
+function run(command, args) {
   try {
-    execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'] });
+    execFileSync(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     return { ok: true };
   } catch (error) {
     return {
       ok: false,
       err: error.stderr?.toString().trim() || error.message,
     };
+  }
+}
+
+/** Kills the detached server process recorded by background-server.mjs, if any. */
+function stopRunningServer() {
+  if (!existsSync(PID_FILE_PATH)) return;
+
+  try {
+    const pid = Number(readFileSync(PID_FILE_PATH, 'utf8').trim());
+    if (Number.isInteger(pid) && pid > 0) {
+      try {
+        process.kill(pid);
+        console.log(`Остановлен работающий сервер (PID ${pid}).`);
+      } catch {
+        // Process is already gone — nothing to do.
+      }
+    }
+  } catch {
+    // Unreadable/garbage pidfile — ignore, we'll still remove it below.
   }
 }
 
@@ -54,17 +75,44 @@ function writeLauncherVbs() {
 }
 
 function removeLegacyRegistryEntry() {
-  run(`reg delete "${RUN_REGISTRY_KEY}" /v "${APP_NAME}" /f`);
+  run('reg', ['delete', RUN_REGISTRY_KEY, '/v', APP_NAME, '/f']);
+}
+
+function quoteForPowerShell(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function registerUserLogonTask() {
+  const script = [
+    `$user = "$env:USERDOMAIN\\$env:USERNAME"`,
+    `$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ${quoteForPowerShell(`"${VBS_PATH}"`)}`,
+    `$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user`,
+    `$trigger.Delay = 'PT30S'`,
+    `$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)`,
+    `$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited`,
+    `Register-ScheduledTask -TaskName ${quoteForPowerShell(TASK_NAME)} -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force -ErrorAction Stop | Out-Null`,
+  ].join('; ');
+  return run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
 }
 
 function install() {
   writeLauncherVbs();
   removeLegacyRegistryEntry();
 
+  // /TR takes a single command-line string that Task Scheduler parses itself,
+  // so the internal quoting here is meaningful data, not shell escaping.
   const taskCommand = `${quoteForCommand('wscript.exe')} ${quoteForCommand(VBS_PATH)}`;
-  const createResult = run(
-    `schtasks /Create /TN "${TASK_NAME}" /SC ONLOGON /TR "${taskCommand}" /F`
-  );
+  let createResult = run('schtasks', [
+    // /DELAY gives the D: drive, network and Explorer time to come up — launching
+    // at the very instant of logon silently did nothing on this machine.
+    '/Create', '/TN', TASK_NAME, '/SC', 'ONLOGON', '/DELAY', '0000:30', '/TR', taskCommand, '/F',
+  ]);
+
+  // `schtasks /SC ONLOGON` targets every user and so needs admin rights; a
+  // trigger scoped to the current user can be registered without elevation.
+  if (!createResult.ok) {
+    createResult = registerUserLogonTask();
+  }
 
   if (createResult.ok) {
     console.log(`Автозапуск зарегистрирован: ${TASK_NAME}`);
@@ -75,9 +123,9 @@ function install() {
   }
 
   const registryValue = `wscript.exe "${VBS_PATH}"`;
-  const registryResult = run(
-    `reg add "${RUN_REGISTRY_KEY}" /v "${APP_NAME}" /t REG_SZ /d "${registryValue}" /f`
-  );
+  const registryResult = run('reg', [
+    'add', RUN_REGISTRY_KEY, '/v', APP_NAME, '/t', 'REG_SZ', '/d', registryValue, '/f',
+  ]);
 
   if (!registryResult.ok) {
     console.error('Не удалось зарегистрировать автозапуск ни через Task Scheduler, ни через HKCU Run.');
@@ -94,11 +142,16 @@ function install() {
 }
 
 function remove() {
-  run(`schtasks /Delete /TN "${TASK_NAME}" /F`);
+  stopRunningServer();
+  run('schtasks', ['/Delete', '/TN', TASK_NAME, '/F']);
   removeLegacyRegistryEntry();
 
   if (existsSync(VBS_PATH)) {
     unlinkSync(VBS_PATH);
+  }
+
+  if (existsSync(PID_FILE_PATH)) {
+    unlinkSync(PID_FILE_PATH);
   }
 
   console.log(`Автозапуск отключён: ${TASK_NAME}`);

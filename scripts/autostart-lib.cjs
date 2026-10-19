@@ -7,6 +7,7 @@ const MANAGED_FILE_NAMES = [
   'package-lock.json',
   'package.json',
   'postcss.config.mjs',
+  'proxy.ts',
   'tsconfig.json',
 ];
 
@@ -42,18 +43,22 @@ function formatLanUrls(lanIps, port) {
     .map(ip => `http://${ip}:${port}`);
 }
 
-function shouldRebuildFromEntries({ buildExists, buildMtimeMs, sourceEntries }) {
+/**
+ * Content-hash based staleness check: rebuild only if there's no prior build,
+ * no recorded stamp for it, or the current source hash differs from the
+ * stamped one. Unlike an mtime comparison, this doesn't false-positive on a
+ * touch-without-content-change (editor re-save, git checkout, AV scan).
+ */
+function shouldRebuildFromHash({ buildExists, previousHash, currentHash }) {
   if (!buildExists) {
     return true;
   }
 
-  return (sourceEntries || []).some(entry => {
-    if (!entry || typeof entry.mtimeMs !== 'number') {
-      return false;
-    }
+  if (!previousHash) {
+    return true;
+  }
 
-    return entry.mtimeMs > buildMtimeMs;
-  });
+  return previousHash !== currentHash;
 }
 
 module.exports = {
@@ -61,5 +66,5 @@ module.exports = {
   MANAGED_FILE_NAMES,
   buildStartServerVbs,
   formatLanUrls,
-  shouldRebuildFromEntries,
+  shouldRebuildFromHash,
 };

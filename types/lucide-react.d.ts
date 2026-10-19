@@ -20,13 +20,22 @@ declare module 'lucide-react' {
   // ── Icons used in this project ───────────────────────────────────────────
   export const Archive: LucideIcon;
   export const ArrowLeft: LucideIcon;
+  export const ArrowRight: LucideIcon;
+  export const Bell: LucideIcon;
   export const Building2: LucideIcon;
   export const ChevronDown: LucideIcon;
   export const ChevronUp: LucideIcon;
+  export const Copy: LucideIcon;
+  export const Eye: LucideIcon;
+  export const EyeOff: LucideIcon;
+  export const FileText: LucideIcon;
+  export const GitBranch: LucideIcon;
+  export const Keyboard: LucideIcon;
   export const LayoutDashboard: LucideIcon;
   export const Moon: LucideIcon;
   export const Plus: LucideIcon;
   export const RefreshCw: LucideIcon;
+  export const Search: LucideIcon;
   export const Settings: LucideIcon;
   export const Sun: LucideIcon;
   export const Wifi: LucideIcon;

@@ -4,9 +4,9 @@
   "description": "Трекер заявок my.gov.uz",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 0.0.0.0",
+    "dev": "node server.mjs --dev",
     "build": "next build",
-    "start": "next start -H 0.0.0.0",
+    "start": "node server.mjs",
     "lint": "eslint",
     "test": "jest",
     "autostart": "node scripts/autostart.mjs install",
@@ -17,14 +17,23 @@
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/$1"
-    }
+    },
+    "collectCoverageFrom": [
+      "lib/**/*.ts",
+      "app/api/**/*.ts",
+      "!**/*.d.ts",
+      "!lib/__tests__/**"
+    ]
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "better-sqlite3": "^12.10.0",
     "cheerio": "^1.2.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.4",
+    "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.4",
+    "puppeteer-core": "^25.3.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

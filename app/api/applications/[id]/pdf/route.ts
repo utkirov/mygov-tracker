@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { deletePdfFile, readPdfFile, savePdfFile } from '@/lib/local-storage';
+import { deletePdfFile, hasPdfMagicBytes, MAX_PDF_UPLOAD_BYTES, readPdfFile, savePdfFile } from '@/lib/local-storage';
 import { readLocalDb, writeLocalDb } from '@/lib/local-db';
 
 async function loadApplicationPdf(id: string) {
@@ -22,10 +22,14 @@ async function loadApplicationPdf(id: string) {
 }
 
 function buildPdfResponse(buffer: Buffer, filename: string) {
+  const safeName = filename || 'document.pdf';
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${encodeURIComponent(filename || 'document.pdf')}"`,
+      // ASCII fallback for old clients + RFC 5987/6266 extended form so
+      // non-ASCII (e.g. Cyrillic) filenames survive instead of being
+      // literally interpreted (browsers don't decode the plain `filename=`).
+      'Content-Disposition': `inline; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
       'Cache-Control': 'no-store',
     },
   });
@@ -58,7 +62,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'File not found' }, { status: 400 });
   }
 
+  if (file.size > MAX_PDF_UPLOAD_BYTES) {
+    return NextResponse.json({ error: 'File exceeds the maximum allowed size' }, { status: 413 });
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
+
+  if (!hasPdfMagicBytes(buffer)) {
+    return NextResponse.json({ error: 'File is not a valid PDF' }, { status: 400 });
+  }
+
   const previousStorageKey = application.pdf_storage_key ?? application.pdf_filename;
   const pdfStorageKey = await savePdfFile(buffer, file.name);
 

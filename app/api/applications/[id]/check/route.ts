@@ -3,35 +3,25 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
+  insertStatusHistory,
   readLocalDb,
-  writeLocalDb,
+  touchMeta,
+  updateApplicationFields,
   type LocalDbApplication,
   type LocalDbApplicationChangeField,
 } from '@/lib/local-db';
-import { fetchApplicationStatus } from '@/lib/status-checker';
+import { fetchRepositoryFiles } from '@/lib/repository-files';
+import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, parseMyGovDate } from '@/lib/status-checker';
+import { captureApplicationStatusScreenshot } from '@/lib/status-screenshot';
+import { buildStatusSnapshotPdf } from '@/lib/status-pdf';
 import {
-  buildApplicationChangeMessage,
-  buildApplicationCompletedMessage,
   buildApplicationErrorMessage,
   buildManualCheckResultMessage,
   isTelegramConfigured,
+  sendApplicationChangeNotification,
   sendTelegramMessage,
 } from '@/lib/telegram';
 import { getStatusType, isCompletedStatus } from '@/types';
-
-function parseMyGovDate(value: string | undefined | null): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
-
-  if (!match) {
-    const parsed = new Date(trimmed);
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-  }
-
-  const [, dd, mm, yyyy, hh = '00', min = '00'] = match;
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}:00`;
-}
 
 function getNextCheckAt(
   checkedAt: string,
@@ -58,14 +48,7 @@ function buildChangeSummary(
   previousValue: string | null,
   nextValue: string | null
 ): string {
-  const labels: Record<LocalDbApplicationChangeField, string> = {
-    status: 'Статус',
-    current_action: 'Текущее действие',
-    acting_party: 'Действует',
-    last_changed_date: 'Последнее изменение',
-  };
-
-  return `${labels[field]}: "${formatChangeValue(previousValue)}" → "${formatChangeValue(nextValue)}"`;
+  return `${CHANGE_FIELD_LABELS[field]}: "${formatChangeValue(previousValue)}" → "${formatChangeValue(nextValue)}"`;
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -79,12 +62,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (application.archived || getStatusType(application.acting_party, application.status) === 'completed') {
-    application.sync_state = 'idle';
-    application.next_check_at = null;
-    application.last_error = '';
-    application.updated_at = new Date().toISOString();
-    db.meta.updated_at = application.updated_at;
-    await writeLocalDb(db);
+    const idleAt = new Date().toISOString();
+    await updateApplicationFields(id, {
+      sync_state: 'idle',
+      next_check_at: null,
+      last_error: '',
+      updated_at: idleAt,
+    });
+    await touchMeta(idleAt);
 
     return NextResponse.json(
       { error: 'Archived and completed applications are excluded from checks' },
@@ -93,42 +78,46 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const startedAt = new Date().toISOString();
-  application.sync_state = 'checking';
-  application.last_error = '';
-  application.updated_at = startedAt;
-  db.meta.updated_at = startedAt;
-  await writeLocalDb(db);
+  await updateApplicationFields(id, {
+    sync_state: 'checking',
+    last_error: '',
+    updated_at: startedAt,
+  });
+  await touchMeta(startedAt);
 
-  let checked: Awaited<ReturnType<typeof fetchApplicationStatus>> | null = null;
+  let session: Awaited<ReturnType<typeof fetchApplicationStatusSession>> | null = null;
   let fetchError: string | null = null;
 
   try {
-    checked = await fetchApplicationStatus(
+    session = await fetchApplicationStatusSession(
       application.application_number,
       application.verification_password
     );
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Неизвестная ошибка при проверке';
   }
+  const checked = session?.status ?? null;
 
   const now = new Date().toISOString();
   const nextCheckAt = getNextCheckAt(now, db.settings.auto_check);
 
   if (!checked) {
     const errorMessage = fetchError ?? 'Не удалось получить статус от my.gov.uz';
-    application.sync_state = 'error';
-    application.last_checked_at = now;
-    application.next_check_at = nextCheckAt;
-    application.last_error = errorMessage;
-    application.updated_at = now;
-    db.meta.updated_at = now;
-    await writeLocalDb(db);
+    const errorPatch: Partial<LocalDbApplication> = {
+      sync_state: 'error',
+      last_checked_at: now,
+      next_check_at: nextCheckAt,
+      last_error: errorMessage,
+      updated_at: now,
+    };
+    await updateApplicationFields(id, errorPatch);
+    await touchMeta(now);
 
     if (isTelegramConfigured(db.settings)) {
       try {
         await sendTelegramMessage(
           db.settings,
-          buildApplicationErrorMessage(application, application.last_error)
+          buildApplicationErrorMessage({ ...application, ...errorPatch }, errorMessage)
         );
       } catch {
         // Ignore Telegram delivery errors and keep the primary API response.
@@ -170,28 +159,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   );
   const statusChanged = previousValues.status !== nextValues.status;
 
-  application.status = nextValues.status;
-  application.current_action = nextValues.current_action;
-  application.acting_party = nextValues.acting_party;
-  application.last_changed_date = nextValues.last_changed_date;
-  application.sync_state = 'success';
-  application.last_checked_at = now;
-  application.next_check_at = nextCheckAt;
-  application.last_error = '';
-  application.last_change_summary = changeSummary;
-  application.last_change_fields = changedFields;
+  const patch: Partial<LocalDbApplication> = {
+    status: nextValues.status,
+    current_action: nextValues.current_action,
+    acting_party: nextValues.acting_party,
+    last_changed_date: nextValues.last_changed_date,
+    sync_state: 'success',
+    last_checked_at: now,
+    next_check_at: nextCheckAt,
+    last_error: '',
+    last_change_summary: changeSummary,
+    last_change_fields: changedFields,
+  };
   if (changedFields.length > 0) {
-    application.last_detected_change_at = now;
+    patch.last_detected_change_at = now;
   }
-  if (isCompletedStatus(application.status)) {
-    application.archived = true;
-    application.sync_state = 'idle';
-    application.next_check_at = null;
+  if (isCompletedStatus(patch.status!)) {
+    patch.archived = true;
+    patch.sync_state = 'idle';
+    patch.next_check_at = null;
   }
-  application.updated_at = now;
+  patch.updated_at = now;
+
+  await updateApplicationFields(id, patch);
+  await touchMeta(now);
 
   if (statusChanged) {
-    db.status_history.push({
+    await insertStatusHistory({
       id: randomUUID(),
       application_id: application.id,
       status: nextValues.status,
@@ -201,19 +195,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
   }
 
-  db.meta.updated_at = now;
-  await writeLocalDb(db);
+  const updatedApplication: LocalDbApplication = { ...application, ...patch };
 
   if (isTelegramConfigured(db.settings)) {
     try {
       if (changedFields.length > 0) {
-        const isNowCompleted = isCompletedStatus(application.status) && !isCompletedStatus(previousValues.status ?? '');
-        const message = isNowCompleted
-          ? buildApplicationCompletedMessage(application)
-          : buildApplicationChangeMessage({ application, changedFields, previousValues, nextValues });
-        await sendTelegramMessage(db.settings, message);
+        const isNowCompleted = isCompletedStatus(updatedApplication.status) && !isCompletedStatus(previousValues.status ?? '');
+        const [readablePdf, screenshotPng, repositoryFiles] = await Promise.all([
+          buildStatusSnapshotPdf({ application: updatedApplication, changedFields, previousValues, nextValues }),
+          session ? captureApplicationStatusScreenshot(session.page, application.verification_password) : null,
+          isNowCompleted && session ? fetchRepositoryFiles(session.page.html) : [],
+        ]);
+        await sendApplicationChangeNotification({
+          settings: db.settings,
+          application: updatedApplication,
+          changedFields,
+          previousValues,
+          nextValues,
+          isNowCompleted,
+          screenshotPng,
+          readablePdf,
+          repositoryFiles,
+        });
       } else if (isManual) {
-        await sendTelegramMessage(db.settings, buildManualCheckResultMessage(application));
+        await sendTelegramMessage(db.settings, buildManualCheckResultMessage(updatedApplication));
       }
     } catch (err) {
       console.error('[check route] Telegram error:', err);
@@ -221,5 +226,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
-  return NextResponse.json({ application, statusChanged });
+  return NextResponse.json({ application: updatedApplication, statusChanged });
 }

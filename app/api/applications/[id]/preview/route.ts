@@ -1,3 +1,4 @@
+import * as cheerio from 'cheerio';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { readLocalDb } from '@/lib/local-db';
@@ -5,6 +6,24 @@ import { readPdfFile } from '@/lib/local-storage';
 import { fetchApplicationHtml } from '@/lib/status-checker';
 
 const ORIGIN = 'https://oldmy.gov.uz:4433';
+
+/**
+ * Strips scripts and inline event-handler attributes before this proxied,
+ * externally-sourced HTML is served under this app's own origin.
+ */
+export function sanitizeHtml(html: string): string {
+  const $ = cheerio.load(html);
+  $('script').remove();
+  $('*').each((_, element) => {
+    if (element.type !== 'tag') return;
+    for (const attrName of Object.keys(element.attribs)) {
+      if (/^on/i.test(attrName)) {
+        $(element).removeAttr(attrName);
+      }
+    }
+  });
+  return $.html();
+}
 
 function buildPreviewFallback(applicationNumber: string) {
   return new NextResponse(
@@ -30,15 +49,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   if (application.application_number && application.verification_password) {
-    const html = await fetchApplicationHtml(
+    const fetched = await fetchApplicationHtml(
       application.application_number,
       application.verification_password
     );
 
-    if (html) {
-      const patched = html.includes('<head>')
-        ? html.replace('<head>', `<head><base href="${ORIGIN}/">`)
-        : `<base href="${ORIGIN}/">${html}`;
+    if (fetched) {
+      const sanitized = sanitizeHtml(fetched.html);
+      const patched = sanitized.includes('<head>')
+        ? sanitized.replace('<head>', `<head><base href="${ORIGIN}/">`)
+        : `<base href="${ORIGIN}/">${sanitized}`;
 
       return new NextResponse(patched, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { deletePdfFile } from '@/lib/local-storage';
-import { readLocalDb, writeLocalDb, type LocalDbApplication } from '@/lib/local-db';
+import {
+  deleteApplicationRow,
+  readLocalDb,
+  touchMeta,
+  updateApplicationFields,
+  type LocalDbApplication,
+} from '@/lib/local-db';
 import { getStatusType } from '@/types';
 
 function sortHistory(history: Array<{ recorded_at: string }>) {
@@ -12,6 +18,25 @@ function toProjectId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+/** True if walking parent_id links from `startId` ever reaches `targetId`. */
+function ancestorChainReaches(
+  all: LocalDbApplication[],
+  startId: string,
+  targetId: string
+): boolean {
+  const byId = new Map(all.map((entry) => [entry.id, entry]));
+  const visited = new Set<string>();
+  let currentId: string | null = startId;
+
+  while (currentId && !visited.has(currentId)) {
+    if (currentId === targetId) return true;
+    visited.add(currentId);
+    currentId = byId.get(currentId)?.parent_id ?? null;
+  }
+
+  return false;
 }
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -53,59 +78,86 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     'organization',
     'sms_phone',
     'project_id',
+    'parent_id',
     'archived',
   ];
+
+  const patch: Partial<LocalDbApplication> = {};
 
   for (const key of allowedKeys) {
     if (!(key in body)) continue;
 
     if (key === 'project_id') {
-      application.project_id = toProjectId(body.project_id);
+      patch.project_id = toProjectId(body.project_id);
+      continue;
+    }
+
+    if (key === 'parent_id') {
+      const nextParentId = toProjectId(body.parent_id);
+
+      if (nextParentId) {
+        if (nextParentId === id) {
+          return NextResponse.json(
+            { error: 'An application cannot be its own parent' },
+            { status: 400 }
+          );
+        }
+
+        if (ancestorChainReaches(db.applications, nextParentId, id)) {
+          return NextResponse.json(
+            { error: 'This parent would create a circular chain' },
+            { status: 400 }
+          );
+        }
+      }
+
+      patch.parent_id = nextParentId;
       continue;
     }
 
     if (key === 'archived') {
-      application.archived = body.archived === true;
-      if (application.archived) {
-        application.sync_state = 'idle';
-        application.next_check_at = null;
-        application.last_error = '';
+      const archived = body.archived === true;
+      patch.archived = archived;
+      if (archived) {
+        patch.sync_state = 'idle';
+        patch.next_check_at = null;
+        patch.last_error = '';
       }
       continue;
     }
 
     const value = body[key];
     if (typeof value === 'string') {
-      application[key] = value as never;
+      (patch as Record<string, unknown>)[key] = value;
     }
   }
 
-  application.updated_at = new Date().toISOString();
+  const updatedAt = new Date().toISOString();
+  patch.updated_at = updatedAt;
   if (getStatusType(application.acting_party, application.status) === 'completed') {
-    application.next_check_at = null;
+    patch.next_check_at = null;
   }
-  db.meta.updated_at = application.updated_at;
 
-  await writeLocalDb(db);
+  await updateApplicationFields(id, patch);
+  await touchMeta(updatedAt);
 
-  return NextResponse.json(application);
+  const updatedApplication: LocalDbApplication = { ...application, ...patch };
+  return NextResponse.json(updatedApplication);
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const db = await readLocalDb();
-  const index = db.applications.findIndex((entry) => entry.id === id);
+  const application = db.applications.find((entry) => entry.id === id);
 
-  if (index === -1) {
+  if (!application) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const [application] = db.applications.splice(index, 1);
-  db.status_history = db.status_history.filter((entry) => entry.application_id !== id);
-  db.meta.updated_at = new Date().toISOString();
-
   const pdfStorageKey = application.pdf_storage_key ?? application.pdf_filename;
-  await writeLocalDb(db);
+
+  await deleteApplicationRow(id);
+  await touchMeta(new Date().toISOString());
 
   if (pdfStorageKey) {
     await deletePdfFile(pdfStorageKey);

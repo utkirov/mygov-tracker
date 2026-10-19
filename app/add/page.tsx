@@ -1,21 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, GitBranch } from 'lucide-react';
 
 import { PdfUpload } from '@/components/PdfUpload';
-import { ProjectSelector } from '@/components/ProjectSelector';
 import { requestImmediateSyncRun } from '@/lib/sync-engine';
 import { showToast } from '@/lib/toast';
-import type { ParsedPdf } from '@/types';
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
+import type { Application, ParsedPdf } from '@/types';
 
 function Section({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="rounded-[14px] border p-4 md:p-5"
+      className="rounded-[16px] border p-4 md:p-5"
       style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}
     >
       {children}
@@ -23,26 +20,40 @@ function Section({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ─── page ─────────────────────────────────────────────────────────────────────
+function AddPageInner() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const parentId     = searchParams.get('parent_id');
 
-export default function AddPage() {
-  const router = useRouter();
   const [parsed,         setParsed]         = useState<ParsedPdf | null>(null);
   const [filename,       setFilename]       = useState('');
   const [pdfStorageKey,  setPdfStorageKey]  = useState('');
   const [objectName,     setObjectName]     = useState('');
   const [notes,          setNotes]          = useState('');
-  const [projectId,      setProjectId]      = useState<string | null>(null);
   const [saving,         setSaving]         = useState(false);
   const [status,         setStatus]         = useState('');
   const [error,          setError]          = useState('');
   const [confirmReset,   setConfirmReset]   = useState(false);
+  const [parentApp,      setParentApp]      = useState<Application | null>(null);
+
   const pdfStorageKeyRef      = useRef('');
   const createdApplicationRef = useRef(false);
 
+  useEffect(() => { pdfStorageKeyRef.current = pdfStorageKey; }, [pdfStorageKey]);
+
+  // Load parent application info if continuing a chain
   useEffect(() => {
-    pdfStorageKeyRef.current = pdfStorageKey;
-  }, [pdfStorageKey]);
+    if (!parentId) return;
+    fetch(`/api/applications/${parentId}`)
+      .then(r => r.json())
+      .then(({ application }: { application: Application }) => {
+        setParentApp(application);
+        // Prefill from the parent as a starting point — still editable before saving.
+        setObjectName(application.object_name ?? '');
+        setNotes(application.notes ?? '');
+      })
+      .catch(() => {});
+  }, [parentId]);
 
   async function cleanupTempPdf(pdfKey: string) {
     if (!pdfKey) return;
@@ -90,7 +101,7 @@ export default function AddPage() {
     const key = pdfStorageKeyRef.current;
     if (!createdApplicationRef.current && key) await cleanupTempPdf(key);
     setParsed(null); setFilename(''); setPdfStorageKey('');
-    setObjectName(''); setNotes(''); setProjectId(null);
+    setObjectName(''); setNotes('');
     setError(''); setStatus('');
   }
 
@@ -103,17 +114,17 @@ export default function AddPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...parsed,
-          object_name:      objectName.trim(),
-          notes:            notes.trim(),
-          pdf_filename:     filename,
-          pdf_storage_key:  pdfStorageKey,
-          project_id:       projectId,
+          object_name:     objectName.trim(),
+          notes:           notes.trim(),
+          pdf_filename:    filename,
+          pdf_storage_key: pdfStorageKey,
+          parent_id:       parentId ?? null,
+          project_id:      parentApp?.project_id ?? null,
         }),
       });
       const payload = await response.json().catch(() => null) as { id?: string; error?: string } | null;
       if (!response.ok || !payload?.id) throw new Error(payload?.error ?? 'Не удалось сохранить заявление');
       createdApplicationRef.current = true;
-      setStatus('Заявление сохранено. Фоновая проверка запускается отдельно.');
       void fetch(`/api/applications/${payload.id}/check`, { method: 'POST' }).catch(() => {
         showToast({ title: 'Заявление сохранено', description: 'Первичная проверка не стартовала сразу.', tone: 'warning' });
       });
@@ -129,38 +140,38 @@ export default function AddPage() {
   }
 
   const fields = [
-    { label: 'Номер заявления',   key: 'application_number' },
-    { label: 'Услуга',            key: 'service_name' },
-    { label: 'Организация',       key: 'organization' },
-    { label: 'Статус из PDF',     key: 'status' },
-    { label: 'Дата подачи',       key: 'submission_date' },
-    { label: 'Текущее действие',  key: 'current_action' },
-    { label: 'Пароль проверки',   key: 'verification_password' },
+    { label: 'Номер заявления',  key: 'application_number' },
+    { label: 'Услуга',           key: 'service_name' },
+    { label: 'Организация',      key: 'organization' },
+    { label: 'Статус из PDF',    key: 'status' },
+    { label: 'Дата подачи',      key: 'submission_date' },
+    { label: 'Текущее действие', key: 'current_action' },
+    { label: 'Пароль проверки',  key: 'verification_password' },
   ] as const;
 
-  const inputCls = "w-full rounded-[9px] border px-3 py-2.5 text-[13px] outline-none transition focus:border-[var(--accent)]";
+  const inputCls = "w-full rounded-[10px] border px-3 py-2.5 text-[13px] outline-none transition focus:border-[var(--accent)]";
   const inputSty = { background: 'var(--panel)', borderColor: 'var(--border)', color: 'var(--text)' };
 
   return (
     <div className="overflow-y-auto px-3 py-4 md:px-5 md:py-6">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <Section>
           <div className="flex items-start gap-3">
             <button
               onClick={() => router.back()}
-              className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition hover:bg-[var(--panel)]"
+              className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition hover:bg-[var(--panel)] active:scale-90"
               style={{ color: 'var(--text-muted)' }}
             >
               <ArrowLeft size={16} />
             </button>
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-                Новое заявление
+                {parentId ? 'Продолжение заявки' : 'Новое заявление'}
               </p>
               <h1 className="mt-1 text-[18px] font-bold leading-[1.3] md:text-xl" style={{ color: 'var(--text)' }}>
-                Добавить в мониторинг
+                {parentId ? 'Подать повторно' : 'Добавить в мониторинг'}
               </h1>
               <p className="mt-1.5 text-[12px] leading-[1.6]" style={{ color: 'var(--text-soft)' }}>
                 Загрузите PDF заявления — данные извлекутся автоматически.
@@ -169,7 +180,27 @@ export default function AddPage() {
           </div>
         </Section>
 
-        {/* ── PDF upload or parsed data ── */}
+        {/* Continuation banner */}
+        {parentId && (
+          <div
+            className="flex items-start gap-3 rounded-[14px] border p-3.5 animate-slide-down"
+            style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', borderStyle: 'solid', borderWidth: '1px' }}
+          >
+            <GitBranch size={15} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold" style={{ color: 'var(--accent)' }}>
+                Продолжение цепочки
+              </p>
+              <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-soft)' }}>
+                {parentApp
+                  ? `После сохранения будет связано с «${parentApp.object_name || parentApp.service_name}» № ${parentApp.application_number}`
+                  : 'Новая заявка будет связана с предыдущей в цепочке'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* PDF upload or parsed data */}
         {!parsed ? (
           <Section>
             <PdfUpload onParsed={handleParsed} />
@@ -226,20 +257,13 @@ export default function AddPage() {
                   />
                 </label>
 
-                <div>
-                  <span className="text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>Проект</span>
-                  <div className="mt-1.5">
-                    <ProjectSelector value={projectId} onChange={setProjectId} />
-                  </div>
-                </div>
-
                 <label className="block">
                   <span className="text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>Внутренняя заметка</span>
                   <textarea
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                     placeholder="Контекст, договорённости, важные детали…"
-                    className={`mt-1.5 min-h-[120px] resize-none ${inputCls}`}
+                    className={`mt-1.5 min-h-[100px] resize-none ${inputCls}`}
                     style={inputSty}
                   />
                 </label>
@@ -264,18 +288,14 @@ export default function AddPage() {
                     <span className="flex-1 text-[12px] font-medium" style={{ color: 'var(--warning)' }}>
                       Данные будут сброшены. Продолжить?
                     </span>
-                    <button
-                      onClick={() => setConfirmReset(false)}
-                      className="rounded-[7px] px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/10"
-                      style={{ color: 'var(--text-soft)' }}
-                    >
+                    <button onClick={() => setConfirmReset(false)}
+                      className="rounded-[7px] px-2.5 py-1 text-[11px] font-medium"
+                      style={{ color: 'var(--text-soft)' }}>
                       Отмена
                     </button>
-                    <button
-                      onClick={() => { setConfirmReset(false); void resetUnsavedUpload(); }}
-                      className="rounded-[7px] px-2.5 py-1 text-[11px] font-semibold transition"
-                      style={{ background: 'var(--warning)', color: '#fff' }}
-                    >
+                    <button onClick={() => { setConfirmReset(false); void resetUnsavedUpload(); }}
+                      className="rounded-[7px] px-2.5 py-1 text-[11px] font-semibold"
+                      style={{ background: 'var(--warning)', color: '#fff' }}>
                       Сбросить
                     </button>
                   </div>
@@ -291,10 +311,10 @@ export default function AddPage() {
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex-1 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
-                  style={{ background: 'var(--accent)' }}
+                  className="flex-1 rounded-[11px] px-4 py-3.5 text-[14px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)', boxShadow: '0 4px 14px rgba(59,110,250,0.35)' }}
                 >
-                  {saving ? 'Сохраняю…' : 'Сохранить и поставить в очередь'}
+                  {saving ? 'Сохраняю…' : parentId ? 'Сохранить продолжение' : 'Сохранить и поставить в очередь'}
                 </button>
               </div>
             </Section>
@@ -302,5 +322,13 @@ export default function AddPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AddPage() {
+  return (
+    <Suspense>
+      <AddPageInner />
+    </Suspense>
   );
 }

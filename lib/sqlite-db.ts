@@ -34,10 +34,16 @@ export async function openDb(rootPath?: string): Promise<Database.Database> {
 }
 
 function applyMigrations(db: Database.Database): void {
-  // Add sound_enabled if missing (existing DBs before this column was introduced)
-  const cols = (db.prepare("PRAGMA table_info(settings)").all() as { name: string }[]).map(c => c.name);
-  if (!cols.includes('sound_enabled')) {
+  const settingsCols = (db.prepare("PRAGMA table_info(settings)").all() as { name: string }[]).map(c => c.name);
+  if (!settingsCols.includes('sound_enabled')) {
     db.exec("ALTER TABLE settings ADD COLUMN sound_enabled INTEGER NOT NULL DEFAULT 1");
+  }
+  const appCols = (db.prepare("PRAGMA table_info(applications)").all() as { name: string }[]).map(c => c.name);
+  if (!appCols.includes('parent_id')) {
+    db.exec("ALTER TABLE applications ADD COLUMN parent_id TEXT");
+  }
+  if (!settingsCols.includes('telegram_commands_chat_id')) {
+    db.exec("ALTER TABLE settings ADD COLUMN telegram_commands_chat_id TEXT NOT NULL DEFAULT ''");
   }
 }
 

@@ -3,15 +3,25 @@
 type SoundType = 'success' | 'error' | 'info';
 
 class SoundNotificationManager {
-  private audioContexts: Map<SoundType, AudioContext> = new Map();
+  private audioContext: AudioContext | null = null;
   private isEnabled = true;
+
+  private getAudioContext(): AudioContext {
+    if (!this.audioContext) {
+      const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.audioContext = new AudioCtx();
+    }
+    return this.audioContext;
+  }
 
   async playSound(type: SoundType) {
     if (!this.isEnabled || typeof window === 'undefined') return;
 
     try {
-      const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const audioContext = new AudioCtx();
+      const audioContext = this.getAudioContext();
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
 
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();

@@ -17,6 +17,10 @@ export async function getUserPlan(): Promise<Plan> {
 
   const { subscription } = await readLocalDb();
   if (subscription.status !== 'active') return getPlan('free');
-  if (subscription.expires_at && new Date(subscription.expires_at) < new Date()) return getPlan('free');
+  if (subscription.expires_at) {
+    const expiresAt = new Date(subscription.expires_at);
+    // Fail closed: an unparseable date must not be treated as "never expires".
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt < new Date()) return getPlan('free');
+  }
   return getPlan(subscription.plan_id);
 }

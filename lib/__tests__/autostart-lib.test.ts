@@ -1,39 +1,44 @@
-const {
-  buildStartServerVbs,
-  formatLanUrls,
-  shouldRebuildFromEntries,
-} = require('../../scripts/autostart-lib.cjs');
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- plain CJS helper, no ESM export surface
+const autostartLib = require('../../scripts/autostart-lib.cjs');
+const { buildStartServerVbs, formatLanUrls, shouldRebuildFromHash } = autostartLib;
 
 describe('autostart-lib', () => {
   it('requires a rebuild when no build marker exists yet', () => {
     expect(
-      shouldRebuildFromEntries({
+      shouldRebuildFromHash({
         buildExists: false,
-        buildMtimeMs: 0,
-        sourceEntries: [],
+        previousHash: null,
+        currentHash: 'abc123',
       })
     ).toBe(true);
   });
 
-  it('requires a rebuild when a source file is newer than the build marker', () => {
+  it('requires a rebuild when a build exists but no stamp was recorded for it', () => {
     expect(
-      shouldRebuildFromEntries({
+      shouldRebuildFromHash({
         buildExists: true,
-        buildMtimeMs: 1_000,
-        sourceEntries: [{ path: 'app/page.tsx', mtimeMs: 1_001 }],
+        previousHash: null,
+        currentHash: 'abc123',
       })
     ).toBe(true);
   });
 
-  it('skips rebuild when the build marker is newer than all tracked sources', () => {
+  it('requires a rebuild when the current source hash differs from the stamp', () => {
     expect(
-      shouldRebuildFromEntries({
+      shouldRebuildFromHash({
         buildExists: true,
-        buildMtimeMs: 5_000,
-        sourceEntries: [
-          { path: 'app/page.tsx', mtimeMs: 2_000 },
-          { path: 'lib/server-scheduler.ts', mtimeMs: 3_000 },
-        ],
+        previousHash: 'abc123',
+        currentHash: 'def456',
+      })
+    ).toBe(true);
+  });
+
+  it('skips rebuild when the current source hash matches the stamp', () => {
+    expect(
+      shouldRebuildFromHash({
+        buildExists: true,
+        previousHash: 'abc123',
+        currentHash: 'abc123',
       })
     ).toBe(false);
   });

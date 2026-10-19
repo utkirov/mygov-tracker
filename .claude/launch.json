@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "nextjs-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["server.mjs", "--dev"],
       "port": 3000,
       "autoPort": false
     }

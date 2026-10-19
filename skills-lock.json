@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "no-mistakes": {
+      "source": "kunchenguid/no-mistakes",
+      "sourceType": "github",
+      "skillPath": "skills/no-mistakes/SKILL.md",
+      "computedHash": "611d714aa6146eaec8a554fad5dea2408de234ec8939cf7fca212073b199eac8"
+    }
+  }
+}

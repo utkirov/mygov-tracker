@@ -55,6 +55,8 @@ next-env.d.ts
 /data/local-db.sqlite-shm
 /data/local-db.sqlite-wal
 /data/scheduler-status.json
+/data/server.pid
+/data/build-stamp.txt
 /data/pdfs/
 
 # autostart runtime artifacts

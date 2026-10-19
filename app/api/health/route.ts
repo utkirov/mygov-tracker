@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { NextResponse } from 'next/server';
 
-import { readLocalDb } from '@/lib/local-db';
+import { readAutoCheckSettings } from '@/lib/local-db';
 import { getServerSchedulerStatus } from '@/lib/server-scheduler';
 
 export const runtime = 'nodejs';
@@ -25,17 +25,17 @@ async function readPersistedSchedulerStatus() {
 }
 
 export async function GET() {
-  const db = await readLocalDb();
+  const autoCheck = await readAutoCheckSettings();
   const persistedScheduler = await readPersistedSchedulerStatus();
 
   return NextResponse.json({
     ok: true,
     time: new Date().toISOString(),
     autoCheck: {
-      enabled: db.settings.auto_check.enabled,
-      intervalMinutes: db.settings.auto_check.interval_minutes,
-      delayBetweenChecksMs: db.settings.auto_check.delay_between_checks_ms,
-      concurrencyLimit: db.settings.auto_check.concurrency_limit,
+      enabled: autoCheck.enabled,
+      intervalMinutes: autoCheck.interval_minutes,
+      delayBetweenChecksMs: autoCheck.delay_between_checks_ms,
+      concurrencyLimit: autoCheck.concurrency_limit,
     },
     scheduler: persistedScheduler ?? getServerSchedulerStatus(),
   });

@@ -1,6 +1,8 @@
 import { networkInterfaces } from 'node:os';
 import { NextResponse } from 'next/server';
 
+import { getAppToken } from '@/lib/app-token';
+
 export async function GET() {
   const nets = networkInterfaces();
   const lanIps: string[] = [];
@@ -13,5 +15,5 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ lanIps, port: 3000 });
+  return NextResponse.json({ lanIps, port: 3000, token: getAppToken() });
 }

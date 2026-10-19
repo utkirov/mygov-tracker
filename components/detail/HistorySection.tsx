@@ -1,20 +1,9 @@
 'use client';
 
 import type { StatusHistory as TStatusHistory } from '@/types';
+import { formatDate } from '@/lib/format-utils';
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return '—';
-  }
-
-  return new Date(value).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+import SectionHeading from './SectionHeading';
 
 interface Props {
   timelineItems: Array<TStatusHistory & { isCurrentSnapshot: boolean }>;
@@ -23,16 +12,7 @@ interface Props {
 export default function HistorySection({ timelineItems }: Props) {
   return (
     <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)] md:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-            История статусов
-          </p>
-          <h2 className="mt-1 text-base font-bold text-[var(--text)]">
-            Хронология движения
-          </h2>
-        </div>
-      </div>
+      <SectionHeading eyebrow="История статусов" title="Хронология движения" />
 
       <div className="mt-4 space-y-2.5">
         {timelineItems.length === 0 && (
@@ -69,7 +49,7 @@ export default function HistorySection({ timelineItems }: Props) {
               )}
             </div>
             <p className="mt-3 text-xs text-[var(--text-muted)]">
-              {formatDate(entry.recorded_at)}
+              {formatDate(entry.recorded_at, { long: true })}
             </p>
           </div>
         ))}

@@ -5,37 +5,9 @@ import Link from 'next/link';
 import { ChevronDown, ChevronUp, X, Zap } from 'lucide-react';
 
 import type { Application } from '@/types';
-import { getApplicationChangeFieldLabel } from '@/types';
+import { getApplicationChangeFieldLabel, getMyGovStatus } from '@/types';
 import type { SyncEngineSnapshot } from '@/lib/sync-engine';
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'только что';
-  if (mins < 60) return `${mins}м`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}ч`;
-  return `${Math.floor(hrs / 24)}д`;
-}
-
-function statusDot(status: string): string {
-  const s = status.trim().toLowerCase();
-  const map: Record<string, string> = {
-    'новое':                            '#60A5FA',
-    'черновик':                         '#60A5FA',
-    'в обработке':                      '#FBBF24',
-    'переотправлена':                   '#FBBF24',
-    'в ожидании другого заявителя':     '#F87171',
-    'в ожидании оплаты':                '#F87171',
-    'обработано':                       '#34D399',
-    'отклонено':                        '#FB7185',
-    'аннулировано':                     '#94A3B8',
-  };
-  return map[s] ?? '#FBBF24';
-}
+import { formatTimeAgo } from '@/lib/format-utils';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -216,7 +188,7 @@ export function LiveActivityWidget({ applications, sync }: Props) {
                       >
                         <div
                           className="mt-[4px] h-[7px] w-[7px] shrink-0 rounded-full"
-                          style={{ background: statusDot(app.status) }}
+                          style={{ background: getMyGovStatus(app.status).dotColor }}
                         />
                         <div className="min-w-0 flex-1">
                           <p
@@ -233,7 +205,7 @@ export function LiveActivityWidget({ applications, sync }: Props) {
                           </p>
                         </div>
                         <span className="shrink-0 text-[9px] tabular" style={{ color: 'var(--text-muted)' }}>
-                          {timeAgo(app.last_detected_change_at)}
+                          {formatTimeAgo(app.last_detected_change_at)}
                         </span>
                       </Link>
                     ))}

@@ -5,6 +5,9 @@ import path from 'node:path';
 import {
   deletePdfFile,
   getPdfStorageDir,
+  hasPdfMagicBytes,
+  isValidPdfStorageKey,
+  MAX_PDF_UPLOAD_BYTES,
   readPdfFile,
   savePdfFile,
 } from '../local-storage';
@@ -45,5 +48,49 @@ describe('local-storage', () => {
 
     const storageDir = getPdfStorageDir(rootPath);
     await expect(readFile(path.join(storageDir, filename))).rejects.toThrow();
+  });
+
+  it('rejects path traversal keys instead of touching files outside the storage dir', async () => {
+    // Plant a file just outside the storage dir that a traversal key would target.
+    const outsideFile = path.join(rootPath, 'evil.pdf');
+    await import('node:fs/promises').then(({ writeFile }) => writeFile(outsideFile, 'secret'));
+
+    const traversalKeys = ['../../evil.pdf', '..\\..\\evil.pdf', '../evil.pdf'];
+
+    for (const key of traversalKeys) {
+      expect(isValidPdfStorageKey(key)).toBe(false);
+      await expect(readPdfFile(key, rootPath)).resolves.toBeNull();
+      await expect(deletePdfFile(key, rootPath)).resolves.toBe(false);
+    }
+
+    // The planted file must survive every rejected delete attempt.
+    await expect(readFile(outsideFile, 'utf8')).resolves.toBe('secret');
+  });
+
+  it('accepts a legitimately-generated key and round-trips it', async () => {
+    const content = Buffer.from('%PDF-1.4 legit content');
+    const key = await savePdfFile(content, 'invoice.pdf', rootPath);
+
+    expect(isValidPdfStorageKey(key)).toBe(true);
+    await expect(readPdfFile(key, rootPath)).resolves.toEqual(content);
+    await expect(deletePdfFile(key, rootPath)).resolves.toBe(true);
+  });
+});
+
+describe('hasPdfMagicBytes', () => {
+  it('accepts a buffer that starts with the PDF signature', () => {
+    expect(hasPdfMagicBytes(Buffer.from('%PDF-1.4 rest of the file'))).toBe(true);
+  });
+
+  it('rejects a buffer without the PDF signature', () => {
+    expect(hasPdfMagicBytes(Buffer.from('<html>not a pdf</html>'))).toBe(false);
+  });
+
+  it('rejects a buffer shorter than the signature', () => {
+    expect(hasPdfMagicBytes(Buffer.from('%PDF'))).toBe(false);
+  });
+
+  it('exposes a positive, sane upload size cap', () => {
+    expect(MAX_PDF_UPLOAD_BYTES).toBeGreaterThan(0);
   });
 });

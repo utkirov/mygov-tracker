@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { readLocalDb, writeLocalDb, type LocalDbSettings } from '@/lib/local-db';
 import { reschedule } from '@/lib/server-scheduler';
+import { sendTelegramMessage } from '@/lib/telegram';
 
 function parseInteger(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -86,6 +87,7 @@ function toFlatSettings(settings: LocalDbSettings) {
     theme: settings.theme,
     telegram_token: settings.telegram.bot_token,
     telegram_chat_id: settings.telegram.chat_id,
+    telegram_commands_chat_id: settings.telegram.commands_chat_id,
     auto_check_enabled: settings.auto_check.enabled,
     auto_check_interval: settings.auto_check.interval_minutes,
     auto_check_delay_ms: settings.auto_check.delay_between_checks_ms,
@@ -114,6 +116,13 @@ function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>):
       : body.telegram && typeof body.telegram === 'object' && typeof (body.telegram as Record<string, unknown>).chat_id === 'string'
         ? (body.telegram as Record<string, string>).chat_id
         : current.telegram.chat_id;
+
+  const telegramCommandsChatId =
+    typeof body.telegram_commands_chat_id === 'string'
+      ? body.telegram_commands_chat_id
+      : body.telegram && typeof body.telegram === 'object' && typeof (body.telegram as Record<string, unknown>).commands_chat_id === 'string'
+        ? (body.telegram as Record<string, string>).commands_chat_id
+        : current.telegram.commands_chat_id;
 
   const nestedAutoCheck = body.auto_check && typeof body.auto_check === 'object'
     ? body.auto_check as Record<string, unknown>
@@ -183,6 +192,7 @@ function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>):
     telegram: {
       bot_token: telegramToken,
       chat_id: telegramChatId,
+      commands_chat_id: telegramCommandsChatId,
     },
     auto_check: {
       enabled: autoCheckEnabled,
@@ -219,29 +229,31 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const { token, chatId } = await request.json();
+  let body: Record<string, unknown>;
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const token = typeof body.token === 'string' ? body.token : '';
+  const chatId = typeof body.chatId === 'string' ? body.chatId : '';
   if (!token || !chatId) {
     return NextResponse.json({ error: 'token and chatId are required' }, { status: 400 });
   }
 
+  const db = await readLocalDb();
+  const testSettings: LocalDbSettings = {
+    ...db.settings,
+    telegram: { bot_token: token, chat_id: chatId, commands_chat_id: db.settings.telegram.commands_chat_id },
+  };
+
   try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: 'Test message from my.gov tracker',
-        parse_mode: 'HTML',
-      }),
-    });
-    const data = await response.json();
-
-    if (response.ok) {
-      return NextResponse.json({ ok: true });
-    }
-
-    return NextResponse.json({ error: data.description ?? 'Telegram error' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Connection failed' }, { status: 502 });
+    await sendTelegramMessage(testSettings, 'Test message from my.gov tracker');
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Connection failed';
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

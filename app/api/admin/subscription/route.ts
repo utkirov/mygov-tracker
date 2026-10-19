@@ -31,6 +31,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (expiresAt !== undefined && Number.isNaN(new Date(expiresAt).getTime())) {
+    return NextResponse.json({ error: 'expiresAt must be a valid date' }, { status: 400 });
+  }
+
   const db = await readLocalDb();
   db.subscription = {
     plan_id: planId as LocalPlanId,

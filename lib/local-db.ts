@@ -45,6 +45,7 @@ export interface LocalDbApplication extends LocalDbApplicationSyncMetadata {
   pdf_filename: string;
   pdf_storage_key: string | null;
   project_id: string | null;
+  parent_id: string | null;
   archived: boolean;
   created_at: string;
   updated_at: string;
@@ -77,6 +78,8 @@ export interface LocalDbSubscription {
 export interface LocalDbTelegramSettings {
   bot_token: string;
   chat_id: string;
+  /** Separate chat trusted for interactive bot commands (browse/history) — chat_id above is usually a broadcast-only channel that can't hold a two-way conversation. Empty until the user sets it. */
+  commands_chat_id: string;
 }
 
 export interface LocalDbAutoCheckSettings {
@@ -132,6 +135,7 @@ export function createDefaultLocalDb(): LocalDb {
       telegram: {
         bot_token: '',
         chat_id: '',
+        commands_chat_id: '',
       },
       auto_check: {
         enabled: true,
@@ -168,6 +172,26 @@ function parseJsonArray<T>(value: unknown): T[] {
   return [];
 }
 
+function rowToAutoCheckSettings(
+  settings: Record<string, unknown> | undefined,
+  defaults: LocalDbAutoCheckSettings
+): LocalDbAutoCheckSettings {
+  return {
+    enabled: settings?.auto_check_enabled !== undefined
+      ? boolFromSqlite(settings.auto_check_enabled)
+      : defaults.enabled,
+    interval_minutes: settings?.auto_check_interval_minutes != null
+      ? Number(settings.auto_check_interval_minutes) || null
+      : defaults.interval_minutes,
+    delay_between_checks_ms: settings?.auto_check_delay_between_checks_ms != null
+      ? Number(settings.auto_check_delay_between_checks_ms) || null
+      : defaults.delay_between_checks_ms,
+    concurrency_limit: settings?.auto_check_concurrency_limit != null
+      ? Number(settings.auto_check_concurrency_limit) || null
+      : defaults.concurrency_limit,
+  };
+}
+
 function rowToApplication(row: Record<string, unknown>): LocalDbApplication {
   return {
     id: String(row.id ?? ''),
@@ -186,6 +210,7 @@ function rowToApplication(row: Record<string, unknown>): LocalDbApplication {
     pdf_filename: String(row.pdf_filename ?? ''),
     pdf_storage_key: nullableString(row.pdf_storage_key),
     project_id: nullableString(row.project_id),
+    parent_id: nullableString(row.parent_id),
     archived: boolFromSqlite(row.archived),
     sync_state: normalizeSyncState(row.sync_state),
     last_checked_at: nullableString(row.last_checked_at),
@@ -239,26 +264,26 @@ export async function readLocalDb(rootPath?: string): Promise<LocalDb> {
       telegram: {
         bot_token: String(settings?.telegram_bot_token ?? ''),
         chat_id: String(settings?.telegram_chat_id ?? ''),
+        commands_chat_id: String(settings?.telegram_commands_chat_id ?? ''),
       },
-      auto_check: {
-        enabled: settings?.auto_check_enabled !== undefined
-          ? boolFromSqlite(settings.auto_check_enabled)
-          : defaults.settings.auto_check.enabled,
-        interval_minutes: settings?.auto_check_interval_minutes != null
-          ? Number(settings.auto_check_interval_minutes) || null
-          : defaults.settings.auto_check.interval_minutes,
-        delay_between_checks_ms: settings?.auto_check_delay_between_checks_ms != null
-          ? Number(settings.auto_check_delay_between_checks_ms) || null
-          : defaults.settings.auto_check.delay_between_checks_ms,
-        concurrency_limit: settings?.auto_check_concurrency_limit != null
-          ? Number(settings.auto_check_concurrency_limit) || null
-          : defaults.settings.auto_check.concurrency_limit,
-      },
+      auto_check: rowToAutoCheckSettings(settings, defaults.settings.auto_check),
       sound_enabled: settings?.sound_enabled !== undefined
         ? boolFromSqlite(settings.sound_enabled)
         : defaults.settings.sound_enabled,
     },
   };
+}
+
+/**
+ * Reads just the `settings.auto_check*` columns, skipping the full
+ * applications/status_history read that readLocalDb() otherwise does.
+ * Used by routes (e.g. /api/health) that get polled frequently and only
+ * need these few scalar fields.
+ */
+export async function readAutoCheckSettings(rootPath?: string): Promise<LocalDbAutoCheckSettings> {
+  const sqlite = await openDb(rootPath);
+  const settings = sqlite.prepare('SELECT * FROM settings WHERE id = 1').get() as Record<string, unknown> | undefined;
+  return rowToAutoCheckSettings(settings, createDefaultLocalDb().settings.auto_check);
 }
 
 export async function writeLocalDb(
@@ -290,10 +315,10 @@ export async function writeLocalDb(
         id, application_number, object_name, service_name, organization, status,
         submission_date, last_changed_date, current_action, acting_party,
         verification_password, sms_phone, notes, pdf_filename, pdf_storage_key,
-        project_id, archived, sync_state, last_checked_at, next_check_at, last_error,
+        project_id, parent_id, archived, sync_state, last_checked_at, next_check_at, last_error,
         last_detected_change_at, last_change_summary, last_change_fields, created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
       ON CONFLICT(id) DO UPDATE SET
         application_number = excluded.application_number,
@@ -311,6 +336,7 @@ export async function writeLocalDb(
         pdf_filename = excluded.pdf_filename,
         pdf_storage_key = excluded.pdf_storage_key,
         project_id = excluded.project_id,
+        parent_id = excluded.parent_id,
         archived = excluded.archived,
         sync_state = excluded.sync_state,
         last_checked_at = excluded.last_checked_at,
@@ -342,6 +368,7 @@ export async function writeLocalDb(
         app.pdf_filename,
         app.pdf_storage_key ?? null,
         app.project_id ?? null,
+        app.parent_id ?? null,
         app.archived ? 1 : 0,
         app.sync_state,
         app.last_checked_at ?? null,
@@ -387,6 +414,7 @@ export async function writeLocalDb(
         theme = ?,
         telegram_bot_token = ?,
         telegram_chat_id = ?,
+        telegram_commands_chat_id = ?,
         auto_check_enabled = ?,
         auto_check_interval_minutes = ?,
         auto_check_delay_between_checks_ms = ?,
@@ -397,6 +425,7 @@ export async function writeLocalDb(
       db.settings.theme,
       db.settings.telegram.bot_token,
       db.settings.telegram.chat_id,
+      db.settings.telegram.commands_chat_id,
       db.settings.auto_check.enabled ? 1 : 0,
       db.settings.auto_check.interval_minutes ?? null,
       db.settings.auto_check.delay_between_checks_ms ?? null,
@@ -406,4 +435,107 @@ export async function writeLocalDb(
   });
 
   write();
+}
+
+// ── single-row helpers ──────────────────────────────────────────────────────
+// Targeted SQL against the open connection, avoiding the readLocalDb()+mutate+
+// writeLocalDb(full snapshot) race that upserts every in-memory row and deletes
+// any application row missing from the caller's stale snapshot. Only used for
+// the `applications` table — projects/subscription/settings stay on
+// readLocalDb()/writeLocalDb() since those remain single-writer flows.
+
+const BOOLEAN_APPLICATION_FIELDS = new Set<keyof LocalDbApplication>(['archived']);
+const JSON_APPLICATION_FIELDS = new Set<keyof LocalDbApplication>([
+  'last_change_summary',
+  'last_change_fields',
+]);
+
+export async function insertApplication(app: LocalDbApplication, rootPath?: string): Promise<void> {
+  const sqlite = await openDb(rootPath);
+
+  sqlite.prepare(`
+    INSERT INTO applications (
+      id, application_number, object_name, service_name, organization, status,
+      submission_date, last_changed_date, current_action, acting_party,
+      verification_password, sms_phone, notes, pdf_filename, pdf_storage_key,
+      project_id, parent_id, archived, sync_state, last_checked_at, next_check_at, last_error,
+      last_detected_change_at, last_change_summary, last_change_fields, created_at, updated_at
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    )
+  `).run(
+    app.id,
+    app.application_number,
+    app.object_name,
+    app.service_name,
+    app.organization,
+    app.status,
+    app.submission_date ?? null,
+    app.last_changed_date ?? null,
+    app.current_action,
+    app.acting_party,
+    app.verification_password,
+    app.sms_phone,
+    app.notes,
+    app.pdf_filename,
+    app.pdf_storage_key ?? null,
+    app.project_id ?? null,
+    app.parent_id ?? null,
+    app.archived ? 1 : 0,
+    app.sync_state,
+    app.last_checked_at ?? null,
+    app.next_check_at ?? null,
+    app.last_error,
+    app.last_detected_change_at ?? null,
+    JSON.stringify(app.last_change_summary),
+    JSON.stringify(app.last_change_fields),
+    app.created_at,
+    app.updated_at,
+  );
+}
+
+/** Single targeted UPDATE — only touches the columns present in `patch`. */
+export async function updateApplicationFields(
+  id: string,
+  patch: Partial<LocalDbApplication>,
+  rootPath?: string
+): Promise<void> {
+  const keys = (Object.keys(patch) as Array<keyof LocalDbApplication>).filter((key) => key !== 'id');
+  if (keys.length === 0) return;
+
+  const sqlite = await openDb(rootPath);
+  const setClause = keys.map((key) => `${key} = ?`).join(', ');
+  const values = keys.map((key) => {
+    const value = patch[key];
+    if (BOOLEAN_APPLICATION_FIELDS.has(key)) return value ? 1 : 0;
+    if (JSON_APPLICATION_FIELDS.has(key)) return JSON.stringify(value ?? []);
+    return value ?? null;
+  });
+
+  sqlite.prepare(`UPDATE applications SET ${setClause} WHERE id = ?`).run(...values, id);
+}
+
+export async function deleteApplicationRow(id: string, rootPath?: string): Promise<void> {
+  const sqlite = await openDb(rootPath);
+  const del = sqlite.transaction(() => {
+    sqlite.prepare('DELETE FROM status_history WHERE application_id = ?').run(id);
+    sqlite.prepare('DELETE FROM applications WHERE id = ?').run(id);
+  });
+  del();
+}
+
+export async function insertStatusHistory(entry: LocalDbStatusHistory, rootPath?: string): Promise<void> {
+  const sqlite = await openDb(rootPath);
+  sqlite.prepare(`
+    INSERT OR IGNORE INTO status_history (id, application_id, status, current_action, acting_party, recorded_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(entry.id, entry.application_id, entry.status, entry.current_action, entry.acting_party, entry.recorded_at);
+}
+
+/** Targeted meta.updated_at touch (and meta.created_at backfill on first write). */
+export async function touchMeta(updatedAt: string, rootPath?: string): Promise<void> {
+  const sqlite = await openDb(rootPath);
+  sqlite.prepare(`
+    UPDATE meta SET updated_at = ?, created_at = COALESCE(created_at, ?) WHERE id = 1
+  `).run(updatedAt, updatedAt);
 }

@@ -7,7 +7,7 @@ import { Building2 } from 'lucide-react';
 import { syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import { formatDate, formatTimeAgo } from '@/lib/format-utils';
 import { getServiceCategory, type ServiceCategory } from '@/lib/service-categories';
-import type { Application, Project } from '@/types';
+import type { Application } from '@/types';
 import { getMyGovStatus, getStatusType, isCompletedStatus } from '@/types';
 import { LiveActivityWidget } from '@/components/LiveActivityWidget';
 
@@ -64,7 +64,7 @@ function getColumn(status: string): KanbanColumn {
 
 // ─── Kanban card ───────────────────────────────────────────────────────────
 
-function KanbanCard({ application, project }: { application: Application; project?: Project }) {
+function KanbanCard({ application, index = 0 }: { application: Application; index?: number }) {
   const statusInfo = getMyGovStatus(application.status);
   const col        = getColumn(application.status);
   const isUrgent   = getStatusType(application.acting_party, application.status) === 'action_required';
@@ -77,43 +77,47 @@ function KanbanCard({ application, project }: { application: Application; projec
   return (
     <Link
       href={`/applications/${application.id}`}
-      className="group relative block overflow-hidden rounded-[14px] border transition-all duration-200 active:scale-[0.98] md:hover:-translate-y-[2px]"
+      className="kanban-card group relative block shrink-0 overflow-hidden rounded-[16px] border animate-slide-up"
       style={{
-        background:  'var(--surface)',
-        borderColor: isUrgent ? col.color : 'var(--border)',
-        boxShadow:   'var(--shadow-card)',
+        background:    'var(--surface)',
+        borderColor:   isUrgent ? col.color : 'var(--border)',
+        boxShadow:     'var(--shadow-card)',
+        // Capped so long columns don't leave a trailing tail of cards
+        // still mid-fade a second after load — those looked cut off /
+        // blank if the page was scrolled or screenshotted early.
+        animationDelay: `${Math.min(index, 8) * 35}ms`,
       }}
     >
       {/* Left accent stripe */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[14px]"
-        style={{ background: col.color, opacity: isUrgent ? 1 : 0.5 }}
+        className="absolute left-0 top-0 bottom-0 w-[4px] rounded-l-[16px]"
+        style={{ background: `linear-gradient(to bottom, ${col.color}, ${col.color}55)`, opacity: isUrgent ? 1 : 0.7 }}
       />
 
-      <div className="pl-4 pr-3.5 pt-3.5 pb-3">
+      <div className="pl-5 pr-4 pt-4 pb-3.5">
         {/* Row 1 — number + state badges */}
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-2.5 flex items-center justify-between gap-2">
           <span
-            className="font-mono text-[10px] tracking-[0.04em]"
+            className="font-mono text-[11px] tracking-[0.03em]"
             style={{ color: 'var(--text-muted)' }}
           >
             № {application.application_number}
           </span>
           <div className="flex items-center gap-1">
             {hasError && (
-              <span className="rounded-[5px] px-1.5 py-[2px] text-[10px] font-bold uppercase tracking-[0.05em]"
+              <span className="rounded-[6px] px-2 py-[3px] text-[11px] font-bold uppercase tracking-[0.04em]"
                 style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
                 Ошибка
               </span>
             )}
             {isChecking && (
-              <span className="rounded-[5px] px-1.5 py-[2px] text-[10px] font-bold uppercase tracking-[0.05em]"
+              <span className="rounded-[6px] px-2 py-[3px] text-[11px] font-bold uppercase tracking-[0.04em]"
                 style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
                 Проверка
               </span>
             )}
             {hasChange && (
-              <span className="rounded-[5px] px-1.5 py-[2px] text-[10px] font-bold uppercase tracking-[0.05em]"
+              <span className="rounded-[6px] px-2 py-[3px] text-[11px] font-bold uppercase tracking-[0.04em]"
                 style={{ background: 'var(--warning-soft)', color: 'var(--warning)' }}>
                 Изменение
               </span>
@@ -123,13 +127,13 @@ function KanbanCard({ application, project }: { application: Application; projec
 
         {/* Row 2 — main title */}
         <p
-          className="text-[14px] font-bold leading-[1.35] tracking-[-0.01em]"
+          className="text-[15px] font-bold leading-[1.35] tracking-[-0.01em]"
           style={{ color: 'var(--text)' }}
         >
           {title}
         </p>
         {subtitle && (
-          <p className="mt-1 text-[11px] leading-[1.4]" style={{ color: 'var(--text-muted)' }}>
+          <p className="mt-1 text-[12px] leading-[1.5]" style={{ color: 'var(--text-soft)' }}>
             {subtitle}
           </p>
         )}
@@ -139,7 +143,7 @@ function KanbanCard({ application, project }: { application: Application; projec
           const cat = getServiceCategory(application.service_name);
           return cat ? (
             <span
-              className="mt-1.5 inline-block rounded-[5px] px-1.5 py-[2px] text-[10px] font-semibold"
+              className="mt-2 inline-block rounded-[6px] px-2 py-[3px] text-[11px] font-semibold"
               style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
             >
               {cat}
@@ -147,21 +151,27 @@ function KanbanCard({ application, project }: { application: Application; projec
           ) : null;
         })()}
         {application.organization && (
-          <p className="mt-1 flex items-center gap-1 text-[11px]" style={{ color: 'var(--text-soft)' }}>
-            <Building2 size={11} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
+          <p className="mt-1.5 flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--text-soft)' }}>
+            <Building2 size={12} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
             <span className="truncate">{application.organization}</span>
           </p>
         )}
 
         {/* Row 4 — status + acting party */}
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className={`inline-flex items-center gap-1 rounded-[6px] px-2 py-[3px] text-[11px] font-semibold ${statusInfo.badge}`}>
-            <span className="h-1.5 w-1.5 rounded-full shrink-0 opacity-70" style={{ background: 'currentColor' }} />
+          <span className={`inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold ${statusInfo.badge}`}>
+            <span
+              className="h-2 w-2 rounded-full shrink-0"
+              style={{
+                background: 'currentColor',
+                animation: (isChecking || isUrgent) ? 'pulse-dot 1.5s ease-in-out infinite' : 'none',
+              }}
+            />
             {statusInfo.label}
           </span>
           {isUrgent && (
             <span
-              className="inline-block rounded-[6px] px-2 py-[3px] text-[10px] font-semibold"
+              className="inline-block rounded-[7px] px-2.5 py-1 text-[11px] font-semibold"
               style={{ background: 'var(--warning-soft)', color: 'var(--warning)' }}
             >
               Ждёт действия
@@ -171,25 +181,22 @@ function KanbanCard({ application, project }: { application: Application; projec
 
         {/* Row 5 — footer */}
         <div
-          className="mt-3 flex items-center justify-between gap-2 border-t pt-2.5"
+          className="mt-3.5 flex items-center justify-between gap-2 border-t pt-3"
           style={{ borderColor: 'var(--border)' }}
         >
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="font-mono text-[10px]" style={{ color: 'var(--text-soft)' }}>
+            <span className="font-mono text-[11px]" style={{ color: 'var(--text-soft)' }}>
               {application.last_changed_date ? formatDate(application.last_changed_date) : '—'}
             </span>
-            <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
               {application.last_checked_at
                 ? `проверено ${formatTimeAgo(application.last_checked_at)}`
                 : 'ещё не проверялось'}
             </span>
           </div>
-          {project && (
-            <span
-              className="shrink-0 rounded-full px-2.5 py-[3px] text-[10px] font-semibold"
-              style={{ background: `${project.color}20`, color: project.color }}
-            >
-              {project.name}
+          {application.parent_id && (
+            <span className="shrink-0 flex items-center gap-1 text-[11px]" style={{ color: 'var(--accent)' }}>
+              ⛓ Цепочка
             </span>
           )}
         </div>
@@ -203,24 +210,18 @@ function KanbanCard({ application, project }: { application: Application; projec
 export default function DashboardPage() {
   const sync = useSyncEngineSnapshot();
   const [applications, setApplications] = useState<Application[]>([]);
-  const [projects,     setProjects]     = useState<Project[]>([]);
   const [search,          setSearch]          = useState('');
   const [activeTab,       setActiveTab]       = useState<string>('all');
   const [categoryFilter,  setCategoryFilter]  = useState<ServiceCategory | null>(null);
   const [dataLoaded,      setDataLoaded]      = useState(false);
+  const [unauthorized,    setUnauthorized]    = useState(false);
 
   const loadData = useCallback(async () => {
-    const [appRes, projRes] = await Promise.all([
-      fetch('/api/applications',  { cache: 'no-store' }),
-      fetch('/api/projects',      { cache: 'no-store' }),
-    ]);
-    const [apps, projs] = await Promise.all([
-      appRes.json()  as Promise<Application[]>,
-      projRes.json() as Promise<Project[]>,
-    ]);
+    const res = await fetch('/api/applications', { cache: 'no-store' });
+    const data: unknown = res.ok ? await res.json() : null;
     startTransition(() => {
-      setApplications(apps);
-      setProjects(projs);
+      setUnauthorized(res.status === 401);
+      setApplications(Array.isArray(data) ? data as Application[] : []);
       setDataLoaded(true);
     });
   }, []);
@@ -288,21 +289,21 @@ export default function DashboardPage() {
   }, [mobileColumn, filtered, columns]);
 
   return (
-    <div className="flex h-[calc(100svh-52px)] flex-col overflow-hidden">
+    <div className="flex h-[calc(100svh-60px)] flex-col overflow-hidden">
 
       {/* ── Board header ── */}
       <div
-        className="border-b px-3 py-2.5 md:px-5 md:py-3"
+        className="border-b px-4 py-3 md:px-6 md:py-4 animate-slide-down"
         style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
       >
         {/* Title + search */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-[13px] font-bold md:text-sm" style={{ color: 'var(--text)' }}>
+            <h1 className="text-[15px] font-extrabold tracking-tight md:text-base" style={{ color: 'var(--text)' }}>
               Доска заявлений
             </h1>
-            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-              <span className="tabular">{active.length}</span> активных
+            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+              <span className="tabular font-semibold" style={{ color: 'var(--text-soft)' }}>{active.length}</span> активных
               {' · '}
               {formatDate(sync.lastRunAt)}
             </p>
@@ -312,7 +313,7 @@ export default function DashboardPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Поиск…"
-            className="w-32 rounded-[9px] px-2.5 py-1.5 text-[12px] outline-none transition focus:ring-2 md:w-44"
+            className="w-36 rounded-[10px] px-3 py-2 text-[13px] outline-none transition focus:ring-2 md:w-52"
             style={{
               background:   'var(--panel)',
               border:       '1px solid var(--border)',
@@ -322,18 +323,18 @@ export default function DashboardPage() {
         </div>
 
         {/* Stat chips */}
-        <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-          <span className="shrink-0 rounded-[6px] px-2 py-[3px] text-[10px] font-semibold"
+        <div className="mt-2.5 flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+          <span className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold"
             style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
             {active.length} активных
           </span>
           {urgentCount > 0 && (
-            <span className="shrink-0 rounded-[6px] px-2 py-[3px] text-[10px] font-semibold"
+            <span className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold"
               style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
               {urgentCount} ждут действия
             </span>
           )}
-          <span className="shrink-0 rounded-[6px] px-2 py-[3px] text-[10px] font-semibold"
+          <span className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold"
             style={{ background: 'rgba(52,211,153,0.12)', color: '#34D399' }}>
             {completedCount} завершено
           </span>
@@ -345,7 +346,7 @@ export default function DashboardPage() {
             {categoryFilter && (
               <button
                 onClick={() => setCategoryFilter(null)}
-                className="shrink-0 rounded-[6px] px-2 py-[3px] text-[10px] font-semibold transition"
+                className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold transition active:scale-95"
                 style={{ background: 'var(--panel)', color: 'var(--text-muted)' }}
               >
                 × Все
@@ -355,7 +356,7 @@ export default function DashboardPage() {
               <button
                 key={cat}
                 onClick={() => setCategoryFilter(prev => prev === cat ? null : cat)}
-                className="shrink-0 rounded-[6px] px-2 py-[3px] text-[10px] font-semibold transition"
+                className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold transition active:scale-95"
                 style={categoryFilter === cat
                   ? { background: 'var(--accent)', color: '#fff' }
                   : { background: 'var(--accent-soft)', color: 'var(--accent)' }
@@ -368,10 +369,10 @@ export default function DashboardPage() {
         )}
 
         {/* Mobile column tabs */}
-        <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5 scrollbar-none md:hidden">
+        <div className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none md:hidden">
           <button
             onClick={() => setActiveTab('all')}
-            className="shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition"
+            className="shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition active:scale-95"
             style={activeTab === 'all'
               ? { background: 'var(--text)', color: 'var(--bg)' }
               : { background: 'var(--panel)', color: 'var(--text-muted)' }
@@ -385,7 +386,7 @@ export default function DashboardPage() {
               <button
                 key={col.id}
                 onClick={() => setActiveTab(col.id)}
-                className="shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition"
+                className="shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition active:scale-95"
                 style={activeTab === col.id
                   ? { background: col.color, color: '#fff' }
                   : { background: 'var(--panel)', color: 'var(--text-muted)' }
@@ -398,18 +399,27 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {unauthorized && (
+        <div
+          className="mx-4 mt-3 rounded-[12px] px-4 py-3 text-[13px] md:mx-6"
+          style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}
+        >
+          Нет доступа к данным. Откройте ссылку с токеном (<span className="font-mono">?token=…</span>) — его значение лежит в <span className="font-mono">APP_TOKEN</span> в файле <span className="font-mono">.env.local</span>.
+        </div>
+      )}
+
       {/* ── Mobile list view ── */}
       <div className="flex flex-1 flex-col overflow-hidden md:hidden">
         <div className="flex-1 overflow-y-auto p-3">
           {!dataLoaded ? (
             <div className="flex flex-col gap-2.5">
               {[1, 2, 3].map(i => (
-                <div key={i} className="rounded-[14px] border p-3.5 animate-pulse"
+                <div key={i} className="rounded-[16px] border p-4"
                   style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-                  <div className="mb-2 h-2.5 w-20 rounded" style={{ background: 'var(--panel)' }} />
-                  <div className="h-3.5 w-full rounded" style={{ background: 'var(--panel)' }} />
-                  <div className="mt-1.5 h-3 w-3/4 rounded" style={{ background: 'var(--panel)' }} />
-                  <div className="mt-3 h-2 w-1/2 rounded" style={{ background: 'var(--panel)' }} />
+                  <div className="mb-2.5 h-3 w-24 rounded animate-shimmer" />
+                  <div className="h-4 w-full rounded animate-shimmer" />
+                  <div className="mt-2 h-3.5 w-3/4 rounded animate-shimmer" />
+                  <div className="mt-3 h-3 w-1/2 rounded animate-shimmer" />
                 </div>
               ))}
             </div>
@@ -419,18 +429,18 @@ export default function DashboardPage() {
               <Link
                 href="/add"
                 className="mt-3 rounded-[9px] px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: 'var(--accent)' }}
+                style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
               >
                 + Добавить
               </Link>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              {mobileApps.map(app => (
+              {mobileApps.map((app, idx) => (
                 <KanbanCard
                   key={app.id}
+                  index={idx}
                   application={app}
-                  project={app.project_id ? projects.find(p => p.id === app.project_id) : undefined}
                 />
               ))}
             </div>
@@ -443,8 +453,8 @@ export default function DashboardPage() {
 
       {/* ── Desktop kanban board ── */}
       <div
-        className="hidden flex-1 gap-3 overflow-x-auto p-4 md:flex md:p-5"
-        style={{ alignItems: active.length === 0 ? 'center' : 'flex-start', justifyContent: active.length === 0 ? 'center' : undefined }}
+        className="hidden min-h-0 flex-1 gap-3 overflow-x-auto p-4 md:flex md:p-5"
+        style={{ alignItems: active.length === 0 ? 'center' : 'stretch', justifyContent: active.length === 0 ? 'center' : undefined }}
       >
         {active.length === 0 ? (
           <div className="flex flex-col items-center gap-4 py-8 text-center">
@@ -463,68 +473,73 @@ export default function DashboardPage() {
             <Link
               href="/add"
               className="rounded-[10px] px-5 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110"
-              style={{ background: 'var(--accent)' }}
+              style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
             >
               + Добавить заявление
             </Link>
           </div>
-        ) : columns.map(col => (
-          <div key={col.id} className="flex w-[272px] min-w-[272px] flex-col">
+        ) : columns.map((col, colIdx) => (
+          <div key={col.id} className="flex min-h-0 w-[288px] min-w-[288px] flex-col animate-slide-up" style={{ animationDelay: `${colIdx * 60}ms` }}>
             {/* Column header */}
             <div
-              className="mb-2.5 flex items-center gap-2 rounded-t-[12px] px-3 py-2.5"
+              className="mb-3 flex items-center gap-2.5 rounded-[13px] px-3.5 py-3"
               style={{
-                background:  'var(--surface)',
-                borderBottom: `2px solid ${col.color}`,
-                boxShadow:   'var(--shadow-card)',
+                background:   `linear-gradient(to bottom, ${col.color}1A, var(--surface))`,
+                borderTop:    `3px solid ${col.color}`,
+                borderRight:  `1px solid ${col.color}30`,
+                borderBottom: `1px solid ${col.color}30`,
+                borderLeft:   `1px solid ${col.color}30`,
+                boxShadow:    'var(--shadow-card)',
               }}
             >
               <span
-                className="h-2 w-2 rounded-full shrink-0"
-                style={{ background: col.color }}
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ background: col.color, boxShadow: `0 0 8px ${col.color}AA` }}
               />
               <span
-                className="flex-1 text-[11px] font-bold uppercase tracking-[0.07em]"
+                className="flex-1 text-[12px] font-bold uppercase tracking-[0.06em]"
                 style={{ color: 'var(--text)' }}
               >
                 {col.label}
               </span>
               <span
-                className="rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular"
+                className="rounded-full px-2 py-0.5 text-[11px] font-bold tabular"
                 style={{ background: col.bgColor, color: col.textColor }}
               >
                 {col.apps.length}
               </span>
             </div>
 
-            {/* Cards */}
+            {/* Cards — flex-1 + min-h-0 so the scroll area exactly fills the
+                column instead of a hardcoded calc() that overshot the board
+                and pushed the last 76px of scrollable content off-screen. */}
             <div
-              className="flex flex-col gap-2 overflow-y-auto scrollbar-none"
-              style={{ maxHeight: 'calc(100vh - 200px)', paddingBottom: '8px' }}
+              className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto scrollbar-none"
+              style={{ paddingBottom: '12px' }}
             >
               {!dataLoaded ? (
                 [1, 2].map(i => (
-                  <div key={i} className="rounded-[14px] border p-3.5 animate-pulse"
+                  <div key={i} className="rounded-[16px] border p-4"
                     style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-                    <div className="mb-2 h-2.5 w-20 rounded" style={{ background: 'var(--panel)' }} />
-                    <div className="h-3.5 w-full rounded" style={{ background: 'var(--panel)' }} />
-                    <div className="mt-1.5 h-3 w-3/4 rounded" style={{ background: 'var(--panel)' }} />
-                    <div className="mt-3 h-2 w-1/2 rounded" style={{ background: 'var(--panel)' }} />
+                    <div className="mb-2.5 h-3 w-24 rounded animate-shimmer" />
+                    <div className="h-4 w-full rounded animate-shimmer" />
+                    <div className="mt-2 h-3.5 w-3/4 rounded animate-shimmer" />
+                    <div className="mt-3 h-3 w-1/2 rounded animate-shimmer" />
                   </div>
                 ))
               ) : (
                 <>
-                  {col.apps.map(app => (
+                  {col.apps.map((app, idx) => (
                     <KanbanCard
                       key={app.id}
+                      index={idx}
                       application={app}
-                      project={app.project_id ? projects.find(p => p.id === app.project_id) : undefined}
                     />
                   ))}
                   {col.apps.length === 0 && (
                     <div
-                      className="rounded-[12px] border border-dashed px-3 py-6 text-center text-[11px]"
-                      style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                      className="rounded-[13px] border border-dashed px-4 py-8 text-center text-[12px]"
+                      style={{ borderColor: `${col.color}30`, color: 'var(--text-muted)' }}
                     >
                       Нет заявлений
                     </div>

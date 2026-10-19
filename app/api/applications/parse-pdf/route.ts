@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { deletePdfFile, savePdfFile } from '@/lib/local-storage';
+import { deletePdfFile, hasPdfMagicBytes, MAX_PDF_UPLOAD_BYTES, savePdfFile } from '@/lib/local-storage';
 import { parsePdfBuffer } from '@/lib/pdf-parser';
 
 async function cleanupTempPdf(request: NextRequest) {
@@ -34,7 +34,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'File not found' }, { status: 400 });
   }
 
+  if (file.size > MAX_PDF_UPLOAD_BYTES) {
+    return NextResponse.json({ error: 'File exceeds the maximum allowed size' }, { status: 413 });
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
+
+  if (!hasPdfMagicBytes(buffer)) {
+    return NextResponse.json({ error: 'File is not a valid PDF' }, { status: 400 });
+  }
 
   try {
     const fields = await parsePdfBuffer(buffer);

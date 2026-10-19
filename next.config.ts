@@ -7,21 +7,15 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
 
-  // Cache strategy for API responses
-  // Development: no caching to prevent stale data during testing
-  // Production: conservative SWR to handle brief network hiccups without causing data inconsistency
-  headers: async () => {
-    const cacheValue = process.env.NODE_ENV === 'development'
-      ? 'public, max-age=0, no-cache'
-      : 'public, max-age=60, stale-while-revalidate=120';
-
-    return [
-      {
-        source: '/api/:path*',
-        headers: [{ key: 'Cache-Control', value: cacheValue }],
-      },
-    ];
-  },
+  // API responses carry verification passwords, the Telegram bot token and
+  // live statuses — never let a browser or shared cache keep them, and never
+  // serve a stale list right after a mutation.
+  headers: async () => [
+    {
+      source: '/api/:path*',
+      headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
+    },
+  ],
 
   // Image optimization
   images: {
@@ -30,10 +24,9 @@ const nextConfig: NextConfig = {
 
   serverExternalPackages: ['better-sqlite3'],
 
-  // Experimental optimizations
-  experimental: {
-    optimizePackageImports: ['@/lib', '@/components'],
-  },
+  // Let LAN devices load dev-only assets (HMR, chunks) in `next dev`;
+  // without this the page renders but never hydrates on e.g. 192.168.x.x.
+  allowedDevOrigins: ['127.0.0.1', '10.*.*.*', '172.*.*.*', '192.168.*.*'],
 };
 
 export default nextConfig;

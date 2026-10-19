@@ -30,6 +30,7 @@ export interface Application {
   pdf_filename: string;
   pdf_storage_key: string | null;
   project_id: string | null;
+  parent_id: string | null;
   archived: boolean;
   sync_state: SyncState;
   last_checked_at: string | null;
@@ -72,6 +73,9 @@ export interface MyGovStatus {
   type: StatusType;
   // Tailwind classes for the badge
   badge: string;
+  // Solid hex color for standalone status-dot indicators (e.g. compact widgets
+  // where a badge's pastel background/text pairing wouldn't read as a dot)
+  dotColor: string;
 }
 
 const STATUS_MAP: Record<string, MyGovStatus> = {
@@ -79,46 +83,55 @@ const STATUS_MAP: Record<string, MyGovStatus> = {
     label: 'Новое',
     type: 'in_progress',
     badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
+    dotColor: '#60A5FA',
   },
   'в обработке': {
     label: 'В обработке',
     type: 'in_progress',
     badge: 'bg-amber-100 text-amber-800 dark:bg-amber-400/20 dark:text-amber-200',
+    dotColor: '#FBBF24',
   },
   'обработано': {
     label: 'Обработано',
     type: 'completed',
     badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-200',
+    dotColor: '#34D399',
   },
   'отклонено': {
     label: 'Отклонено',
     type: 'completed',
     badge: 'bg-red-100 text-red-800 dark:bg-red-400/20 dark:text-red-200',
+    dotColor: '#FB7185',
   },
   'аннулировано': {
     label: 'Аннулировано',
     type: 'completed',
     badge: 'bg-gray-100 text-gray-600 dark:bg-gray-400/20 dark:text-gray-300',
+    dotColor: '#94A3B8',
   },
   'переотправлена': {
     label: 'Переотправлена',
     type: 'in_progress',
     badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
+    dotColor: '#FBBF24',
   },
   'черновик': {
     label: 'Черновик',
     type: 'in_progress',
     badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-400/20 dark:text-yellow-200',
+    dotColor: '#60A5FA',
   },
   'в ожидании другого заявителя': {
     label: 'В ожидании другого заявителя',
     type: 'action_required',
     badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
+    dotColor: '#F87171',
   },
   'в ожидании оплаты': {
     label: 'В ожидании оплаты',
     type: 'action_required',
     badge: 'bg-blue-100 text-blue-800 dark:bg-blue-400/20 dark:text-blue-200',
+    dotColor: '#F87171',
   },
 };
 
@@ -131,6 +144,7 @@ export function getMyGovStatus(status: string): MyGovStatus {
     label: status,
     type: 'in_progress' as StatusType,
     badge: 'bg-[var(--panel-strong)] text-[var(--text-soft)]',
+    dotColor: 'var(--text-soft)',
   };
 }
 

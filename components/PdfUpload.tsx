@@ -68,7 +68,16 @@ export function PdfUpload({ onParsed }: Props) {
         }
       }}
       onClick={() => inputRef.current?.click()}
-      className={`cursor-pointer rounded-[32px] border-2 border-dashed p-8 text-center transition md:p-12 ${
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
+      tabIndex={0}
+      role="button"
+      aria-label="Выбрать или перетащить PDF файл заявления для разбора"
+      className={`cursor-pointer rounded-[32px] border-2 border-dashed p-8 text-center transition outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 md:p-12 ${
         dragging
           ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
           : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]'

@@ -8,19 +8,24 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import {
+  insertStatusHistory,
   readLocalDb,
+  touchMeta,
+  updateApplicationFields,
   writeLocalDb,
   type LocalDbApplication,
   type LocalDbApplicationChangeField,
 } from './local-db';
 import { openDb } from './sqlite-db';
-import { fetchApplicationStatus } from './status-checker';
+import { fetchRepositoryFiles } from './repository-files';
+import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, parseMyGovDate } from './status-checker';
+import { captureApplicationStatusScreenshot } from './status-screenshot';
+import { buildStatusSnapshotPdf } from './status-pdf';
 import {
-  buildApplicationChangeMessage,
-  buildApplicationCompletedMessage,
   buildApplicationErrorMessage,
   buildCycleSummaryMessage,
   isTelegramConfigured,
+  sendApplicationChangeNotification,
   sendTelegramMessage,
 } from './telegram';
 import { isCompletedStatus } from '@/types';
@@ -67,18 +72,6 @@ async function persistSchedulerStatus(): Promise<void> {
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-function parseMyGovDate(value: string | undefined | null): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
-  if (!match) {
-    const parsed = new Date(trimmed);
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-  }
-  const [, dd, mm, yyyy, hh = '00', min = '00'] = match;
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}:00`;
-}
-
 async function writeCheckLog(
   applicationId: string,
   applicationNumber: string,
@@ -107,30 +100,38 @@ async function writeCheckLog(
 
 // ── single-application check ───────────────────────────────────────────────
 
-async function checkOne(application: LocalDbApplication): Promise<'changed' | 'unchanged' | 'error'> {
-  // Mark as checking
-  {
-    const db = await readLocalDb();
-    const entry = db.applications.find(a => a.id === application.id);
-    if (!entry) return 'error';
-    entry.sync_state = 'checking';
-    entry.last_error = '';
-    entry.updated_at = new Date().toISOString();
-    db.meta.updated_at = entry.updated_at;
-    await writeLocalDb(db);
-  }
+export interface CheckOneResult {
+  result: 'changed' | 'unchanged' | 'error';
+  /** The fetched my.gov.uz session, when the check reached that point — lets callers (e.g. the Telegram bot) build a status screenshot without re-fetching. */
+  session: Awaited<ReturnType<typeof fetchApplicationStatusSession>> | null;
+}
 
-  let checked: Awaited<ReturnType<typeof fetchApplicationStatus>> | null = null;
+export async function checkOne(application: LocalDbApplication): Promise<CheckOneResult> {
+  // Mark as checking — single targeted update instead of a full-snapshot read/write,
+  // so a concurrent PATCH/DELETE (or another checkOne call) can't race and lose data.
+  const initialDb = await readLocalDb();
+  if (!initialDb.applications.some(a => a.id === application.id)) return { result: 'error', session: null };
+
+  const checkingAt = new Date().toISOString();
+  await updateApplicationFields(application.id, {
+    sync_state: 'checking',
+    last_error: '',
+    updated_at: checkingAt,
+  });
+  await touchMeta(checkingAt);
+
+  let session: Awaited<ReturnType<typeof fetchApplicationStatusSession>> | null = null;
   let fetchError: string | null = null;
   try {
-    checked = await fetchApplicationStatus(application.application_number, application.verification_password);
+    session = await fetchApplicationStatusSession(application.application_number, application.verification_password);
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Неизвестная ошибка при проверке';
   }
+  const checked = session?.status ?? null;
 
   const db = await readLocalDb();
   const entry = db.applications.find(a => a.id === application.id);
-  if (!entry) return 'error';
+  if (!entry) return { result: 'error', session };
 
   const now = new Date().toISOString();
   const intervalMinutes = db.settings.auto_check.interval_minutes ?? 15;
@@ -140,21 +141,23 @@ async function checkOne(application: LocalDbApplication): Promise<'changed' | 'u
 
   if (!checked) {
     const errorMessage = fetchError ?? 'Не удалось получить статус от my.gov.uz';
-    entry.sync_state = 'error';
-    entry.last_checked_at = now;
-    entry.next_check_at = nextCheckAt;
-    entry.last_error = errorMessage;
-    entry.updated_at = now;
-    db.meta.updated_at = now;
-    await writeLocalDb(db);
+    const errorPatch: Partial<LocalDbApplication> = {
+      sync_state: 'error',
+      last_checked_at: now,
+      next_check_at: nextCheckAt,
+      last_error: errorMessage,
+      updated_at: now,
+    };
+    await updateApplicationFields(entry.id, errorPatch);
+    await touchMeta(now);
 
     await writeCheckLog(entry.id, entry.application_number, 'error', [], errorMessage);
 
     if (isTelegramConfigured(db.settings)) {
-      sendTelegramMessage(db.settings, buildApplicationErrorMessage(entry, errorMessage))
+      sendTelegramMessage(db.settings, buildApplicationErrorMessage({ ...entry, ...errorPatch }, errorMessage))
         .catch(err => console.error('[Scheduler] Telegram error (check error):', err));
     }
-    return 'error';
+    return { result: 'error', session };
   }
 
   const previousValues = {
@@ -172,35 +175,36 @@ async function checkOne(application: LocalDbApplication): Promise<'changed' | 'u
   const trackedFields: LocalDbApplicationChangeField[] = ['status', 'current_action', 'acting_party', 'last_changed_date'];
   const changedFields = trackedFields.filter(f => previousValues[f] !== nextValues[f]);
 
-  const labels: Record<LocalDbApplicationChangeField, string> = {
-    status: 'Статус', current_action: 'Текущее действие',
-    acting_party: 'Действует', last_changed_date: 'Последнее изменение',
-  };
   const fmt = (v: string | null) => v?.trim() || 'пусто';
 
-  entry.status = nextValues.status;
-  entry.current_action = nextValues.current_action;
-  entry.acting_party = nextValues.acting_party;
-  entry.last_changed_date = nextValues.last_changed_date;
-  entry.sync_state = 'success';
-  entry.last_checked_at = now;
-  entry.next_check_at = nextCheckAt;
-  entry.last_error = '';
-  entry.last_change_summary = changedFields.map(f =>
-    `${labels[f]}: "${fmt(previousValues[f])}" → "${fmt(nextValues[f])}"`
-  );
-  entry.last_change_fields = changedFields;
-  if (changedFields.length > 0) entry.last_detected_change_at = now;
+  const patch: Partial<LocalDbApplication> = {
+    status: nextValues.status,
+    current_action: nextValues.current_action,
+    acting_party: nextValues.acting_party,
+    last_changed_date: nextValues.last_changed_date,
+    sync_state: 'success',
+    last_checked_at: now,
+    next_check_at: nextCheckAt,
+    last_error: '',
+    last_change_summary: changedFields.map(f =>
+      `${CHANGE_FIELD_LABELS[f]}: "${fmt(previousValues[f])}" → "${fmt(nextValues[f])}"`
+    ),
+    last_change_fields: changedFields,
+  };
+  if (changedFields.length > 0) patch.last_detected_change_at = now;
 
-  if (isCompletedStatus(entry.status)) {
-    entry.archived = true;
-    entry.sync_state = 'idle';
-    entry.next_check_at = null;
+  if (isCompletedStatus(patch.status!)) {
+    patch.archived = true;
+    patch.sync_state = 'idle';
+    patch.next_check_at = null;
   }
-  entry.updated_at = now;
+  patch.updated_at = now;
+
+  await updateApplicationFields(entry.id, patch);
+  await touchMeta(now);
 
   if (previousValues.status !== nextValues.status) {
-    db.status_history.push({
+    await insertStatusHistory({
       id: randomUUID(),
       application_id: entry.id,
       status: nextValues.status,
@@ -210,22 +214,33 @@ async function checkOne(application: LocalDbApplication): Promise<'changed' | 'u
     });
   }
 
-  db.meta.updated_at = now;
-  await writeLocalDb(db);
+  const updatedEntry: LocalDbApplication = { ...entry, ...patch };
 
   const result: 'changed' | 'unchanged' = changedFields.length > 0 ? 'changed' : 'unchanged';
-  await writeCheckLog(entry.id, entry.application_number, result, changedFields);
+  await writeCheckLog(updatedEntry.id, updatedEntry.application_number, result, changedFields);
 
   if (isTelegramConfigured(db.settings) && changedFields.length > 0) {
-    const isNowCompleted = isCompletedStatus(entry.status) && !isCompletedStatus(previousValues.status ?? '');
-    const message = isNowCompleted
-      ? buildApplicationCompletedMessage(entry)
-      : buildApplicationChangeMessage({ application: entry, changedFields, previousValues, nextValues });
-    sendTelegramMessage(db.settings, message)
-      .catch(err => console.error('[Scheduler] Telegram error (change):', err));
+    const isNowCompleted = isCompletedStatus(updatedEntry.status) && !isCompletedStatus(previousValues.status ?? '');
+    Promise.all([
+      buildStatusSnapshotPdf({ application: updatedEntry, changedFields, previousValues, nextValues }),
+      session ? captureApplicationStatusScreenshot(session.page, application.verification_password) : null,
+      // Official result documents (approval/rejection notices) only appear on
+      // the page once the application is finalized — fetch them then.
+      isNowCompleted && session ? fetchRepositoryFiles(session.page.html) : [],
+    ]).then(([readablePdf, screenshotPng, repositoryFiles]) => sendApplicationChangeNotification({
+      settings: db.settings,
+      application: updatedEntry,
+      changedFields,
+      previousValues,
+      nextValues,
+      isNowCompleted,
+      screenshotPng,
+      readablePdf,
+      repositoryFiles,
+    })).catch(err => console.error('[Scheduler] Telegram error (change):', err));
   }
 
-  return result;
+  return { result, session };
 }
 
 // ── cycle ──────────────────────────────────────────────────────────────────
@@ -268,8 +283,8 @@ async function runCycle(onlyIds?: string[]): Promise<void> {
       const results = await Promise.all(batch.map(a => checkOne(a)));
       for (let j = 0; j < results.length; j++) {
         checkedCount++;
-        if (results[j] === 'changed') changedCount++;
-        if (results[j] === 'error') {
+        if (results[j].result === 'changed') changedCount++;
+        if (results[j].result === 'error') {
           errorCount++;
           failedIds.push(batch[j].id);
         }

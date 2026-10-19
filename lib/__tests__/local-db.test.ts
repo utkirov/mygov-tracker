@@ -4,11 +4,47 @@ import path from 'node:path';
 
 import {
   createDefaultLocalDb,
+  deleteApplicationRow,
   getLocalDbFilePath,
+  insertApplication,
   readLocalDb,
+  updateApplicationFields,
   writeLocalDb,
+  type LocalDbApplication,
 } from '../local-db';
 import { closeDb } from '../sqlite-db';
+
+function makeApplication(overrides: Partial<LocalDbApplication> & { id: string }): LocalDbApplication {
+  return {
+    application_number: '',
+    object_name: '',
+    service_name: '',
+    organization: '',
+    status: '',
+    submission_date: null,
+    last_changed_date: null,
+    current_action: '',
+    acting_party: '',
+    verification_password: '',
+    sms_phone: '',
+    notes: '',
+    pdf_filename: '',
+    pdf_storage_key: null,
+    project_id: null,
+    parent_id: null,
+    archived: false,
+    sync_state: 'idle',
+    last_checked_at: null,
+    next_check_at: null,
+    last_error: '',
+    last_detected_change_at: null,
+    last_change_summary: [],
+    last_change_fields: [],
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
 
 describe('local-db', () => {
   let rootPath: string;
@@ -39,7 +75,7 @@ describe('local-db', () => {
       expires_at: null,
       updated_at: null,
     });
-    expect(db.settings.telegram).toEqual({ bot_token: '', chat_id: '' });
+    expect(db.settings.telegram).toEqual({ bot_token: '', chat_id: '', commands_chat_id: '' });
     expect(db.settings.auto_check.enabled).toBe(false);
   });
 
@@ -69,6 +105,7 @@ describe('local-db', () => {
       pdf_filename: 'invoice.pdf',
       pdf_storage_key: '1746423600000-uuid.pdf',
       project_id: 'project-1',
+      parent_id: null,
       archived: false,
       sync_state: 'idle',
       last_checked_at: null,
@@ -126,5 +163,47 @@ describe('local-db', () => {
     const db = await readLocalDb(rootPath);
     expect(typeof db.settings.sound_enabled).toBe('boolean');
     expect(db.settings.sound_enabled).toBe(true);
+  });
+
+  // Regression coverage for the non-atomic writeLocalDb(full-snapshot) bug: targeted
+  // single-row helpers must only ever touch the row they're given, never siblings.
+  describe('single-row application helpers', () => {
+    it('updateApplicationFields updates only the targeted row and only the given columns', async () => {
+      await insertApplication(makeApplication({ id: 'app-a', status: 'New', notes: 'A notes' }), rootPath);
+      await insertApplication(makeApplication({ id: 'app-b', status: 'New', notes: 'B notes' }), rootPath);
+
+      await updateApplicationFields('app-a', { status: 'Обработано', archived: true }, rootPath);
+
+      const db = await readLocalDb(rootPath);
+      expect(db.applications).toHaveLength(2); // no rows resurrected or deleted
+
+      const appA = db.applications.find((a) => a.id === 'app-a')!;
+      const appB = db.applications.find((a) => a.id === 'app-b')!;
+
+      expect(appA.status).toBe('Обработано');
+      expect(appA.archived).toBe(true);
+      expect(appA.notes).toBe('A notes'); // columns not in the patch stay untouched
+
+      // App B must be completely unaffected by the targeted update on app A.
+      expect(appB.status).toBe('New');
+      expect(appB.archived).toBe(false);
+      expect(appB.notes).toBe('B notes');
+    });
+
+    it('updateApplicationFields does not resurrect a row deleted by a concurrent deleteApplicationRow call', async () => {
+      await insertApplication(makeApplication({ id: 'app-a', status: 'New' }), rootPath);
+      await insertApplication(makeApplication({ id: 'app-b', status: 'New' }), rootPath);
+
+      // A second "writer" deletes app-b via the targeted helper.
+      await deleteApplicationRow('app-b', rootPath);
+
+      // A concurrent targeted update on app-a must not touch or resurrect app-b.
+      await updateApplicationFields('app-a', { status: 'Обработано' }, rootPath);
+
+      const db = await readLocalDb(rootPath);
+      expect(db.applications).toHaveLength(1);
+      expect(db.applications[0].id).toBe('app-a');
+      expect(db.applications[0].status).toBe('Обработано');
+    });
   });
 });

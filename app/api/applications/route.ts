@@ -2,23 +2,16 @@ import { randomUUID } from 'node:crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { readLocalDb, writeLocalDb, type LocalDbApplication } from '@/lib/local-db';
+import {
+  insertApplication,
+  insertStatusHistory,
+  readLocalDb,
+  touchMeta,
+  type LocalDbApplication,
+} from '@/lib/local-db';
 import { canAddApplication } from '@/lib/plans';
+import { parseMyGovDate } from '@/lib/status-checker';
 import { getUserPlan } from '@/lib/subscription';
-
-function parseMyGovDate(value: string | undefined | null): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
-
-  if (!match) {
-    const parsed = new Date(trimmed);
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-  }
-
-  const [, dd, mm, yyyy, hh = '00', min = '00'] = match;
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}:00`;
-}
 
 function sortByUpdatedAtDesc(applications: LocalDbApplication[]): LocalDbApplication[] {
   return [...applications].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
@@ -88,6 +81,7 @@ export async function POST(request: NextRequest) {
     pdf_filename: pdfFilename,
     pdf_storage_key: pdfStorageKey,
     project_id: typeof body.project_id === 'string' ? body.project_id : null,
+    parent_id: typeof body.parent_id === 'string' && body.parent_id.trim() ? body.parent_id.trim() : null,
     archived: body.archived === true,
     sync_state: 'idle',
     last_checked_at: null,
@@ -100,8 +94,8 @@ export async function POST(request: NextRequest) {
     updated_at: now,
   };
 
-  db.applications.push(application);
-  db.status_history.push({
+  await insertApplication(application);
+  await insertStatusHistory({
     id: randomUUID(),
     application_id: application.id,
     status: application.status,
@@ -109,10 +103,7 @@ export async function POST(request: NextRequest) {
     acting_party: application.acting_party,
     recorded_at: now,
   });
-  db.meta.created_at = db.meta.created_at ?? now;
-  db.meta.updated_at = now;
-
-  await writeLocalDb(db);
+  await touchMeta(now);
 
   return NextResponse.json(application, { status: 201 });
 }

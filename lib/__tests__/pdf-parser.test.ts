@@ -1,5 +1,5 @@
 // lib/__tests__/pdf-parser.test.ts
-import { extractFieldsFromText } from '../pdf-parser';
+import { extractFieldsFromText, looksLikeScannedPdf, ocrPdfBuffer } from '../pdf-parser';
 
 // Real format from my.gov.uz: value immediately follows label with no separator
 const REAL_PDF_TEXT = `
@@ -163,5 +163,31 @@ describe('extractFieldsFromText – Uzbek format', () => {
 
   it('extracts verification password', () => {
     expect(extractFieldsFromText(UZ_PDF_TEXT).verification_password).toBe('41819');
+  });
+});
+
+describe('looksLikeScannedPdf', () => {
+  it('treats near-empty text as a scan', () => {
+    expect(looksLikeScannedPdf('')).toBe(true);
+    expect(looksLikeScannedPdf('   \n\n  ')).toBe(true);
+    expect(looksLikeScannedPdf('short')).toBe(true);
+  });
+
+  it('treats a normal extracted document as not-a-scan', () => {
+    expect(looksLikeScannedPdf(REAL_PDF_TEXT)).toBe(false);
+  });
+});
+
+describe('ocrPdfBuffer', () => {
+  const originalPlatform = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
+  });
+
+  it('returns null immediately on non-Windows platforms (no OCR script exists for them)', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const result = await ocrPdfBuffer(Buffer.from('%PDF-1.4 fake'));
+    expect(result).toBeNull();
   });
 });
