@@ -2,7 +2,7 @@
   "expo": {
     "name": "my.gov tracker",
     "slug": "mygov-tracker",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,7 +15,11 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "uz.turonproject.tracker",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 2,
+      "permissions": [
+        "REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -65,6 +69,14 @@
         "projectId": "271d2f4d-6932-489a-8b12-a7a6dda37a9e"
       }
     },
-    "owner": "utkirov"
+    "owner": "utkirov",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/271d2f4d-6932-489a-8b12-a7a6dda37a9e",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }

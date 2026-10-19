@@ -339,6 +339,117 @@ function SecuritySection() {
 }
 
 interface PairingQr { link: string; expiresAt: string; svg: string }
+interface AppRelease { version: string; versionCode: number; notes: string; size: number; uploaded_at: string; backup_copy: string | null }
+
+function ReleaseBlock() {
+  const [release, setRelease] = useState<AppRelease | null | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [version, setVersion] = useState('');
+  const [versionCode, setVersionCode] = useState('');
+  const [notes, setNotes] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/app-release', { cache: 'no-store' })
+      .then(r => r.json() as Promise<{ release: AppRelease | null }>)
+      .then(p => setRelease(p.release))
+      .catch(() => setRelease(null));
+  }, []);
+
+  function startUpload() {
+    // Suggest the next version so a quick re-publish is two clicks.
+    if (release) {
+      const [major, minor] = release.version.split('.').map(Number);
+      setVersion(`${major}.${(minor ?? 0) + 1}.0`);
+      setVersionCode(String(release.versionCode + 1));
+    }
+    setOpen(true);
+  }
+
+  async function upload() {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('version', version.trim());
+      form.append('versionCode', versionCode.trim());
+      form.append('notes', notes);
+      const response = await fetch('/api/app-release', { method: 'POST', body: form });
+      const payload = await response.json().catch(() => ({})) as { release?: AppRelease; error?: string };
+      if (!response.ok || !payload.release) throw new Error(payload.error ?? 'Не удалось опубликовать');
+      setRelease(payload.release);
+      setOpen(false);
+      setFile(null);
+      setNotes('');
+      showToast({ title: `Версия ${payload.release.version} опубликована`, description: 'Телефоны предложат обновиться при следующем запуске.', tone: 'success' });
+    } catch (error) {
+      showToast({ title: 'APK не опубликован', description: error instanceof Error ? error.message : '', tone: 'error' });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const field = 'mt-1 block h-9 w-full rounded-[8px] px-3 text-[13px] outline-none focus:ring-2';
+  const fieldStyle = { background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--text)' };
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
+            {release ? `Опубликована версия ${release.version} (code ${release.versionCode})` : release === null ? 'APK ещё не опубликован' : '…'}
+          </p>
+          {release && (
+            <p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              {formatBytes(release.size)} · {new Date(release.uploaded_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              {release.backup_copy ? ' · копия рядом с бэкапами' : ''}
+            </p>
+          )}
+        </div>
+        {!open && (
+          <button onClick={startUpload} className="rounded-[8px] border px-3 py-2 text-[12px] font-semibold"
+            style={{ borderColor: 'var(--border-strong)', color: 'var(--text)', background: 'var(--surface)' }}>
+            Загрузить APK
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="space-y-2 rounded-[10px] border p-3" style={{ borderColor: 'var(--border)' }}>
+          <input type="file" accept=".apk,application/vnd.android.package-archive"
+            onChange={e => setFile(e.target.files?.[0] ?? null)} className="block w-full text-[12px]" style={{ color: 'var(--text-soft)' }} />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block text-[11px] font-medium" style={{ color: 'var(--text-soft)' }}>Версия
+              <input value={version} onChange={e => setVersion(e.target.value)} placeholder="1.2.0" className={field} style={fieldStyle} />
+            </label>
+            <label className="block text-[11px] font-medium" style={{ color: 'var(--text-soft)' }}>Код версии (versionCode)
+              <input value={versionCode} onChange={e => setVersionCode(e.target.value)} inputMode="numeric" placeholder="12" className={field} style={fieldStyle} />
+            </label>
+          </div>
+          <label className="block text-[11px] font-medium" style={{ color: 'var(--text-soft)' }}>Что нового (по строке на пункт)
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+              className="mt-1 block w-full rounded-[8px] px-3 py-2 text-[13px] outline-none" style={fieldStyle} />
+          </label>
+          <div className="flex gap-2">
+            <button onClick={() => void upload()} disabled={uploading || !file || !version || !versionCode}
+              className="rounded-[8px] px-3 py-2 text-[12px] font-semibold disabled:opacity-60" style={{ background: 'var(--text)', color: 'var(--surface)' }}>
+              {uploading ? 'Загружаю…' : 'Опубликовать'}
+            </button>
+            <button onClick={() => setOpen(false)} disabled={uploading}
+              className="rounded-[8px] border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: 'var(--border-strong)', color: 'var(--text)' }}>
+              Отмена
+            </button>
+          </div>
+          <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            Версия и код должны совпадать с mobile/app.json (expo.version и android.versionCode) той сборки, которую загружаете.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AndroidSection() {
   const [qr, setQr] = useState<PairingQr | null>(null);
@@ -371,7 +482,7 @@ function AndroidSection() {
   const left = `${Math.floor(Math.max(0, leftMs) / 60000)}:${String(Math.floor((Math.max(0, leftMs) % 60000) / 1000)).padStart(2, '0')}`;
 
   return (
-    <SectionCard title="Приложение Android" subtitle="Привязка телефона без ввода пароля">
+    <SectionCard title="Приложение Android" subtitle="Привязка телефона и обновления APK">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="flex h-[148px] w-[148px] shrink-0 items-center justify-center rounded-[10px] border p-2"
           style={{ background: '#fff', borderColor: 'var(--border)' }}>
@@ -400,6 +511,7 @@ function AndroidSection() {
           </button>
         </div>
       </div>
+      <ReleaseBlock />
     </SectionCard>
   );
 }

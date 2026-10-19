@@ -22,7 +22,7 @@ function finishedAt(app: Application): string {
   return app.last_changed_date ?? app.updated_at;
 }
 
-export function ApplicationList({ archived }: { archived: boolean }) {
+export function ApplicationList({ archived, header }: { archived: boolean; header?: React.ReactNode }) {
   const t = useTheme();
   const { expire } = useAuth();
   const [items, setItems] = useState<Application[] | null>(null);
@@ -99,6 +99,7 @@ export function ApplicationList({ archived }: { archived: boolean }) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}
       ListHeaderComponent={
         <View style={{ gap: 10 }}>
+          {header}
           {offlineSince && <OfflineBanner since={offlineSince} onRetry={() => void load()} />}
           <View style={[styles.search, { backgroundColor: t.surface, borderColor: t.border }]}>
             <Icon name="search" size={16} color={t.textMuted} />
