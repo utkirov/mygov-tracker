@@ -84,7 +84,8 @@ Expo: аккаунт `utkirov`, проект `@utkirov/mygov-tracker` (projectId
   `npm ci` падает на peer react-dom).
 - Статус: `npx.cmd eas-cli@latest build:view <id> --json` (поле artifacts.buildUrl = APK).
 
-Осталось: дождаться сборки, поставить APK на телефон, войти, проверить живой push.
+Первый APK собран (build faafd54b, 2026-10-20). Осталось: пользователь ставит APK
+на телефон, входит, проверяем живой push. Затем этап 8.
 
 ## Заметки
 - Telegram-вебхук на tele.goldenherd.com удалён по просьбе пользователя; бот работает
