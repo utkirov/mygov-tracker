@@ -25,9 +25,10 @@ const buildStampPath = join(projectDir, 'data', 'build-stamp.txt');
 const pidFilePath = join(projectDir, 'data', 'server.pid');
 const logPath = join(projectDir, 'autostart.log');
 const buildLogPath = join(projectDir, 'autostart-build.log');
-const healthUrl = 'http://127.0.0.1:3000/api/health';
-const networkInfoUrl = 'http://127.0.0.1:3000/api/network-info';
-const port = 3000;
+// Cloudflare Tunnel (tracker.turonproject.uz) points at this port.
+const port = Number.parseInt(process.env.PORT || '3040', 10);
+const healthUrl = `http://127.0.0.1:${port}/api/health`;
+const networkInfoUrl = `http://127.0.0.1:${port}/api/network-info`;
 
 function timestamp() {
   return new Date().toISOString();
@@ -276,7 +277,7 @@ async function notifyTelegram() {
     await fetch(`https://api.telegram.org/bot${row.telegram_bot_token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: row.telegram_chat_id, text: '✅ Сервер запущен и работает — http://localhost:3000', parse_mode: 'HTML' }),
+      body: JSON.stringify({ chat_id: row.telegram_chat_id, text: `✅ Сервер запущен и работает — http://localhost:${port}`, parse_mode: 'HTML' }),
     });
   } catch (e) {
     await log(`Telegram notify failed: ${e.message}`);

@@ -342,13 +342,15 @@ export default function SettingsPage() {
   const sync = useSyncEngineSnapshot();
   const [lanIps, setLanIps] = useState<string[]>([]);
   const [lanToken, setLanToken] = useState<string | null>(null);
+  const [lanPort, setLanPort] = useState(3040);
   const [showTelegramToken, setShowTelegramToken] = useState(false);
 
   useEffect(() => {
     fetch('/api/network-info')
       .then(r => r.json())
-      .then((d: { lanIps: string[]; token?: string }) => {
+      .then((d: { lanIps: string[]; port?: number; token?: string }) => {
         setLanIps(d.lanIps);
+        if (typeof d.port === 'number') setLanPort(d.port);
         setLanToken(typeof d.token === 'string' ? d.token : null);
       })
       .catch(() => {});
@@ -857,7 +859,7 @@ export default function SettingsPage() {
                   <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Определяю адрес…</p>
                 ) : (
                   lanIps.map(ip => {
-                    const url = `http://${ip}:3000${lanToken ? `?token=${lanToken}` : ''}`;
+                    const url = `http://${ip}:${lanPort}${lanToken ? `?token=${lanToken}` : ''}`;
                     return (
                       <div key={ip}
                         className="flex items-center justify-between gap-2 rounded-[9px] px-3 py-2"
@@ -885,7 +887,7 @@ export default function SettingsPage() {
                   </p>
                 )}
                 <p className="text-[10px] leading-4" style={{ color: 'var(--text-muted)' }}>
-                  Убедитесь что порт 3000 открыт в Windows Firewall.
+                  Убедитесь что порт {lanPort} открыт в Windows Firewall.
                 </p>
               </div>
             </SectionCard>

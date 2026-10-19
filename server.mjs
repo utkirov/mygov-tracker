@@ -9,7 +9,7 @@
 // `x-forwarded-for` to the real socket address before Next sees the request.
 //
 // Usage: `node server.mjs` (production, needs `next build`) or
-// `node server.mjs --dev`. HOST / PORT env vars override 0.0.0.0:3000.
+// `node server.mjs --dev`. HOST / PORT env vars override 0.0.0.0:3040.
 import { createServer } from 'node:http';
 
 const dev = process.argv.includes('--dev');
@@ -19,7 +19,7 @@ process.env.NODE_ENV ??= dev ? 'development' : 'production';
 process.env.APP_TRUSTED_CLIENT_IP = '1';
 
 const hostname = process.env.HOST || '0.0.0.0';
-const port = Number.parseInt(process.env.PORT || '3000', 10);
+const port = Number.parseInt(process.env.PORT || '3040', 10);
 
 const SPOOFABLE_HEADERS = [
   'x-forwarded-for',

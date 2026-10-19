@@ -15,5 +15,5 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ lanIps, port: 3000, token: getAppToken() });
+  return NextResponse.json({ lanIps, port: Number.parseInt(process.env.PORT || '3040', 10), token: getAppToken() });
 }

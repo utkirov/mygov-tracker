@@ -13,7 +13,7 @@ const { createRotatingLog, nextRestartDelay } = require('./rotating-log.cjs');
 
 const projectDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const lockPath = join(projectDir, 'data', 'supervisor.pid');
-const port = process.env.PORT || '3000';
+const port = process.env.PORT || '3040';
 const healthUrl = `http://127.0.0.1:${port}/api/health`;
 
 const STABLE_MS = 10 * 60 * 1000;

@@ -115,7 +115,7 @@ function install() {
   if (createResult.ok) {
     console.log(`Автозапуск зарегистрирован: ${TASK_NAME}`);
     console.log('При входе в Windows сервер будет запускаться тихо в фоне.');
-    console.log('Проект остаётся доступен в локальной сети на порту 3000.');
+    console.log('Проект остаётся доступен в локальной сети на порту 3040.');
     console.log('Отключить: npm run autostart:remove');
     return;
   }
@@ -135,7 +135,7 @@ function install() {
   console.log('Task Scheduler недоступен из текущего контекста, поэтому включён fallback через HKCU Run.');
   console.log(`Автозапуск зарегистрирован: ${APP_NAME}`);
   console.log('При входе в Windows сервер будет запускаться тихо в фоне.');
-  console.log('Проект остаётся доступен в локальной сети на порту 3000.');
+  console.log('Проект остаётся доступен в локальной сети на порту 3040.');
   console.log('Отключить: npm run autostart:remove');
 }
 
