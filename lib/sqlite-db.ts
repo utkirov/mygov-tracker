@@ -159,6 +159,15 @@ function applySchema(db: Database.Database): void {
       revoked_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS push_devices (
+      token TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      platform TEXT NOT NULL DEFAULT 'android',
+      device_name TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_check_log_checked_at ON check_log(checked_at);
     CREATE INDEX IF NOT EXISTS idx_check_log_app ON check_log(application_id, checked_at);
     CREATE INDEX IF NOT EXISTS idx_status_history_app ON status_history(application_id, recorded_at);

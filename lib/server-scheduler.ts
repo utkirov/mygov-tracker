@@ -20,6 +20,7 @@ import {
 } from './local-db';
 import { openDb } from './sqlite-db';
 import { fetchRepositoryFiles } from './repository-files';
+import { sendPushToAll } from './push';
 import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, parseMyGovDate } from './status-checker';
 import { captureApplicationStatusScreenshot } from './status-screenshot';
 import { buildStatusSnapshotPdf } from './status-pdf';
@@ -238,6 +239,14 @@ export async function checkOne(application: LocalDbApplication): Promise<CheckOn
       readablePdf,
       repositoryFiles,
     })).catch(err => console.error('[Scheduler] Telegram error (change):', err));
+  }
+
+  if (changedFields.length > 0) {
+    sendPushToAll({
+      title: updatedEntry.object_name || `Заявка № ${updatedEntry.application_number}`,
+      body: changedFields.map(f => `${CHANGE_FIELD_LABELS[f]}: ${fmt(nextValues[f])}`).join('\n'),
+      data: { applicationId: updatedEntry.id, kind: 'status-change' },
+    }).catch(err => console.error('[Scheduler] Push error (change):', err));
   }
 
   return { result, session };

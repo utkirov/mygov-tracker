@@ -77,3 +77,4 @@ start-server.vbs
 
 # personal documents
 *.docx
+/data/firebase-*.json
