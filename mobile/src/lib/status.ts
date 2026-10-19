@@ -43,3 +43,30 @@ export function formatDate(iso: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
+
+/** "14 мин назад" / "9 ч назад" / "1 д назад". */
+export function formatAgo(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (Number.isNaN(mins)) return '—';
+  if (mins < 1) return 'только что';
+  if (mins < 60) return `${mins} мин назад`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} ч назад`;
+  return `${Math.floor(hrs / 24)} д назад`;
+}
+
+/** "через 16 мин" for a future time; "сейчас" once it has passed. */
+export function formatUntil(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const mins = Math.ceil((new Date(iso).getTime() - Date.now()) / 60_000);
+  if (Number.isNaN(mins)) return '—';
+  if (mins <= 0) return 'сейчас';
+  if (mins < 60) return `через ${mins} мин`;
+  return `через ${Math.round(mins / 60)} ч`;
+}
+
+export function formatSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+  return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`;
+}

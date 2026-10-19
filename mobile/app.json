@@ -39,7 +39,8 @@
           "defaultChannel": "status-changes",
           "enableRemoteNotifications": true
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "scheme": "mygovtracker",
     "experiments": {
