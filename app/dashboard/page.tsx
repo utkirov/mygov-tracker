@@ -158,6 +158,14 @@ function KanbanCard({ application, index = 0 }: { application: Application; inde
 
 // ─── Page ─────────────────────────────────────────────────────────────────
 
+function formatClock(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const today = new Date().toDateString() === date.toDateString();
+  return today ? `сегодня в ${time}` : `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} в ${time}`;
+}
+
 export default function DashboardPage() {
   const sync = useSyncEngineSnapshot();
   const [applications, setApplications] = useState<Application[]>([]);
@@ -239,6 +247,7 @@ export default function DashboardPage() {
     [active],
   );
   const completedCount = recentDone.length;
+  const errorCount     = useMemo(() => active.filter(a => a.sync_state === 'error' || Boolean(a.last_error)).length, [active]);
 
   // Mobile: which column is visible
   const mobileColumn = COLUMNS.find(c => c.id === activeTab);
@@ -263,8 +272,10 @@ export default function DashboardPage() {
             </h1>
             <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
               <span className="tabular font-semibold" style={{ color: 'var(--text-soft)' }}>{active.length}</span> активных
-              {' · '}
-              {formatDate(sync.lastRunAt)}
+              {sync.lastRunAt && <>{' · '}последняя проверка {formatClock(sync.lastRunAt)}</>}
+              {sync.isRunning
+                ? ' · проверка идёт'
+                : sync.nextRunAt && <>{' · '}следующая {formatClock(sync.nextRunAt)}</>}
             </p>
           </div>
 
@@ -285,6 +296,11 @@ export default function DashboardPage() {
           {urgentCount > 0 && (
             <span className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium" style={{ background: 'var(--panel)', color: 'var(--danger)' }}>
               {urgentCount} ждут действия
+            </span>
+          )}
+          {errorCount > 0 && (
+            <span className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium" style={{ background: 'var(--panel)', color: 'var(--danger)' }}>
+              {errorCount} {errorCount === 1 ? 'ошибка' : errorCount < 5 ? 'ошибки' : 'ошибок'} проверки
             </span>
           )}
           <span className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium" style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
