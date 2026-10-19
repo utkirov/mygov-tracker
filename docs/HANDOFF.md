@@ -88,6 +88,11 @@ Expo: аккаунт `utkirov`, проект `@utkirov/mygov-tracker` (projectId
 на телефон, входит, проверяем живой push. Затем этап 8.
 
 ## Заметки
+- Кнопки Telegram-бота не работали: у бота остался `allowed_updates` без `callback_query`
+  (след удалённого вебхука). Теперь `getUpdates` всегда передаёт
+  `allowed_updates=["message","callback_query"]` (2026-10-20, проверено через getWebhookInfo).
+- Автозапуск при входе в Windows 10.10 и 16.10 сдавался по таймауту 90 с (медленный
+  холодный старт) — предложено увеличить ожидание, пока не сделано.
 - Telegram-вебхук на tele.goldenherd.com удалён по просьбе пользователя; бот работает
   через getUpdates, лок `data/telegram-bot.lock` с heartbeat.
 - Пользователю рекомендовано отключить спящий режим ПК (сам).

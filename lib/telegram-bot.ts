@@ -361,6 +361,7 @@ async function handleUpdate(botToken: string, chatId: string, update: TelegramUp
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const CONFLICT_BACKOFF_MS = 10 * 60 * 1000;
+const ALLOWED_UPDATES = encodeURIComponent(JSON.stringify(['message', 'callback_query']));
 let _networkFailures = 0;
 let _conflictReported = false;
 
@@ -395,7 +396,10 @@ async function pollOnce(): Promise<void> {
 
   let resp: Response;
   try {
-    resp = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?offset=${_offset}&timeout=25`);
+    // allowed_updates must be explicit: Telegram remembers the last value it
+    // was given (here: a filter left over from the removed webhook, which
+    // lacked callback_query), so without it inline-button taps never arrive.
+    resp = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?offset=${_offset}&timeout=25&allowed_updates=${ALLOWED_UPDATES}`);
   } catch (err) {
     // No internet: log the first failure of a streak only, back off up to 2 min.
     if (_networkFailures === 0) console.error('[TelegramBot] getUpdates network error:', err instanceof Error ? err.message : err);
