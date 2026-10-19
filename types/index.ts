@@ -32,6 +32,8 @@ export interface Application {
   project_id: string | null;
   parent_id: string | null;
   archived: boolean;
+  /** Number of stored result documents — only sent by the archive list. */
+  result_documents?: number;
   sync_state: SyncState;
   last_checked_at: string | null;
   next_check_at: string | null;

@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plus } from 'lucide-react';
 
-import { formatDate } from '@/lib/format-utils';
+import { ApplicationCard } from '@/components/ApplicationCard';
+import { PROJECTS_CHANGED_EVENT } from '@/lib/project-events';
 import { showToast } from '@/lib/toast';
 import type { Application, Project } from '@/types';
 import { getMyGovStatus, PROJECT_COLORS } from '@/types';
@@ -59,6 +60,7 @@ export default function ProjectPage() {
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(typeof result?.error === 'string' ? result.error : 'Не удалось сохранить проект');
       setProject(result as Project);
+      window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
       setEditing(false);
       showToast({ title: 'Проект обновлён', tone: 'success' });
     } catch (error) {
@@ -76,7 +78,8 @@ export default function ProjectPage() {
         const result = await response.json().catch(() => null);
         throw new Error(typeof result?.error === 'string' ? result.error : 'Не удалось удалить проект');
       }
-      router.push('/dashboard');
+      window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+      router.push('/projects');
     } catch (error) {
       showToast({ title: 'Удаление не выполнено', description: error instanceof Error ? error.message : 'Повтори попытку.', tone: 'error' });
       setDeleting(false);
@@ -86,7 +89,7 @@ export default function ProjectPage() {
 
   if (!loaded) {
     return (
-      <div className="flex h-[calc(100svh-56px)] items-center justify-center text-[13px]"
+      <div className="flex py-20 items-center justify-center text-[13px]"
         style={{ color: 'var(--text-muted)' }}>
         Загрузка…
       </div>
@@ -95,7 +98,7 @@ export default function ProjectPage() {
 
   if (!project) {
     return (
-      <div className="flex h-[calc(100svh-56px)] flex-col items-center justify-center gap-3 text-[13px]"
+      <div className="flex py-20 flex-col items-center justify-center gap-3 text-[13px]"
         style={{ color: 'var(--text-muted)' }}>
         <p>Проект не найден</p>
         <Link
@@ -111,10 +114,14 @@ export default function ProjectPage() {
 
   const active   = apps.filter(a => !a.archived);
   const archived = apps.filter(a =>  a.archived);
+  const statusBreakdown = [...apps.reduce((map, a) => {
+    const label = getMyGovStatus(a.status).label;
+    return map.set(label, (map.get(label) ?? 0) + 1);
+  }, new Map<string, number>())];
 
   return (
-    <div className="overflow-y-auto px-4 py-4 md:px-6 md:py-6 animate-fade-up">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+    <div className="animate-fade-up">
+      <div className="flex w-full flex-col gap-4">
 
         {/* ── Header card ── */}
         <div className="rounded-[12px] border p-4 md:p-6"
@@ -208,6 +215,13 @@ export default function ProjectPage() {
                         {archived.length} в архиве
                       </span>
                     )}
+                    {statusBreakdown.map(([label, count]) => (
+                      <span key={label} className="inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1 text-[12px] font-medium"
+                        style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
+                        <span className="h-2 w-2 rounded-full" style={{ background: getMyGovStatus(label).dotColor }} />
+                        {count} · {label.toLowerCase()}
+                      </span>
+                    ))}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button
@@ -267,7 +281,7 @@ export default function ProjectPage() {
         <div className="rounded-[12px] border p-4 md:p-5"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
           <h2 className="mb-4 text-[13px] font-semibold tracking-tight" style={{ color: 'var(--text)' }}>
-            История заявлений
+            Заявления проекта
           </h2>
 
           {apps.length === 0 ? (
@@ -288,74 +302,12 @@ export default function ProjectPage() {
               </Link>
             </div>
           ) : (
-            <div className="relative pl-8">
-              {/* Vertical line */}
-              <div
-                className="absolute left-[7px] top-2 bottom-4 w-[2px] rounded-full"
-                style={{ background: project.color }}
-              />
-
-              <div className="space-y-2">
-                {apps.map((app, idx) => {
-                  const statusInfo = getMyGovStatus(app.status);
-                  const isActive   = !app.archived;
-                  return (
-                    <Link
-                      key={app.id}
-                      href={`/applications/${app.id}`}
-                      className="relative flex gap-3 rounded-[12px] p-3 transition-colors hover:bg-[var(--panel)] animate-slide-up group"
-                      style={{ animationDelay: `${idx * 45}ms` }}
-                    >
-                      {/* Timeline dot */}
-                      <div
-                        className="absolute left-[-25px] top-[14px] h-[14px] w-[14px] rounded-full border-2 z-10 shrink-0"
-                        style={{
-                          background:  isActive ? project.color : 'var(--panel)',
-                          borderColor: project.color,
-                          boxShadow:   isActive ? `0 0 0 3px ${project.color}22` : 'none',
-                        }}
-                      />
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-[13px] font-semibold leading-tight"
-                              style={{ color: 'var(--text)' }}>
-                              {app.object_name || app.service_name}
-                            </p>
-                            <p className="mt-0.5 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                              № {app.application_number}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                            {app.archived && (
-                              <span className="rounded-[5px] px-1.5 py-0.5 text-[10px] font-semibold"
-                                style={{ background: 'var(--panel-strong)', color: 'var(--text-muted)' }}>
-                                Архив
-                              </span>
-                            )}
-                            <span className="rounded-[6px] px-2 py-0.5 text-[11px] font-semibold"
-                              style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
-                              {statusInfo.label}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-3">
-                          <p className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                            {formatDate(app.last_changed_date ?? app.created_at)}
-                          </p>
-                          {app.last_change_fields.length > 0 && (
-                            <span className="rounded-[4px] px-1.5 py-0.5 text-[10px] font-semibold"
-                              style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
-                              изменение
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {apps.map((app, idx) => (
+                <div key={app.id} className="animate-slide-up" style={{ animationDelay: `${idx * 40}ms` }}>
+                  <ApplicationCard application={app} />
+                </div>
+              ))}
             </div>
           )}
         </div>

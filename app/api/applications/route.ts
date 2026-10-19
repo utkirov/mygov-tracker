@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { readArtifacts } from '@/lib/application-artifacts';
 import {
   insertApplication,
   insertStatusHistory,
@@ -20,9 +21,15 @@ function sortByUpdatedAtDesc(applications: LocalDbApplication[]): LocalDbApplica
 
 export async function GET(request: NextRequest) {
   const showArchived = request.nextUrl.searchParams.get('archived') === 'true';
-  const applications = await listApplications({ archived: showArchived });
+  const applications = sortByUpdatedAtDesc(await listApplications({ archived: showArchived }));
+  if (!showArchived) return NextResponse.json(applications);
 
-  return NextResponse.json(sortByUpdatedAtDesc(applications));
+  // The archive table shows how many result documents each application has.
+  const withDocuments = await Promise.all(applications.map(async (application) => ({
+    ...application,
+    result_documents: (await readArtifacts(application.id)).results.length,
+  })));
+  return NextResponse.json(withDocuments);
 }
 
 export async function POST(request: NextRequest) {
