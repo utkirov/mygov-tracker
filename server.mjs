@@ -28,13 +28,31 @@ const SPOOFABLE_HEADERS = [
   'x-forwarded-port',
   'x-real-ip',
   'forwarded',
+  'x-app-via-tunnel',
+  'x-app-client-ip',
 ];
 
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+// Cloudflare Tunnel: cloudflared runs on this machine and connects from
+// loopback, adding `cf-connecting-ip` with the real visitor address. That
+// header is only believed when the socket itself is loopback — anyone on the
+// LAN sending it directly gets it stripped. proxy.ts treats tunnel requests
+// as public (login required) and rate-limits by x-app-client-ip.
 function scrubForwardingHeaders(req) {
+  const socketIp = req.socket.remoteAddress ?? '';
+  const cfIp = req.headers['cf-connecting-ip'];
   for (const header of SPOOFABLE_HEADERS) {
     delete req.headers[header];
   }
-  req.headers['x-forwarded-for'] = req.socket.remoteAddress ?? '';
+  req.headers['x-forwarded-for'] = socketIp;
+  if (LOOPBACK.has(socketIp) && typeof cfIp === 'string' && cfIp) {
+    req.headers['x-app-via-tunnel'] = '1';
+    req.headers['x-app-client-ip'] = cfIp;
+  } else {
+    delete req.headers['cf-connecting-ip'];
+    req.headers['x-app-client-ip'] = socketIp;
+  }
 }
 
 // Imported after NODE_ENV is set — Next reads it while loading.

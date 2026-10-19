@@ -8,7 +8,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isPrivateNetworkAddress, isValidAppToken } from '@/lib/app-token';
-import { isAllowedHost, isCrossSiteRequest } from '@/lib/request-guards';
+import { isAllowedHost, isCrossSiteRequest, isPublicRequest } from '@/lib/request-guards';
+import { readSessionToken, SESSION_COOKIE, verifySession } from '@/lib/session-token';
+
+// Reachable without a session from the internet: the login page and what it calls.
+const PUBLIC_PATHS = new Set(['/login', '/api/auth/login', '/api/auth/me', '/api/health']);
 
 const TOKEN_COOKIE_NAME = 'app_token';
 const TOKEN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // ~1 year
@@ -39,6 +43,25 @@ export function proxy(request: NextRequest) {
     return isApiRoute
       ? NextResponse.json({ error: 'Host not allowed' }, { status: 403 })
       : new NextResponse('Host not allowed', { status: 403 });
+  }
+
+  // Requests from the internet (Cloudflare Tunnel / public domain): login only.
+  // No IP trust (tunnel traffic arrives from 127.0.0.1) and no APP_TOKEN —
+  // a valid signed session (cookie or Bearer for the Android app) is required.
+  if (isPublicRequest(host, request.headers.get('x-app-via-tunnel'))) {
+    const pathname = request.nextUrl.pathname;
+    if (isApiRoute && isCrossSiteRequest(request.method, request.headers.get('origin'), request.headers.get('sec-fetch-site'), host)) {
+      return NextResponse.json({ error: 'Cross-site request blocked' }, { status: 403 });
+    }
+    if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
+
+    const token = readSessionToken(request.cookies.get(SESSION_COOKIE)?.value, request.headers.get('authorization'));
+    if (verifySession(token, process.env.SESSION_SECRET)) return NextResponse.next();
+
+    if (isApiRoute) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const loginUrl = new URL('/login', request.url);
+    if (pathname !== '/') loginUrl.searchParams.set('next', pathname + request.nextUrl.search);
+    return NextResponse.redirect(loginUrl);
   }
 
   // Page routes (dashboard, settings, ...) are never gated — the UI shell

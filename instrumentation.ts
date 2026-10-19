@@ -6,6 +6,12 @@ export async function register() {
   const { ensureAppToken } = await import('./lib/app-token');
   ensureAppToken();
 
+  // Session secret + revocation state must be ready before proxy.ts verifies
+  // any public request (verifySession fails closed until loaded).
+  const { ensureSessionSecret, loadAuthState } = await import('./lib/auth');
+  ensureSessionSecret();
+  await loadAuthState();
+
   const { startServerScheduler } = await import('./lib/server-scheduler');
   startServerScheduler();
 

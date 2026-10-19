@@ -11,7 +11,7 @@ import { useTheme } from './ThemeProvider';
 import { CommandPalette } from './CommandPalette';
 import { NotificationsPanel } from './NotificationsPanel';
 
-const NO_SHELL = ['/'];
+const NO_SHELL = ['/', '/login'];
 
 const NAV = [
   { href: '/dashboard',  icon: LayoutDashboard, label: 'Доска' },

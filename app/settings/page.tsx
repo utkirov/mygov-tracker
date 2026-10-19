@@ -177,6 +177,167 @@ function BackupSection() {
   );
 }
 
+interface AuthMe { configured: boolean; public: boolean; authenticated: boolean; username: string | null }
+interface AuthSession { id: string; kind: string; device_name: string; ip: string; created_at: string; current: boolean }
+
+function SecuritySection() {
+  const [me, setMe] = useState<AuthMe | null>(null);
+  const [sessions, setSessions] = useState<AuthSession[]>([]);
+  const [username, setUsername] = useState('admin');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => fetch('/api/auth/me', { cache: 'no-store' })
+    .then(r => r.json() as Promise<AuthMe>)
+    .then(m => {
+      setMe(m);
+      if (!m.configured) return;
+      return fetch('/api/auth/sessions', { cache: 'no-store' })
+        .then(r => r.json() as Promise<{ sessions: AuthSession[] }>)
+        .then(s => setSessions(s.sessions));
+    })
+    .catch(() => {}), []);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then(r => r.json() as Promise<AuthMe>)
+      .then(m => {
+        setMe(m);
+        if (!m.configured) return;
+        return fetch('/api/auth/sessions', { cache: 'no-store' })
+          .then(r => r.json() as Promise<{ sessions: AuthSession[] }>)
+          .then(s => setSessions(s.sessions));
+      })
+      .catch(() => {});
+  }, []);
+
+  async function savePassword() {
+    if (next !== repeat) {
+      showToast({ title: 'Пароли не совпадают', tone: 'warning' });
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(me?.configured ? { currentPassword: current, newPassword: next } : { username, newPassword: next }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Не удалось сохранить пароль');
+      showToast({ title: me?.configured ? 'Пароль изменён' : 'Учётная запись создана', description: me?.configured ? 'Остальные устройства вышли из системы.' : 'Вход через домен теперь требует пароль.', tone: 'success' });
+      setCurrent(''); setNext(''); setRepeat('');
+      await load();
+    } catch (error) {
+      showToast({ title: 'Ошибка', description: error instanceof Error ? error.message : '', tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke(id?: string) {
+    const url = id ? `/api/auth/sessions?id=${encodeURIComponent(id)}` : '/api/auth/sessions';
+    await fetch(url, { method: 'DELETE' });
+    if (!id && me?.public) { window.location.assign('/login'); return; }
+    await load();
+  }
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.assign(me?.public ? '/login' : '/dashboard');
+  }
+
+  const field = 'mt-1 block h-9 w-full rounded-[8px] px-3 text-[13px] outline-none focus:ring-2';
+  const fieldStyle = { background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--text)' };
+  const label = 'block text-[11px] font-medium';
+
+  return (
+    <SectionCard title="Безопасность" subtitle="Вход по логину и паролю для доступа через домен. В домашней сети пароль не нужен.">
+      {!me ? null : !me.configured ? (
+        <div className="space-y-3">
+          <p className="rounded-[10px] p-3 text-[12px]" style={{ background: 'var(--warning-soft)', color: 'var(--warning)' }}>
+            Учётная запись не создана — пока она не создана, вход через интернет невозможен.
+          </p>
+          <label className={label} style={{ color: 'var(--text-soft)' }}>Логин
+            <input value={username} onChange={e => setUsername(e.target.value)} className={field} style={fieldStyle} />
+          </label>
+          <label className={label} style={{ color: 'var(--text-soft)' }}>Пароль (от 10 символов)
+            <input type="password" value={next} onChange={e => setNext(e.target.value)} autoComplete="new-password" className={field} style={fieldStyle} />
+          </label>
+          <label className={label} style={{ color: 'var(--text-soft)' }}>Повторите пароль
+            <input type="password" value={repeat} onChange={e => setRepeat(e.target.value)} autoComplete="new-password" className={field} style={fieldStyle} />
+          </label>
+          <button onClick={() => void savePassword()} disabled={busy || !next}
+            className="rounded-[8px] px-3 py-2 text-[12px] font-semibold disabled:opacity-60" style={{ background: 'var(--text)', color: 'var(--surface)' }}>
+            Создать учётную запись
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-[12px]" style={{ color: 'var(--text-soft)' }}>
+            Логин: <strong style={{ color: 'var(--text)' }}>{me.username ?? '—'}</strong>
+            {me.public ? ' · вы вошли через интернет' : ' · этот компьютер или домашняя сеть'}
+          </p>
+
+          <div className="grid gap-2 md:grid-cols-3">
+            <label className={label} style={{ color: 'var(--text-soft)' }}>Текущий пароль
+              <input type="password" value={current} onChange={e => setCurrent(e.target.value)} autoComplete="current-password" className={field} style={fieldStyle} />
+            </label>
+            <label className={label} style={{ color: 'var(--text-soft)' }}>Новый пароль
+              <input type="password" value={next} onChange={e => setNext(e.target.value)} autoComplete="new-password" className={field} style={fieldStyle} />
+            </label>
+            <label className={label} style={{ color: 'var(--text-soft)' }}>Повторите
+              <input type="password" value={repeat} onChange={e => setRepeat(e.target.value)} autoComplete="new-password" className={field} style={fieldStyle} />
+            </label>
+          </div>
+          <button onClick={() => void savePassword()} disabled={busy || !current || !next}
+            className="rounded-[8px] border px-3 py-2 text-[12px] font-semibold disabled:opacity-60" style={{ borderColor: 'var(--border-strong)', color: 'var(--text)' }}>
+            Сменить пароль
+          </button>
+
+          <div>
+            <p className="mb-2 text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Активные устройства</p>
+            {sessions.length === 0 ? (
+              <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>Через интернет никто не входил.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {sessions.map(s => (
+                  <li key={s.id} className="flex items-center justify-between gap-3 rounded-[8px] px-3 py-2" style={{ background: 'var(--panel)' }}>
+                    <div className="min-w-0">
+                      <p className="truncate text-[12px] font-medium" style={{ color: 'var(--text)' }}>
+                        {s.device_name || (s.kind === 'device' ? 'Приложение' : 'Браузер')}
+                      </p>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        {new Date(s.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · IP {s.ip}
+                      </p>
+                    </div>
+                    {s.current
+                      ? <span className="text-[11px] font-medium" style={{ color: 'var(--accent)' }}>Это устройство</span>
+                      : <button onClick={() => void revoke(s.id)} className="text-[11px] font-medium" style={{ color: 'var(--danger)' }}>Отозвать</button>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => void revoke()} className="rounded-[8px] px-3 py-2 text-[12px] font-semibold" style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
+              Выйти на всех устройствах
+            </button>
+            {me.authenticated && (
+              <button onClick={() => void logout()} className="rounded-[8px] border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: 'var(--border-strong)', color: 'var(--text)' }}>
+                Выйти
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 export default function SettingsPage() {
   const sync = useSyncEngineSnapshot();
   const [lanIps, setLanIps] = useState<string[]>([]);
@@ -673,6 +834,8 @@ export default function SettingsPage() {
                 />
               </div>
             </SectionCard>
+
+            <SecuritySection />
 
             <BackupSection />
 

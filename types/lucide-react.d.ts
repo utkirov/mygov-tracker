@@ -32,6 +32,7 @@ declare module 'lucide-react' {
   export const GitBranch: LucideIcon;
   export const Keyboard: LucideIcon;
   export const LayoutDashboard: LucideIcon;
+  export const Lock: LucideIcon;
   export const Moon: LucideIcon;
   export const Plus: LucideIcon;
   export const RefreshCw: LucideIcon;

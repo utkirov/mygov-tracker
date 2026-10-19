@@ -36,6 +36,13 @@ export function isAllowedHost(
   extraAllowedHosts: string[] = parseAllowedHostsEnv(process.env.APP_ALLOWED_HOSTS),
   machineHostname: string = osHostname()
 ): boolean {
+  if (isLocalHost(host, machineHostname)) return true;
+  const name = hostNameFromHeader(host);
+  return !!name && extraAllowedHosts.includes(name);
+}
+
+/** localhost, private-network IP literals and this machine's own name — i.e. not a public domain. */
+export function isLocalHost(host: string | null | undefined, machineHostname: string = osHostname()): boolean {
   const name = hostNameFromHeader(host);
   if (!name) return false;
 
@@ -43,9 +50,17 @@ export function isAllowedHost(
   if (isPrivateNetworkAddress(name)) return true;
 
   const machine = machineHostname.trim().toLowerCase();
-  if (machine && (name === machine || name === `${machine}.local`)) return true;
+  return !!machine && (name === machine || name === `${machine}.local`);
+}
 
-  return extraAllowedHosts.includes(name);
+/**
+ * A request is public (login required, no IP trust) when it came through the
+ * Cloudflare Tunnel (flag set by server.mjs) or addresses a non-local host name
+ * such as the public domain.
+ */
+export function isPublicRequest(host: string | null | undefined, viaTunnelHeader: string | null | undefined, machineHostname?: string): boolean {
+  if (process.env.APP_TRUSTED_CLIENT_IP === '1' && viaTunnelHeader === '1') return true;
+  return !isLocalHost(host, machineHostname);
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);

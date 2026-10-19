@@ -138,5 +138,25 @@ function applySchema(db: Database.Database): void {
       error_message TEXT,
       changed_fields TEXT NOT NULL DEFAULT '[]'
     );
+
+    CREATE TABLE IF NOT EXISTS auth_users (
+      username TEXT PRIMARY KEY,
+      password_hash TEXT NOT NULL,
+      session_version INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      device_name TEXT NOT NULL DEFAULT '',
+      ip TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT
+    );
   `);
 }
