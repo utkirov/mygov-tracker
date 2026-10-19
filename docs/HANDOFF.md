@@ -47,7 +47,7 @@ Git из песочницы ругается на владельца — исп�
 | 4 | Утверждённый дизайн на сайте | ✅ |
 | 5 | Cloudflare Tunnel + домен | ✅ (вход через домен проверен 2026-10-20) |
 | 6 | Мобильный API + push (FCM) | ✅ (ключ проверен 2026-10-20; живой push проверить на этапе 7) |
-| 7 | Android-приложение (Expo / React Native) | ⏳ следующий |
+| 7 | Android-приложение (Expo / React Native) | 🟡 код готов, ждём google-services.json + аккаунт Expo для сборки APK |
 | 8 | Обновления через облако (APK-апдейтер + OTA) | — |
 
 ## Следующий шаг
@@ -62,11 +62,22 @@ Firebase: проект `mygov-tracker`, Android package `uz.turonproject.tracker
 ключ лежит в `data/firebase-service-account.json`, OAuth + FCM API проверены (dry-run).
 `google-services.json` у пользователя — попросить его на этапе 7 для сборки APK.
 
-**Этап 7 — Android-приложение.** Перед началом подтвердить у пользователя стек
-(предложено: Expo / React Native, отдельная папка `mobile/`). Экраны — по Figma
-(страница «Android»). Вход: `POST /api/auth/login` с `device: {name}` → Bearer-токен
-(хранить в SecureStore), затем `POST /api/push/register` с FCM-токеном. Базовый URL
-`https://tracker.turonproject.uz`. После сборки APK — проверить живой push.
+**Этап 7 — Android-приложение (стек подтверждён: Expo SDK 58 / React Native, `mobile/`).**
+Сделано (2026-10-20): Expo Router (`mobile/src/app`), экраны вход / доска с фильтрами /
+архив / карточка заявки с историей и «Проверить сейчас» / настройки (выход, push).
+Токен — SecureStore, `Authorization: Bearer`; FCM-токен через
+`getDevicePushTokenAsync` → `/api/push/register`; тап по push открывает заявку
+(`data.applicationId`). Проверено: `npx tsc --noEmit`, `npx expo-doctor` (20/20),
+`npx expo export --platform android` собирается. `mobile/` исключён из tsc/eslint/jest сайта.
+`@expo/vector-icons` не ставится (конфликт react-dom) — табы без иконок.
+Java/Android SDK на ПК нет → сборка APK в облаке: `mobile/eas.json`, профиль `apk`.
+
+Осталось:
+1. Пользователь кладёт `google-services.json` в `mobile/` (можно коммитить — публичные id).
+2. Пользователь создаёт бесплатный аккаунт expo.dev и сам логинится:
+   `cd mobile && npx eas-cli@latest login` (пароль вводит он).
+3. `npx eas-cli@latest build -p android --profile apk` → ссылка на APK, поставить на телефон,
+   войти, проверить живой push (изменить статус или дождаться проверки).
 
 ## Заметки
 - Telegram-вебхук на tele.goldenherd.com удалён по просьбе пользователя; бот работает
