@@ -72,12 +72,19 @@ Firebase: проект `mygov-tracker`, Android package `uz.turonproject.tracker
 `@expo/vector-icons` не ставится (конфликт react-dom) — табы без иконок.
 Java/Android SDK на ПК нет → сборка APK в облаке: `mobile/eas.json`, профиль `apk`.
 
-Осталось:
-1. Пользователь кладёт `google-services.json` в `mobile/` (можно коммитить — публичные id).
-2. Пользователь создаёт бесплатный аккаунт expo.dev и сам логинится:
-   `cd mobile && npx eas-cli@latest login` (пароль вводит он).
-3. `npx eas-cli@latest build -p android --profile apk` → ссылка на APK, поставить на телефон,
-   войти, проверить живой push (изменить статус или дождаться проверки).
+Expo: аккаунт `utkirov`, проект `@utkirov/mygov-tracker` (projectId в app.json), ключ
+подписи хранится на серверах Expo. `google-services.json` закоммичен в `mobile/`.
+
+**Как собирать APK (важно для этого ПК):**
+- PowerShell блокирует `.ps1` → всегда `npx.cmd`, не `npx`.
+- Запускать в терминальной вкладке (run_in_terminal), из `mobile/`:
+  `$env:EAS_NO_VCS = '1'; npx.cmd eas-cli@latest build -p android --profile apk --no-wait`
+  (без EAS_NO_VCS падает: git «dubious ownership» и симлинк `.claude/skills` в репо).
+  Что уходит в облако — `mobile/.easignore`. `mobile/.npmrc` = legacy-peer-deps (иначе
+  `npm ci` падает на peer react-dom).
+- Статус: `npx.cmd eas-cli@latest build:view <id> --json` (поле artifacts.buildUrl = APK).
+
+Осталось: дождаться сборки, поставить APK на телефон, войти, проверить живой push.
 
 ## Заметки
 - Telegram-вебхук на tele.goldenherd.com удалён по просьбе пользователя; бот работает
