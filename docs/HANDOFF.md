@@ -46,8 +46,8 @@ Git из песочницы ругается на владельца — исп�
 | 3 | Надёжность: супервизор, один бот, ротация логов, быстрая БД | ✅ |
 | 4 | Утверждённый дизайн на сайте | ✅ |
 | 5 | Cloudflare Tunnel + домен | ✅ (вход через домен проверен 2026-10-20) |
-| 6 | Мобильный API + push (FCM) | 🟡 сервер готов, ждём ключ Firebase от пользователя |
-| 7 | Android-приложение (Expo / React Native) | — |
+| 6 | Мобильный API + push (FCM) | ✅ (ключ проверен 2026-10-20; живой push проверить на этапе 7) |
+| 7 | Android-приложение (Expo / React Native) | ⏳ следующий |
 | 8 | Обновления через облако (APK-апдейтер + OTA) | — |
 
 ## Следующий шаг
@@ -58,12 +58,15 @@ Git из песочницы ругается на владельца — исп�
 - Push уходит при каждом изменении статуса (`lib/server-scheduler.ts`, рядом с Telegram).
 - Ключ: `data/firebase-service-account.json` (в gitignore). Без него push выключен.
 
-Осталось от пользователя: создать бесплатный проект в console.firebase.google.com,
-добавить Android-приложение (package name, напр. `uz.turonproject.tracker`),
-скачать `google-services.json` (для APK, этап 7) и сервисный ключ
-(Project settings → Service accounts → Generate new private key) — положить как
-`data/firebase-service-account.json`. Потом проверить отправку тестового push
-(после этапа 7, когда будет телефонный токен). Можно параллельно начинать этап 7.
+Firebase: проект `mygov-tracker`, Android package `uz.turonproject.tracker`. Сервисный
+ключ лежит в `data/firebase-service-account.json`, OAuth + FCM API проверены (dry-run).
+`google-services.json` у пользователя — попросить его на этапе 7 для сборки APK.
+
+**Этап 7 — Android-приложение.** Перед началом подтвердить у пользователя стек
+(предложено: Expo / React Native, отдельная папка `mobile/`). Экраны — по Figma
+(страница «Android»). Вход: `POST /api/auth/login` с `device: {name}` → Bearer-токен
+(хранить в SecureStore), затем `POST /api/push/register` с FCM-токеном. Базовый URL
+`https://tracker.turonproject.uz`. После сборки APK — проверить живой push.
 
 ## Заметки
 - Telegram-вебхук на tele.goldenherd.com удалён по просьбе пользователя; бот работает
