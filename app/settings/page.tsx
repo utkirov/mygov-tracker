@@ -96,6 +96,87 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   );
 }
 
+interface BackupStatus {
+  dir: string;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastFile: string | null;
+  lastSize: number | null;
+  lastError: string | null;
+}
+
+function formatBytes(size: number | null) {
+  if (size === null) return '—';
+  return size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} МБ` : `${Math.round(size / 1024)} КБ`;
+}
+
+function BackupSection() {
+  const [status, setStatusState] = useState<BackupStatus | null>(null);
+  const [stale, setStale] = useState(false);
+  const [running, setRunning] = useState(false);
+
+  const setStatus = useCallback((s: BackupStatus) => {
+    setStatusState(s);
+    setStale(!s.lastSuccessAt || Date.now() - Date.parse(s.lastSuccessAt) > 2 * 24 * 60 * 60 * 1000);
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/backup', { cache: 'no-store' })
+      .then(r => r.json())
+      .then((s: BackupStatus) => setStatus(s))
+      .catch(() => {});
+  }, [setStatus]);
+
+  async function runNow() {
+    setRunning(true);
+    try {
+      const response = await fetch('/api/backup', { method: 'POST' });
+      const next = await response.json() as BackupStatus;
+      setStatus(next);
+      showToast(next.lastError
+        ? { title: 'Копия не создана', description: next.lastError, tone: 'error' }
+        : { title: 'Копия сохранена', description: `${next.lastFile} · ${formatBytes(next.lastSize)}`, tone: 'success' });
+    } catch {
+      showToast({ title: 'Копия не создана', description: 'Сервер не ответил.', tone: 'error' });
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const last = status?.lastSuccessAt ? new Date(status.lastSuccessAt) : null;
+
+  return (
+    <SectionCard title="Резервные копии" subtitle="База и PDF, зашифрованный архив, каждый день в 03:00 · хранится 14 ежедневных и 8 еженедельных">
+      <div className="space-y-3">
+        <div className="rounded-[10px] p-3" style={{ background: stale ? 'var(--warning-soft)' : 'var(--panel)' }}>
+          <p className="text-xs font-semibold" style={{ color: stale ? 'var(--warning)' : 'var(--text)' }}>
+            {last ? `Последняя копия: ${last.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : 'Копий ещё не было'}
+          </p>
+          {status?.lastFile && (
+            <p className="mt-0.5 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              {status.lastFile} · {formatBytes(status.lastSize)}
+            </p>
+          )}
+          {status?.lastError && (
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--danger)' }}>Ошибка: {status.lastError}</p>
+          )}
+        </div>
+        <p className="text-[11px] break-all" style={{ color: 'var(--text-muted)' }}>
+          Папка: <span className="font-mono">{status?.dir ?? '…'}</span>
+        </p>
+        <button
+          onClick={() => void runNow()}
+          disabled={running}
+          className="rounded-[8px] px-3 py-2 text-[12px] font-semibold transition active:scale-95 disabled:opacity-60"
+          style={{ background: 'var(--text)', color: 'var(--surface)' }}
+        >
+          {running ? 'Создаю копию…' : 'Сделать копию сейчас'}
+        </button>
+      </div>
+    </SectionCard>
+  );
+}
+
 export default function SettingsPage() {
   const sync = useSyncEngineSnapshot();
   const [lanIps, setLanIps] = useState<string[]>([]);
@@ -592,6 +673,8 @@ export default function SettingsPage() {
                 />
               </div>
             </SectionCard>
+
+            <BackupSection />
 
             <SectionCard title="Поведение системы">
               <ul className="space-y-2 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>

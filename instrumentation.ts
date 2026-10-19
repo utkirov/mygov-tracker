@@ -11,4 +11,9 @@ export async function register() {
 
   const { startTelegramBotPolling } = await import('./lib/telegram-bot');
   startTelegramBotPolling();
+
+  const { ensureBackupKey } = await import('./lib/backup');
+  ensureBackupKey();
+  const { startBackupScheduler } = await import('./lib/backup-scheduler');
+  startBackupScheduler();
 }

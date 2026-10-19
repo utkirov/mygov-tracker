@@ -58,6 +58,11 @@ next-env.d.ts
 /data/server.pid
 /data/build-stamp.txt
 /data/pdfs/
+/data/backups/
+/data/backup-status.json
+/data/restore-*/
+/data/.backup-snapshot-*
+*.mgbk
 
 # autostart runtime artifacts
 autostart.log
