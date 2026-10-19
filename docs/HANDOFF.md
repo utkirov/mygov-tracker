@@ -52,17 +52,17 @@ Git из песочницы ругается на владельца — исп�
 
 ## Следующий шаг
 Этап 6 — серверная часть сделана (2026-10-20):
-- : таблица  (токен привязан к сессии; отозвал сессию — push
+- `lib/push.ts`: таблица `push_devices` (токен привязан к сессии; отозвал сессию — push
   прекращается), отправка через FCM HTTP v1 без зависимостей, мёртвые токены удаляются.
--  (Bearer device-токен из  с ).
-- Push уходит при каждом изменении статуса (, рядом с Telegram).
-- Ключ:  (в gitignore). Без него push выключен.
+- `POST/DELETE /api/push/register` (Bearer device-токен из `POST /api/auth/login` с `device`).
+- Push уходит при каждом изменении статуса (`lib/server-scheduler.ts`, рядом с Telegram).
+- Ключ: `data/firebase-service-account.json` (в gitignore). Без него push выключен.
 
 Осталось от пользователя: создать бесплатный проект в console.firebase.google.com,
-добавить Android-приложение (package name предложить, напр. ),
-скачать  (для APK, этап 7) и сервисный ключ
+добавить Android-приложение (package name, напр. `uz.turonproject.tracker`),
+скачать `google-services.json` (для APK, этап 7) и сервисный ключ
 (Project settings → Service accounts → Generate new private key) — положить как
-. Потом проверить отправку тестового push
+`data/firebase-service-account.json`. Потом проверить отправку тестового push
 (после этапа 7, когда будет телефонный токен). Можно параллельно начинать этап 7.
 
 ## Заметки
