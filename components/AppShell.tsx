@@ -71,7 +71,7 @@ function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-overlay-title"
-        className="w-full max-w-[320px] overflow-hidden rounded-[20px] animate-scale-in"
+        className="w-full max-w-[320px] overflow-hidden rounded-[12px] animate-scale-in"
         style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', boxShadow: 'var(--shadow-float)' }}
         onClick={e => e.stopPropagation()}
       >
@@ -187,139 +187,105 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div style={{ background: 'var(--bg)', minHeight: '100svh' }}>
       {/* ── Top bar ── */}
       <header
-        className="shell-glass sticky top-0 z-40 flex h-[60px] items-center gap-2 px-3 md:gap-3 md:px-6 relative"
-        style={{ boxShadow: 'var(--shadow-topbar)', borderBottom: '1px solid var(--border)' }}
+        className="shell-glass sticky top-0 z-40 flex h-[56px] items-center gap-2 px-3 md:gap-3 md:px-6"
+        style={{ borderBottom: '1px solid var(--border)' }}
       >
-        {/* Gradient accent line at top */}
-        <div
-          className="absolute inset-x-0 top-0 h-[2px] pointer-events-none"
-          style={{ background: 'linear-gradient(90deg, #3B6EFA 0%, #7C3AED 50%, #22D3EE 100%)' }}
-        />
-
-        {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2 mr-1 shrink-0">
+        <Link href="/dashboard" className="mr-2 flex shrink-0 items-center gap-2">
           <div
-            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-[11px] font-black text-white"
-            style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)', boxShadow: '0 2px 8px rgba(59,110,250,0.4)' }}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[12px] font-semibold"
+            style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
           >
-            MG
+            mg
           </div>
-          <span className="hidden text-[14px] font-bold text-white/85 sm:block tracking-tight">
+          <span className="hidden text-[14px] font-semibold tracking-tight sm:block" style={{ color: 'var(--text)' }}>
             my.gov tracker
           </span>
         </Link>
 
-        {/* ── Desktop nav ── */}
-        <nav className="hidden md:flex items-center gap-0.5">
+        <nav className="hidden items-center gap-0.5 md:flex">
           {NAV.map(({ href, icon: Icon, label }) => {
             const active = isActive(href);
             return (
               <Link
                 key={href}
                 href={href}
-                className="flex items-center gap-1.5 rounded-[9px] px-3.5 py-2 text-[13px] font-medium transition-all duration-150"
-                style={{
-                  color:      active ? '#fff' : 'rgba(255,255,255,0.45)',
-                  background: active ? 'linear-gradient(135deg, rgba(59,110,250,0.28) 0%, rgba(124,58,237,0.22) 100%)' : 'transparent',
-                  boxShadow:  active ? 'inset 0 0 0 1px rgba(255,255,255,0.1)' : 'none',
-                }}
+                className="flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-[var(--panel)]"
+                style={{ color: active ? 'var(--text)' : 'var(--text-muted)', background: active ? 'var(--panel)' : 'transparent' }}
               >
-                <Icon size={14} />
+                <Icon size={15} />
                 <span>{label}</span>
               </Link>
             );
           })}
         </nav>
 
-        {/* ── Right side actions ── */}
         <div className="ml-auto flex items-center gap-1">
-          {/* Sync status pill — desktop only */}
           <div
-            className="hidden items-center gap-1.5 rounded-[7px] px-2.5 py-1 text-[11px] font-medium md:flex"
-            style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.4)' }}
+            className="hidden items-center gap-1.5 rounded-[7px] px-2.5 py-1 text-[12px] md:flex"
+            style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}
+            title={sync.isRunning ? 'Идёт цикл проверки' : `Автопроверка каждые ${sync.intervalMinutes} мин`}
           >
             <span
-              className="h-1.5 w-1.5 rounded-full shrink-0"
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
               style={{
-                background: sync.isRunning ? '#FBBF24' : 'rgba(255,255,255,0.2)',
+                background: sync.isRunning ? 'var(--warning)' : sync.enabled ? 'var(--success)' : 'var(--text-muted)',
                 animation: sync.isRunning ? 'pulse-dot 1.5s ease-in-out infinite' : 'none',
               }}
             />
-            <span className="text-white/60 tabular">
-              {sync.isRunning ? 'Проверяю…' : `${sync.intervalMinutes}м`}
-            </span>
+            <span className="tabular">{sync.isRunning ? 'Проверяю…' : `Авто · ${sync.intervalMinutes} мин`}</span>
           </div>
 
-          {/* Search / command palette — desktop */}
-          <button
-            onClick={() => setPaletteOpen(true)}
-            aria-label="Поиск"
-            className="hidden md:flex h-9 w-9 items-center justify-center rounded-[9px] transition hover:bg-white/10 active:scale-90"
-            style={{ color: 'rgba(255,255,255,0.3)' }}
-            title="Поиск (Ctrl+K)"
-          >
-            <Search size={14} />
+          <button onClick={() => setPaletteOpen(true)} aria-label="Поиск" title="Поиск (Ctrl+K)"
+            className="hidden md:flex h-9 w-9 items-center justify-center rounded-[8px] transition hover:bg-[var(--panel)] active:scale-95" style={{ color: 'var(--text-muted)' }}>
+            <Search size={15} />
           </button>
 
-          {/* Shortcuts hint — desktop */}
-          <button
-            onClick={() => setShortcutsOpen(true)}
-            aria-label="Горячие клавиши"
-            className="hidden md:flex h-9 w-9 items-center justify-center rounded-[9px] transition hover:bg-white/10 active:scale-90"
-            style={{ color: 'rgba(255,255,255,0.3)' }}
-            title="Горячие клавиши (?)"
-          >
-            <Keyboard size={14} />
+          <button onClick={() => setShortcutsOpen(true)} aria-label="Горячие клавиши" title="Горячие клавиши (?)"
+            className="hidden md:flex h-9 w-9 items-center justify-center rounded-[8px] transition hover:bg-[var(--panel)] active:scale-95" style={{ color: 'var(--text-muted)' }}>
+            <Keyboard size={15} />
           </button>
 
-          {/* Notifications */}
           <NotificationsPanel />
 
-          {/* Add — desktop only */}
           <Link
             href="/add"
-            className="hidden items-center gap-2 rounded-[9px] px-4 py-2 text-[13px] font-medium text-white/55 transition hover:bg-white/10 hover:text-white/85 active:scale-95 md:flex"
+            className="hidden items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-[var(--panel)] md:flex"
+            style={{ color: pathname === '/add' ? 'var(--text)' : 'var(--text-soft)', background: pathname === '/add' ? 'var(--panel)' : 'transparent' }}
           >
-            <Plus size={14} />
+            <Plus size={15} />
             <span>Добавить</span>
           </Link>
 
-          {/* Check now */}
           <button
             onClick={handleCheckNow}
             disabled={sync.isRunning}
-            aria-label={sync.isRunning ? 'Проверяю…' : 'Проверить'}
-            className="flex items-center gap-2 rounded-[9px] px-4 py-2 text-[13px] font-semibold text-white transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)', boxShadow: '0 2px 10px rgba(59,110,250,0.35)' }}
+            aria-label={sync.isRunning ? 'Проверяю…' : 'Проверить все'}
+            className="flex items-center gap-2 rounded-[8px] px-3.5 py-1.5 text-[13px] font-medium transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+            style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
           >
-            <RefreshCw size={13} style={{ animation: sync.isRunning ? 'spin-slow 1s linear infinite' : 'none' }} />
-            <span className="hidden sm:inline">{sync.isRunning ? 'Проверяю…' : 'Проверить'}</span>
+            <RefreshCw size={14} style={{ animation: sync.isRunning ? 'spin-slow 1s linear infinite' : 'none' }} />
+            <span className="hidden sm:inline">{sync.isRunning ? 'Проверяю…' : 'Проверить все'}</span>
           </button>
 
-          {/* Theme toggle */}
           <button
             onClick={toggle}
             aria-label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-            className="flex h-11 w-11 items-center justify-center rounded-[9px] text-white/35 transition hover:bg-white/10 hover:text-white/70 active:scale-90 md:h-9 md:w-9"
+            className="flex h-10 w-10 items-center justify-center rounded-[8px] transition hover:bg-[var(--panel)] active:scale-95 md:h-9 md:w-9"
+            style={{ color: 'var(--text-muted)' }}
           >
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </button>
         </div>
       </header>
 
-      {/* ── Page content ── */}
-      <main className="min-h-[calc(100svh-60px)] pb-[68px] md:pb-0">
+      <main className="min-h-[calc(100svh-56px)] pb-[68px] md:pb-0">
         {children}
       </main>
 
       {/* ── Mobile bottom navigation ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch border-t md:hidden"
-        style={{
-          background:    'var(--shell)',
-          borderColor:   'rgba(255,255,255,0.07)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
-        }}
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {NAV.map(({ href, icon: Icon, label }) => {
           const active = isActive(href);
@@ -327,29 +293,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={href}
               href={href}
-              className="flex flex-1 flex-col items-center gap-[3px] py-2.5 text-[10px] font-medium transition-colors active:scale-95"
-              style={{ color: active ? 'var(--accent)' : 'rgba(255,255,255,0.35)' }}
+              className="flex flex-1 flex-col items-center gap-[3px] py-2.5 text-[11px] font-medium transition-colors active:scale-95"
+              style={{ color: active ? 'var(--text)' : 'var(--text-muted)' }}
             >
-              <Icon size={17} strokeWidth={active ? 2.5 : 1.75} />
+              <Icon size={18} strokeWidth={active ? 2.25 : 1.75} />
               {label}
             </Link>
           );
         })}
         <Link
           href="/add"
-          className="flex flex-1 flex-col items-center gap-[3px] py-2.5 text-[10px] font-medium transition-colors active:scale-95"
-          style={{ color: 'rgba(255,255,255,0.35)' }}
+          className="flex flex-1 flex-col items-center gap-[3px] py-2.5 text-[11px] font-medium transition-colors active:scale-95"
+          style={{ color: pathname === '/add' ? 'var(--text)' : 'var(--text-muted)' }}
         >
-          <Plus size={17} strokeWidth={1.75} />
+          <Plus size={18} strokeWidth={1.75} />
           Добавить
         </Link>
         <button
           onClick={() => setPaletteOpen(true)}
           aria-label="Поиск"
-          className="flex flex-1 flex-col items-center gap-[3px] py-2.5 text-[10px] font-medium transition-colors active:scale-95"
-          style={{ color: 'rgba(255,255,255,0.35)' }}
+          className="flex flex-1 flex-col items-center gap-[3px] py-2.5 text-[11px] font-medium transition-colors active:scale-95"
+          style={{ color: 'var(--text-muted)' }}
         >
-          <Search size={17} strokeWidth={1.75} />
+          <Search size={18} strokeWidth={1.75} />
           Поиск
         </button>
       </nav>

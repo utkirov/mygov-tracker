@@ -86,7 +86,7 @@ export default function ProjectPage() {
 
   if (!loaded) {
     return (
-      <div className="flex h-[calc(100svh-60px)] items-center justify-center text-[13px]"
+      <div className="flex h-[calc(100svh-56px)] items-center justify-center text-[13px]"
         style={{ color: 'var(--text-muted)' }}>
         Загрузка…
       </div>
@@ -95,13 +95,13 @@ export default function ProjectPage() {
 
   if (!project) {
     return (
-      <div className="flex h-[calc(100svh-60px)] flex-col items-center justify-center gap-3 text-[13px]"
+      <div className="flex h-[calc(100svh-56px)] flex-col items-center justify-center gap-3 text-[13px]"
         style={{ color: 'var(--text-muted)' }}>
         <p>Проект не найден</p>
         <Link
           href="/dashboard"
           className="rounded-[9px] px-4 py-2 text-[12px] font-semibold text-white transition active:scale-95"
-          style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+          style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
         >
           На доску заявлений
         </Link>
@@ -117,7 +117,7 @@ export default function ProjectPage() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 
         {/* ── Header card ── */}
-        <div className="rounded-[16px] border p-4 md:p-6"
+        <div className="rounded-[12px] border p-4 md:p-6"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
           <div className="flex items-start gap-3">
             <button
@@ -132,7 +132,7 @@ export default function ProjectPage() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: editColor }} />
-                    <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                    <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
                       Изменить проект
                     </p>
                   </div>
@@ -165,7 +165,7 @@ export default function ProjectPage() {
                       onClick={() => void handleSaveEdit()}
                       disabled={savingEdit || !editName.trim()}
                       className="rounded-[9px] px-3.5 py-2 text-[12px] font-semibold text-white transition active:scale-95 disabled:opacity-60"
-                      style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+                      style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
                     >
                       {savingEdit ? 'Сохраняю…' : 'Сохранить'}
                     </button>
@@ -183,11 +183,11 @@ export default function ProjectPage() {
                 <>
                   <div className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: project.color }} />
-                    <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                    <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
                       Проект
                     </p>
                   </div>
-                  <h1 className="mt-1 text-[20px] font-extrabold leading-[1.25] tracking-[-0.02em] md:text-[24px]"
+                  <h1 className="mt-1 text-[20px] font-semibold leading-[1.25] tracking-[-0.02em] md:text-[24px]"
                     style={{ color: 'var(--text)' }}>
                     {project.name}
                   </h1>
@@ -198,7 +198,7 @@ export default function ProjectPage() {
                     </span>
                     {active.length > 0 && (
                       <span className="rounded-[7px] px-2.5 py-1 text-[12px] font-semibold"
-                        style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                        style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
                         {active.length} активных
                       </span>
                     )}
@@ -254,7 +254,7 @@ export default function ProjectPage() {
               <Link
                 href={`/add?project_id=${project.id}`}
                 className="flex shrink-0 items-center gap-1.5 rounded-[10px] px-3.5 py-2 text-[13px] font-semibold text-white transition active:scale-95 hover:brightness-110"
-                style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)', boxShadow: '0 2px 10px rgba(59,110,250,0.3)' }}
+                style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
               >
                 <Plus size={13} />
                 <span className="hidden sm:inline">Новая заявка</span>
@@ -264,9 +264,9 @@ export default function ProjectPage() {
         </div>
 
         {/* ── Timeline ── */}
-        <div className="rounded-[16px] border p-4 md:p-5"
+        <div className="rounded-[12px] border p-4 md:p-5"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
-          <h2 className="mb-4 text-[13px] font-bold tracking-tight" style={{ color: 'var(--text)' }}>
+          <h2 className="mb-4 text-[13px] font-semibold tracking-tight" style={{ color: 'var(--text)' }}>
             История заявлений
           </h2>
 
@@ -282,7 +282,7 @@ export default function ProjectPage() {
               <Link
                 href={`/add?project_id=${project.id}`}
                 className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition active:scale-95"
-                style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+                style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
               >
                 Добавить первую
               </Link>
@@ -292,7 +292,7 @@ export default function ProjectPage() {
               {/* Vertical line */}
               <div
                 className="absolute left-[7px] top-2 bottom-4 w-[2px] rounded-full"
-                style={{ background: `linear-gradient(to bottom, ${project.color}, ${project.color}20)` }}
+                style={{ background: project.color }}
               />
 
               <div className="space-y-2">
@@ -335,7 +335,7 @@ export default function ProjectPage() {
                               </span>
                             )}
                             <span className="rounded-[6px] px-2 py-0.5 text-[11px] font-semibold"
-                              style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                              style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
                               {statusInfo.label}
                             </span>
                           </div>
@@ -346,7 +346,7 @@ export default function ProjectPage() {
                           </p>
                           {app.last_change_fields.length > 0 && (
                             <span className="rounded-[4px] px-1.5 py-0.5 text-[10px] font-semibold"
-                              style={{ background: 'var(--warning-soft)', color: 'var(--warning)' }}>
+                              style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
                               изменение
                             </span>
                           )}

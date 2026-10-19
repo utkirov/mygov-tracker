@@ -1,28 +1,21 @@
 import type { Metadata } from 'next';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ToastProvider } from '@/components/ToastProvider';
 import { SoundNotificationProvider } from '@/components/SoundNotificationProvider';
 import { AppShell } from '@/components/AppShell';
 import './globals.css';
 
+// Self-hosted at build time by next/font — no request to Google Fonts at
+// runtime (faster first paint, works offline on the LAN).
+const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter', display: 'swap' });
+const jetbrains = JetBrains_Mono({ subsets: ['latin', 'cyrillic'], variable: '--font-jetbrains', display: 'swap' });
+
 export const metadata: Metadata = {
-  title: 'my.gov tracker — Local Monitor',
+  title: 'my.gov tracker',
   description: 'Track my.gov.uz applications locally',
   icons: '/favicon.ico',
 };
-
-// Preconnect + font stylesheet injected in <head> for correct load order
-const fontPreconnects = (
-  <>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-    {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
-  </>
-);
 
 export default function RootLayout({
   children,
@@ -30,8 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru" suppressHydrationWarning>
-      <head>{fontPreconnects}</head>
+    <html lang="ru" suppressHydrationWarning className={`${inter.variable} ${jetbrains.variable}`}>
       <body style={{ fontFamily: 'var(--font-ui)' }}>
         <ThemeProvider>
           <SoundNotificationProvider />

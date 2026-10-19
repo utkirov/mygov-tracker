@@ -24,6 +24,12 @@ const nextConfig: NextConfig = {
 
   serverExternalPackages: ['better-sqlite3'],
 
+  // This checkout lives inside another project's folder (git worktree); without
+  // an explicit root Turbopack picks the parent's lockfile as the workspace root.
+  turbopack: {
+    root: __dirname,
+  },
+
   // Let LAN devices load dev-only assets (HMR, chunks) in `next dev`;
   // without this the page renders but never hydrates on e.g. 192.168.x.x.
   allowedDevOrigins: ['127.0.0.1', '10.*.*.*', '172.*.*.*', '192.168.*.*'],

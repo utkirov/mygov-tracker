@@ -12,7 +12,7 @@ import type { Application, ParsedPdf } from '@/types';
 function Section({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="rounded-[16px] border p-4 md:p-5"
+      className="rounded-[12px] border p-4 md:p-5"
       style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}
     >
       {children}
@@ -167,7 +167,7 @@ function AddPageInner() {
               <ArrowLeft size={16} />
             </button>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
                 {parentId ? 'Продолжение заявки' : 'Новое заявление'}
               </p>
               <h1 className="mt-1 text-[18px] font-bold leading-[1.3] md:text-xl" style={{ color: 'var(--text)' }}>
@@ -211,7 +211,7 @@ function AddPageInner() {
             <Section>
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                  <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
                     Извлечено из PDF
                   </p>
                   <h2 className="mt-1 text-[15px] font-bold" style={{ color: 'var(--text)' }}>
@@ -230,7 +230,7 @@ function AddPageInner() {
               <div className="grid gap-2 md:grid-cols-2">
                 {fields.map(field => (
                   <div key={field.key} className="rounded-[9px] p-3" style={{ background: 'var(--panel)' }}>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                    <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
                       {field.label}
                     </p>
                     <p className="mt-1.5 text-[13px] font-medium leading-[1.4]" style={{ color: 'var(--text)' }}>
@@ -312,7 +312,7 @@ function AddPageInner() {
                   onClick={handleSave}
                   disabled={saving}
                   className="flex-1 rounded-[11px] px-4 py-3.5 text-[14px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)', boxShadow: '0 4px 14px rgba(59,110,250,0.35)' }}
+                  style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
                 >
                   {saving ? 'Сохраняю…' : parentId ? 'Сохранить продолжение' : 'Сохранить и поставить в очередь'}
                 </button>

@@ -64,142 +64,93 @@ function getColumn(status: string): KanbanColumn {
 
 // ─── Kanban card ───────────────────────────────────────────────────────────
 
+function Tag({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'danger' }) {
+  return (
+    <span className="rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium"
+      style={tone === 'danger'
+        ? { background: 'var(--danger-soft)', color: 'var(--danger)' }
+        : { background: 'var(--panel)', color: 'var(--text-soft)' }}>
+      {children}
+    </span>
+  );
+}
+
+const STATUS_DOT: Record<string, string> = {
+  'отклонено': 'var(--col-rejected)',
+  'аннулировано': 'var(--col-canceled)',
+};
+
+function StatusDot({ status, size = 7 }: { status: string; size?: number }) {
+  const color = STATUS_DOT[status.trim().toLowerCase()] ?? getColumn(status).color;
+  return <span className="shrink-0 rounded-full" style={{ width: size, height: size, background: color }} />;
+}
+
 function KanbanCard({ application, index = 0 }: { application: Application; index?: number }) {
   const statusInfo = getMyGovStatus(application.status);
-  const col        = getColumn(application.status);
   const isUrgent   = getStatusType(application.acting_party, application.status) === 'action_required';
   const hasError   = Boolean(application.last_error);
   const hasChange  = application.last_change_fields.length > 0 && !hasError && application.sync_state !== 'checking';
   const isChecking = application.sync_state === 'checking';
   const title      = application.object_name || application.service_name;
   const subtitle   = application.object_name ? application.service_name : null;
+  const category   = getServiceCategory(application.service_name);
 
   return (
     <Link
       href={`/applications/${application.id}`}
-      className="kanban-card group relative block shrink-0 overflow-hidden rounded-[16px] border animate-slide-up"
+      className="kanban-card block shrink-0 rounded-[12px] border p-4 animate-slide-up"
       style={{
-        background:    'var(--surface)',
-        borderColor:   isUrgent ? col.color : 'var(--border)',
-        boxShadow:     'var(--shadow-card)',
-        // Capped so long columns don't leave a trailing tail of cards
-        // still mid-fade a second after load — those looked cut off /
-        // blank if the page was scrolled or screenshotted early.
-        animationDelay: `${Math.min(index, 8) * 35}ms`,
+        background: 'var(--surface)',
+        borderColor: 'var(--border)',
+        // Capped so long columns don't leave a tail of cards mid-fade.
+        animationDelay: `${Math.min(index, 8) * 30}ms`,
       }}
     >
-      {/* Left accent stripe */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-[4px] rounded-l-[16px]"
-        style={{ background: `linear-gradient(to bottom, ${col.color}, ${col.color}55)`, opacity: isUrgent ? 1 : 0.7 }}
-      />
-
-      <div className="pl-5 pr-4 pt-4 pb-3.5">
-        {/* Row 1 — number + state badges */}
-        <div className="mb-2.5 flex items-center justify-between gap-2">
-          <span
-            className="font-mono text-[11px] tracking-[0.03em]"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            № {application.application_number}
-          </span>
-          <div className="flex items-center gap-1">
-            {hasError && (
-              <span className="rounded-[6px] px-2 py-[3px] text-[11px] font-bold uppercase tracking-[0.04em]"
-                style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
-                Ошибка
-              </span>
-            )}
-            {isChecking && (
-              <span className="rounded-[6px] px-2 py-[3px] text-[11px] font-bold uppercase tracking-[0.04em]"
-                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-                Проверка
-              </span>
-            )}
-            {hasChange && (
-              <span className="rounded-[6px] px-2 py-[3px] text-[11px] font-bold uppercase tracking-[0.04em]"
-                style={{ background: 'var(--warning-soft)', color: 'var(--warning)' }}>
-                Изменение
-              </span>
-            )}
-          </div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          № {application.application_number}
+        </span>
+        <div className="flex items-center gap-1">
+          {hasError && <Tag tone="danger">Ошибка</Tag>}
+          {isChecking && <Tag>Проверяю…</Tag>}
+          {hasChange && <Tag>Изменение</Tag>}
+          {application.parent_id && <Tag>Цепочка</Tag>}
         </div>
+      </div>
 
-        {/* Row 2 — main title */}
-        <p
-          className="text-[15px] font-bold leading-[1.35] tracking-[-0.01em]"
-          style={{ color: 'var(--text)' }}
-        >
-          {title}
+      <p className="text-[14px] font-semibold leading-[1.35] tracking-[-0.01em]" style={{ color: 'var(--text)' }}>
+        {title}
+      </p>
+      {subtitle && (
+        <p className="mt-0.5 text-[12px] leading-[1.5]" style={{ color: 'var(--text-soft)' }}>{subtitle}</p>
+      )}
+      {application.organization && (
+        <p className="mt-1.5 flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+          <Building2 size={12} className="shrink-0" />
+          <span className="truncate">{application.organization}</span>
         </p>
-        {subtitle && (
-          <p className="mt-1 text-[12px] leading-[1.5]" style={{ color: 'var(--text-soft)' }}>
-            {subtitle}
-          </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--text)' }}>
+          <StatusDot status={application.status} />
+          {statusInfo.label}
+        </span>
+        {isUrgent && (
+          <span className="text-[12px] font-medium" style={{ color: 'var(--danger)' }}>Нужно ваше действие</span>
         )}
+        {category && <Tag>{category}</Tag>}
+      </div>
 
-        {/* Row 3 — category + organization */}
-        {(() => {
-          const cat = getServiceCategory(application.service_name);
-          return cat ? (
-            <span
-              className="mt-2 inline-block rounded-[6px] px-2 py-[3px] text-[11px] font-semibold"
-              style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-            >
-              {cat}
-            </span>
-          ) : null;
-        })()}
-        {application.organization && (
-          <p className="mt-1.5 flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--text-soft)' }}>
-            <Building2 size={12} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
-            <span className="truncate">{application.organization}</span>
-          </p>
-        )}
-
-        {/* Row 4 — status + acting party */}
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className={`inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold ${statusInfo.badge}`}>
-            <span
-              className="h-2 w-2 rounded-full shrink-0"
-              style={{
-                background: 'currentColor',
-                animation: (isChecking || isUrgent) ? 'pulse-dot 1.5s ease-in-out infinite' : 'none',
-              }}
-            />
-            {statusInfo.label}
-          </span>
-          {isUrgent && (
-            <span
-              className="inline-block rounded-[7px] px-2.5 py-1 text-[11px] font-semibold"
-              style={{ background: 'var(--warning-soft)', color: 'var(--warning)' }}
-            >
-              Ждёт действия
-            </span>
-          )}
-        </div>
-
-        {/* Row 5 — footer */}
-        <div
-          className="mt-3.5 flex items-center justify-between gap-2 border-t pt-3"
-          style={{ borderColor: 'var(--border)' }}
-        >
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="font-mono text-[11px]" style={{ color: 'var(--text-soft)' }}>
-              {application.last_changed_date ? formatDate(application.last_changed_date) : '—'}
-            </span>
-            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              {application.last_checked_at
-                ? `проверено ${formatTimeAgo(application.last_checked_at)}`
-                : 'ещё не проверялось'}
-            </span>
-          </div>
-          {application.parent_id && (
-            <span className="shrink-0 flex items-center gap-1 text-[11px]" style={{ color: 'var(--accent)' }}>
-              ⛓ Цепочка
-            </span>
-          )}
-        </div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2.5" style={{ borderColor: 'var(--border)' }}>
+        <span className="font-mono text-[11px]" style={{ color: 'var(--text-soft)' }}>
+          {application.last_changed_date ? formatDate(application.last_changed_date) : '—'}
+        </span>
+        <span className="text-[11px]" style={{ color: hasError ? 'var(--danger)' : 'var(--text-muted)' }}>
+          {application.last_checked_at
+            ? `${hasError ? 'ошибка · ' : ''}${formatTimeAgo(application.last_checked_at)}`
+            : 'ещё не проверялось'}
+        </span>
       </div>
     </Link>
   );
@@ -210,6 +161,7 @@ function KanbanCard({ application, index = 0 }: { application: Application; inde
 export default function DashboardPage() {
   const sync = useSyncEngineSnapshot();
   const [applications, setApplications] = useState<Application[]>([]);
+  const [recentDone,   setRecentDone]   = useState<Application[]>([]);
   const [search,          setSearch]          = useState('');
   const [activeTab,       setActiveTab]       = useState<string>('all');
   const [categoryFilter,  setCategoryFilter]  = useState<ServiceCategory | null>(null);
@@ -217,11 +169,21 @@ export default function DashboardPage() {
   const [unauthorized,    setUnauthorized]    = useState(false);
 
   const loadData = useCallback(async () => {
-    const res = await fetch('/api/applications', { cache: 'no-store' });
+    const [res, archivedRes] = await Promise.all([
+      fetch('/api/applications', { cache: 'no-store' }),
+      fetch('/api/applications?archived=true', { cache: 'no-store' }),
+    ]);
     const data: unknown = res.ok ? await res.json() : null;
+    const archived: unknown = archivedRes.ok ? await archivedRes.json() : null;
+    // Completed applications are auto-archived, so the "Завершено" column is
+    // fed from the archive: everything finished in the last 7 days.
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const done = (Array.isArray(archived) ? archived as Application[] : [])
+      .filter(a => isCompletedStatus(a.status) && Date.parse(a.last_changed_date ?? a.updated_at) >= weekAgo);
     startTransition(() => {
       setUnauthorized(res.status === 401);
       setApplications(Array.isArray(data) ? data as Application[] : []);
+      setRecentDone(done);
       setDataLoaded(true);
     });
   }, []);
@@ -247,7 +209,7 @@ export default function DashboardPage() {
   }, [active]);
 
   const filtered = useMemo(() => {
-    let result = active;
+    let result = [...active, ...recentDone];
     const q = search.trim().toLowerCase();
     if (q) {
       result = result.filter(a =>
@@ -259,7 +221,7 @@ export default function DashboardPage() {
       result = result.filter(a => getServiceCategory(a.service_name) === categoryFilter);
     }
     return result;
-  }, [active, search, categoryFilter]);
+  }, [active, recentDone, search, categoryFilter]);
 
   const columns = useMemo(() =>
     COLUMNS.map(col => ({
@@ -276,10 +238,7 @@ export default function DashboardPage() {
     () => active.filter(a => getStatusType(a.acting_party, a.status) === 'action_required').length,
     [active],
   );
-  const completedCount = useMemo(
-    () => applications.filter(a => isCompletedStatus(a.status)).length,
-    [applications],
-  );
+  const completedCount = recentDone.length;
 
   // Mobile: which column is visible
   const mobileColumn = COLUMNS.find(c => c.id === activeTab);
@@ -289,7 +248,7 @@ export default function DashboardPage() {
   }, [mobileColumn, filtered, columns]);
 
   return (
-    <div className="flex h-[calc(100svh-60px)] flex-col overflow-hidden">
+    <div className="flex h-[calc(100svh-56px)] flex-col overflow-hidden">
 
       {/* ── Board header ── */}
       <div
@@ -299,7 +258,7 @@ export default function DashboardPage() {
         {/* Title + search */}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-[15px] font-extrabold tracking-tight md:text-base" style={{ color: 'var(--text)' }}>
+            <h1 className="text-[15px] font-semibold tracking-tight md:text-base" style={{ color: 'var(--text)' }}>
               Доска заявлений
             </h1>
             <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
@@ -312,31 +271,24 @@ export default function DashboardPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Поиск…"
-            className="w-36 rounded-[10px] px-3 py-2 text-[13px] outline-none transition focus:ring-2 md:w-52"
-            style={{
-              background:   'var(--panel)',
-              border:       '1px solid var(--border)',
-              color:        'var(--text)',
-            }}
+            placeholder="Поиск по номеру или объекту"
+            className="w-36 rounded-[8px] px-3 py-1.5 text-[13px] outline-none transition focus:ring-2 md:w-64"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--text)' }}
           />
         </div>
 
         {/* Stat chips */}
         <div className="mt-2.5 flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-none">
-          <span className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold"
-            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+          <span className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium" style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
             {active.length} активных
           </span>
           {urgentCount > 0 && (
-            <span className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold"
-              style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
+            <span className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium" style={{ background: 'var(--panel)', color: 'var(--danger)' }}>
               {urgentCount} ждут действия
             </span>
           )}
-          <span className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold"
-            style={{ background: 'rgba(52,211,153,0.12)', color: '#34D399' }}>
-            {completedCount} завершено
+          <span className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium" style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
+            {completedCount} завершено за 7 дней
           </span>
         </div>
 
@@ -356,10 +308,10 @@ export default function DashboardPage() {
               <button
                 key={cat}
                 onClick={() => setCategoryFilter(prev => prev === cat ? null : cat)}
-                className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold transition active:scale-95"
+                className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium transition active:scale-95"
                 style={categoryFilter === cat
-                  ? { background: 'var(--accent)', color: '#fff' }
-                  : { background: 'var(--accent-soft)', color: 'var(--accent)' }
+                  ? { background: 'var(--primary)', color: 'var(--on-primary)' }
+                  : { background: 'var(--panel)', color: 'var(--text-soft)' }
                 }
               >
                 {cat}
@@ -374,7 +326,7 @@ export default function DashboardPage() {
             onClick={() => setActiveTab('all')}
             className="shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition active:scale-95"
             style={activeTab === 'all'
-              ? { background: 'var(--text)', color: 'var(--bg)' }
+              ? { background: 'var(--primary)', color: 'var(--on-primary)' }
               : { background: 'var(--panel)', color: 'var(--text-muted)' }
             }
           >
@@ -388,7 +340,7 @@ export default function DashboardPage() {
                 onClick={() => setActiveTab(col.id)}
                 className="shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition active:scale-95"
                 style={activeTab === col.id
-                  ? { background: col.color, color: '#fff' }
+                  ? { background: 'var(--primary)', color: 'var(--on-primary)' }
                   : { background: 'var(--panel)', color: 'var(--text-muted)' }
                 }
               >
@@ -404,7 +356,7 @@ export default function DashboardPage() {
           className="mx-4 mt-3 rounded-[12px] px-4 py-3 text-[13px] md:mx-6"
           style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}
         >
-          Нет доступа к данным. Откройте ссылку с токеном (<span className="font-mono">?token=…</span>) — его значение лежит в <span className="font-mono">APP_TOKEN</span> в файле <span className="font-mono">.env.local</span>.
+          Нет доступа к данным. <Link href="/login" className="underline">Войдите заново</Link>.
         </div>
       )}
 
@@ -414,7 +366,7 @@ export default function DashboardPage() {
           {!dataLoaded ? (
             <div className="flex flex-col gap-2.5">
               {[1, 2, 3].map(i => (
-                <div key={i} className="rounded-[16px] border p-4"
+                <div key={i} className="rounded-[12px] border p-4"
                   style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
                   <div className="mb-2.5 h-3 w-24 rounded animate-shimmer" />
                   <div className="h-4 w-full rounded animate-shimmer" />
@@ -428,8 +380,8 @@ export default function DashboardPage() {
               <p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>Нет заявлений</p>
               <Link
                 href="/add"
-                className="mt-3 rounded-[9px] px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+                className="mt-3 rounded-[8px] px-4 py-2 text-xs font-medium"
+                style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
               >
                 + Добавить
               </Link>
@@ -458,22 +410,16 @@ export default function DashboardPage() {
       >
         {active.length === 0 ? (
           <div className="flex flex-col items-center gap-4 py-8 text-center">
-            <div
-              className="flex h-16 w-16 items-center justify-center rounded-[18px] text-3xl"
-              style={{ background: 'var(--panel)' }}
-            >
-              📋
-            </div>
             <div>
-              <p className="text-[15px] font-bold" style={{ color: 'var(--text)' }}>Заявлений пока нет</p>
+              <p className="text-[15px] font-semibold" style={{ color: 'var(--text)' }}>Заявлений пока нет</p>
               <p className="mt-1 text-[13px]" style={{ color: 'var(--text-muted)' }}>
                 Загрузите PDF с my.gov.uz, чтобы начать мониторинг
               </p>
             </div>
             <Link
               href="/add"
-              className="rounded-[10px] px-5 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110"
-              style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+              className="rounded-[8px] px-4 py-2 text-[13px] font-medium transition hover:opacity-90"
+              style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
             >
               + Добавить заявление
             </Link>
@@ -481,33 +427,12 @@ export default function DashboardPage() {
         ) : columns.map((col, colIdx) => (
           <div key={col.id} className="flex min-h-0 w-[288px] min-w-[288px] flex-col animate-slide-up" style={{ animationDelay: `${colIdx * 60}ms` }}>
             {/* Column header */}
-            <div
-              className="mb-3 flex items-center gap-2.5 rounded-[13px] px-3.5 py-3"
-              style={{
-                background:   `linear-gradient(to bottom, ${col.color}1A, var(--surface))`,
-                borderTop:    `3px solid ${col.color}`,
-                borderRight:  `1px solid ${col.color}30`,
-                borderBottom: `1px solid ${col.color}30`,
-                borderLeft:   `1px solid ${col.color}30`,
-                boxShadow:    'var(--shadow-card)',
-              }}
-            >
-              <span
-                className="h-2.5 w-2.5 rounded-full shrink-0"
-                style={{ background: col.color, boxShadow: `0 0 8px ${col.color}AA` }}
-              />
-              <span
-                className="flex-1 text-[12px] font-bold uppercase tracking-[0.06em]"
-                style={{ color: 'var(--text)' }}
-              >
-                {col.label}
+            <div className="mb-2.5 flex items-center gap-2 px-1 py-1">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: col.color }} />
+              <span className="flex-1 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+                {col.id === 'done' ? 'Завершено · 7 дней' : col.label}
               </span>
-              <span
-                className="rounded-full px-2 py-0.5 text-[11px] font-bold tabular"
-                style={{ background: col.bgColor, color: col.textColor }}
-              >
-                {col.apps.length}
-              </span>
+              <span className="tabular text-[12px]" style={{ color: 'var(--text-muted)' }}>{col.apps.length}</span>
             </div>
 
             {/* Cards — flex-1 + min-h-0 so the scroll area exactly fills the
@@ -519,7 +444,7 @@ export default function DashboardPage() {
             >
               {!dataLoaded ? (
                 [1, 2].map(i => (
-                  <div key={i} className="rounded-[16px] border p-4"
+                  <div key={i} className="rounded-[12px] border p-4"
                     style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
                     <div className="mb-2.5 h-3 w-24 rounded animate-shimmer" />
                     <div className="h-4 w-full rounded animate-shimmer" />
@@ -538,8 +463,8 @@ export default function DashboardPage() {
                   ))}
                   {col.apps.length === 0 && (
                     <div
-                      className="rounded-[13px] border border-dashed px-4 py-8 text-center text-[12px]"
-                      style={{ borderColor: `${col.color}30`, color: 'var(--text-muted)' }}
+                      className="rounded-[12px] border border-dashed px-4 py-8 text-center text-[12px]"
+                      style={{ borderColor: 'var(--border-strong)', color: 'var(--text-muted)' }}
                     >
                       Нет заявлений
                     </div>

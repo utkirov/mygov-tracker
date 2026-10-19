@@ -45,7 +45,7 @@ export default function ArchivePage() {
   }, [applications, search]);
 
   return (
-    <div className="flex h-[calc(100svh-60px)] flex-col overflow-hidden">
+    <div className="flex h-[calc(100svh-56px)] flex-col overflow-hidden">
       {/* ── Header ── */}
       <div
         className="border-b px-4 py-3 md:px-6 md:py-4 animate-slide-down"
@@ -53,7 +53,7 @@ export default function ArchivePage() {
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-[15px] font-extrabold tracking-tight" style={{ color: 'var(--text)' }}>
+            <h1 className="text-[15px] font-semibold tracking-tight" style={{ color: 'var(--text)' }}>
               Архив
             </h1>
             <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
@@ -63,7 +63,7 @@ export default function ArchivePage() {
           <div className="flex items-center gap-2">
             <span
               className="rounded-[7px] px-2.5 py-1 text-[12px] font-semibold tabular"
-              style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+              style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}
             >
               {applications.length}
             </span>
@@ -87,7 +87,7 @@ export default function ArchivePage() {
         {!dataLoaded ? (
           <div className="mx-auto grid max-w-5xl gap-3 md:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="rounded-[16px] border p-4"
+              <div key={i} className="rounded-[12px] border p-4"
                 style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
                 <div className="mb-2.5 h-3 w-24 rounded animate-shimmer" />
                 <div className="h-4 w-full rounded animate-shimmer" />
@@ -98,7 +98,7 @@ export default function ArchivePage() {
           </div>
         ) : loadError ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <div className="flex h-14 w-14 items-center justify-center rounded-[16px] text-2xl"
+            <div className="flex h-14 w-14 items-center justify-center rounded-[12px] text-2xl"
               style={{ background: 'var(--danger-soft)' }}>
               ⚠️
             </div>
@@ -108,14 +108,14 @@ export default function ArchivePage() {
             <button
               onClick={() => void loadData()}
               className="rounded-[9px] px-4 py-2 text-[12px] font-semibold text-white transition active:scale-95"
-              style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+              style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
             >
               Повторить
             </button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <div className="flex h-14 w-14 items-center justify-center rounded-[16px] text-2xl"
+            <div className="flex h-14 w-14 items-center justify-center rounded-[12px] text-2xl"
               style={{ background: 'var(--panel)' }}>
               📦
             </div>

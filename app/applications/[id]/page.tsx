@@ -26,7 +26,7 @@ const HistorySection = dynamic(
   () => import('@/components/detail/HistorySection'),
   {
     loading: () => (
-      <div className="rounded-[16px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+      <div className="rounded-[12px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
         <div className="h-5 w-36 rounded-lg animate-shimmer" />
         <div className="mt-4 space-y-2">
           {[1, 2, 3].map(i => <div key={i} className="h-16 rounded-[10px] animate-shimmer" />)}
@@ -41,7 +41,7 @@ const NotesSection = dynamic(
   () => import('@/components/detail/NotesSection'),
   {
     loading: () => (
-      <div className="rounded-[16px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+      <div className="rounded-[12px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
         <div className="h-5 w-36 rounded-lg animate-shimmer" />
         <div className="mt-4 h-28 rounded-[10px] animate-shimmer" />
       </div>
@@ -54,7 +54,7 @@ const PdfSection = dynamic(
   () => import('@/components/detail/PdfSection'),
   {
     loading: () => (
-      <div className="rounded-[16px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+      <div className="rounded-[12px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
         <div className="h-5 w-36 rounded-lg animate-shimmer" />
         <div className="mt-4 h-16 rounded-[10px] animate-shimmer" />
       </div>
@@ -67,7 +67,7 @@ const OperationalDataSection = dynamic(
   () => import('@/components/detail/OperationalDataSection'),
   {
     loading: () => (
-      <div className="rounded-[16px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+      <div className="rounded-[12px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
         <div className="h-5 w-36 rounded-lg animate-shimmer" />
         <div className="mt-4 space-y-2">
           {[1, 2, 3, 4].map(i => <div key={i} className="h-12 rounded-[10px] animate-shimmer" />)}
@@ -218,13 +218,13 @@ export default function DetailPage() {
   if (!application) {
     if (loadError) {
       return (
-        <div className="flex h-[calc(100svh-60px)] flex-col items-center justify-center gap-3 text-[13px]"
+        <div className="flex h-[calc(100svh-56px)] flex-col items-center justify-center gap-3 text-[13px]"
           style={{ color: 'var(--text-muted)' }}>
           <p>Не удалось загрузить заявление.</p>
           <button
             onClick={() => void loadApplication()}
             className="rounded-[9px] px-4 py-2 text-[12px] font-semibold text-white transition active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+            style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
           >
             Повторить
           </button>
@@ -232,7 +232,7 @@ export default function DetailPage() {
       );
     }
     return (
-      <div className="flex h-[calc(100svh-60px)] items-center justify-center text-[13px]"
+      <div className="flex h-[calc(100svh-56px)] items-center justify-center text-[13px]"
         style={{ color: 'var(--text-muted)' }}>
         Загрузка заявления…
       </div>
@@ -247,7 +247,7 @@ export default function DetailPage() {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 md:gap-5">
 
         {/* Header card */}
-        <div className="rounded-[16px] border p-4 md:p-6"
+        <div className="rounded-[12px] border p-4 md:p-6"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
           <div className="flex items-center gap-2.5 mb-4">
             <button
@@ -269,7 +269,7 @@ export default function DetailPage() {
             )}
           </div>
 
-          <h1 className="text-[20px] font-extrabold leading-[1.25] tracking-[-0.02em] md:text-[24px]" style={{ color: 'var(--text)' }}>
+          <h1 className="text-[20px] font-semibold leading-[1.25] tracking-[-0.02em] md:text-[24px]" style={{ color: 'var(--text)' }}>
             {application.object_name || application.service_name}
           </h1>
           {application.object_name && (
@@ -279,7 +279,7 @@ export default function DetailPage() {
           )}
           {application.organization && (
             <p className="mt-1.5 flex items-center gap-1.5 text-[13px]" style={{ color: 'var(--text-soft)' }}>
-              <span>🏛</span> {application.organization}
+              {application.organization}
             </p>
           )}
 
@@ -288,9 +288,8 @@ export default function DetailPage() {
             <div className="rounded-[12px] p-3.5" style={{ background: 'var(--panel)', border: '1px solid var(--border)' }}>
               <p className="label-caps">Статус</p>
               <div className="mt-2.5">
-                <span className="inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1 text-[12px] font-bold"
-                  style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--accent)' }} />
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: statusInfo.dotColor }} />
                   {statusInfo.label}
                 </span>
               </div>
@@ -322,9 +321,8 @@ export default function DetailPage() {
               style={{ background: 'var(--danger-soft)', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)' }}
             >
               <div className="flex items-start gap-2">
-                <span className="mt-[1px] shrink-0 text-[13px]">⚠️</span>
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.05em]" style={{ color: 'var(--danger)' }}>
+                  <p className="text-[11px] font-semibold" style={{ color: 'var(--danger)' }}>
                     Ошибка последней проверки
                   </p>
                   <p className="mt-0.5 text-[12px] leading-[1.5]" style={{ color: 'var(--text-soft)' }}>
@@ -342,7 +340,7 @@ export default function DetailPage() {
                 onClick={handleCheck}
                 disabled={checking}
                 className="shrink-0 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-white transition active:scale-95 disabled:opacity-60 md:hover:brightness-105"
-                style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)', boxShadow: '0 2px 10px rgba(59,110,250,0.35)' }}
+                style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
               >
                 {checking ? 'Проверяю…' : 'Проверить'}
               </button>
@@ -410,7 +408,7 @@ export default function DetailPage() {
               <Link
                 href={`/add?parent_id=${id}`}
                 className="shrink-0 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-white transition active:scale-95 hover:brightness-110"
-                style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)', boxShadow: '0 2px 10px rgba(59,110,250,0.3)' }}
+                style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
               >
                 Продолжить заявку
               </Link>
@@ -420,12 +418,12 @@ export default function DetailPage() {
 
         {/* Chain section */}
         {chain.length > 1 && (
-          <div className="rounded-[16px] border p-4 md:p-5"
+          <div className="rounded-[12px] border p-4 md:p-5"
             style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
             <div className="flex items-center gap-2 mb-3">
               <GitBranch size={14} style={{ color: 'var(--accent)' }} />
               <p className="label-caps">Цепочка заявок</p>
-              <span className="rounded-[5px] px-1.5 py-0.5 text-[10px] font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+              <span className="rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium" style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
                 {chain.length}
               </span>
             </div>
@@ -447,7 +445,7 @@ export default function DetailPage() {
                       <div className="flex-1 rounded-[10px] p-3 mb-1.5"
                         style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)' }}>
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[12px] font-bold" style={{ color: 'var(--accent)' }}>
+                          <p className="text-[12px] font-semibold" style={{ color: 'var(--accent)' }}>
                             Текущая — № {item.application_number}
                           </p>
                           <span className="text-[11px] font-medium" style={{ color: 'var(--accent)' }}>{sInfo.label}</span>
@@ -481,12 +479,12 @@ export default function DetailPage() {
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
           <div className="space-y-4">
             {/* Last change */}
-            <div className="rounded-[16px] border p-4 md:p-5"
+            <div className="rounded-[12px] border p-4 md:p-5"
               style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="label-caps">Последнее изменение</p>
-                  <h2 className="mt-1.5 text-[15px] font-extrabold leading-[1.3] tracking-[-0.01em] md:text-[17px]"
+                  <h2 className="mt-1.5 text-[15px] font-semibold leading-[1.3] tracking-[-0.01em] md:text-[17px]"
                     style={{ color: 'var(--text)' }}>
                     {application.last_change_summary.length > 0
                       ? getChangeHeadline(application)
@@ -496,8 +494,8 @@ export default function DetailPage() {
                 {application.last_change_fields.length > 0 && (
                   <div className="flex flex-wrap gap-1 shrink-0">
                     {application.last_change_fields.map(field => (
-                      <span key={field} className="rounded-[5px] px-2 py-[3px] text-[10px] font-bold uppercase tracking-[0.05em]"
-                        style={{ background: 'var(--warning-soft)', color: 'var(--warning)' }}>
+                      <span key={field} className="rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium"
+                        style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
                         {getApplicationChangeFieldLabel(field)}
                       </span>
                     ))}
@@ -510,7 +508,7 @@ export default function DetailPage() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div>
                     <p className="label-caps">Дата изменения</p>
-                    <p className="mt-1.5 font-mono text-[18px] font-bold tracking-[-0.01em] md:text-[22px]" style={{ color: 'var(--text)' }}>
+                    <p className="mt-1.5 font-mono text-[18px] font-semibold tracking-[-0.01em] md:text-[22px]" style={{ color: 'var(--text)' }}>
                       {formatDate(application.last_changed_date)}
                     </p>
                     <p className="mt-1.5 text-[12px] leading-[1.5]" style={{ color: 'var(--text-muted)' }}>

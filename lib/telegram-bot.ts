@@ -9,7 +9,7 @@ import path from 'node:path';
 
 import { readLocalDb, readSettings, type LocalDbApplication, type LocalDbStatusHistory } from './local-db';
 import { resolveLocalProjectRoot } from './local-paths';
-import { acquireProcessLock, releaseProcessLock } from './process-lock';
+import { acquireProcessLock, releaseProcessLock, startLockHeartbeat } from './process-lock';
 import { fetchRepositoryFiles } from './repository-files';
 import { checkOne, triggerImmediateCycle } from './server-scheduler';
 import { fetchApplicationHtml } from './status-checker';
@@ -468,6 +468,7 @@ export function startTelegramBotPolling(): void {
     console.error(`[TelegramBot] Another server (PID ${lock.holder}) already polls the bot — this one only sends notifications`);
     return;
   }
+  startLockHeartbeat(lockFile);
   process.once('exit', () => releaseProcessLock(lockFile));
   _polling = true;
   console.log('[TelegramBot] Polling started');

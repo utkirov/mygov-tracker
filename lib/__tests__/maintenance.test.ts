@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { acquireProcessLock, releaseProcessLock } from '../process-lock';
+import { acquireProcessLock, LOCK_STALE_MS, releaseProcessLock } from '../process-lock';
 import { getApplicationById, listApplications, pruneCheckLog, readSettings } from '../local-db';
 import { closeDb, openDb } from '../sqlite-db';
 
@@ -27,6 +27,13 @@ describe('process lock', () => {
     expect(acquireProcessLock(file, 200, () => false)).toEqual({ ok: true });
     releaseProcessLock(file, 200);
     expect(acquireProcessLock(file, 300, () => true)).toEqual({ ok: true });
+  });
+
+  it('treats a lock without heartbeat as abandoned even if the PID is reused', () => {
+    const file = path.join(root, 'bot.lock');
+    expect(acquireProcessLock(file, 100, () => true)).toEqual({ ok: true });
+    const later = Date.now() + LOCK_STALE_MS + 1000;
+    expect(acquireProcessLock(file, 200, () => true, later)).toEqual({ ok: true });
   });
 });
 

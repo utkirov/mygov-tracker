@@ -17,13 +17,13 @@ interface Props {
 
 function getSyncBadge(application: Application) {
   if (application.sync_state === 'checking') {
-    return { label: 'Проверяется', style: { background: 'var(--accent-soft)', color: 'var(--accent)' } };
+    return { label: 'Проверяется', style: { background: 'var(--panel)', color: 'var(--text-soft)' } };
   }
   if (application.last_error) {
     return { label: 'Ошибка', style: { background: 'var(--danger-soft)', color: 'var(--danger)' } };
   }
   if (application.last_change_fields.length > 0) {
-    return { label: 'Изменение', style: { background: 'var(--warning-soft)', color: 'var(--warning)' } };
+    return { label: 'Изменение', style: { background: 'var(--panel)', color: 'var(--text-soft)' } };
   }
   if (!isApplicationCheckable(application)) {
     return { label: 'Остановлено', style: { background: 'var(--panel)', color: 'var(--text-muted)' } };
@@ -38,7 +38,7 @@ export function ApplicationCard({ application }: Props) {
   return (
     <Link
       href={`/applications/${application.id}`}
-      className="kanban-card block rounded-[16px] border"
+      className="kanban-card block rounded-[12px] border"
       style={{
         background:  'var(--surface)',
         borderColor: 'var(--border)',
@@ -52,14 +52,14 @@ export function ApplicationCard({ application }: Props) {
             № {application.application_number}
           </span>
           {syncBadge && (
-            <span className="ml-auto rounded-[6px] px-2 py-[3px] text-[11px] font-semibold" style={syncBadge.style}>
+            <span className="ml-auto rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium" style={syncBadge.style}>
               {syncBadge.label}
             </span>
           )}
         </div>
 
         {/* Name */}
-        <p className="text-[15px] font-bold leading-[1.35] tracking-[-0.01em]" style={{ color: 'var(--text)' }}>
+        <p className="text-[14px] font-semibold leading-[1.35] tracking-[-0.01em]" style={{ color: 'var(--text)' }}>
           {application.object_name || application.service_name}
         </p>
         {application.object_name && (
@@ -70,10 +70,8 @@ export function ApplicationCard({ application }: Props) {
 
         {/* Status badge */}
         <div className="mt-2.5">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold ${statusInfo.badge}`}
-          >
-            <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: 'currentColor' }} />
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--text)' }}>
+            <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: statusInfo.dotColor }} />
             {statusInfo.label}
           </span>
         </div>
@@ -84,8 +82,8 @@ export function ApplicationCard({ application }: Props) {
             {application.last_change_fields.map(field => (
               <span
                 key={field}
-                className="rounded-[6px] px-2 py-[3px] text-[11px] font-semibold"
-                style={{ background: 'var(--warning-soft)', color: 'var(--warning)' }}
+                className="rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium"
+                style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}
               >
                 {getApplicationChangeFieldLabel(field)}
               </span>
@@ -102,7 +100,7 @@ export function ApplicationCard({ application }: Props) {
             {application.last_changed_date ? formatDate(application.last_changed_date) : '—'}
           </span>
           {application.parent_id ? (
-            <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--accent)' }}>
+            <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
               <GitBranch size={11} />
               Цепочка
             </span>

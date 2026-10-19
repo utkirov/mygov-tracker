@@ -26,7 +26,7 @@ export default function HistorySection({ timelineItems }: Props) {
             key={entry.id}
             className={`rounded-[10px] border p-3 ${
               entry.isCurrentSnapshot
-                ? 'border-[color:color-mix(in_oklab,var(--accent)_35%,var(--border))] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_10%,var(--panel))_0%,var(--panel)_100%)]'
+                ? 'border-[var(--border-strong)] bg-[var(--surface)]'
                 : 'border-[var(--border)] bg-[var(--panel)]'
             }`}
           >
@@ -43,7 +43,7 @@ export default function HistorySection({ timelineItems }: Props) {
                 </p>
               </div>
               {entry.isCurrentSnapshot && (
-                <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--accent)]">
+                <span className="rounded-[6px] bg-[var(--panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-soft)]">
                   Текущий срез
                 </span>
               )}

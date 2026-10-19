@@ -110,7 +110,7 @@ export function ProjectSelector({ value, onChange }: Props) {
                 }
               }}
               placeholder="Название проекта"
-              className="w-full rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              className="w-full rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
             />
 
             <div className="flex flex-wrap gap-2">

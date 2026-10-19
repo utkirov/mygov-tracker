@@ -57,11 +57,11 @@ function SectionCard({ title, subtitle, children, badge }: {
   badge?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[16px] border p-4 md:p-5"
+    <div className="rounded-[12px] border p-4 md:p-5"
       style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[14px] font-bold tracking-tight" style={{ color: 'var(--text)' }}>{title}</h2>
+          <h2 className="text-[14px] font-semibold tracking-tight" style={{ color: 'var(--text)' }}>{title}</h2>
           {subtitle && <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>}
         </div>
         {badge}
@@ -566,7 +566,7 @@ export default function SettingsPage() {
         onClick={() => onSelect(value)}
         className="rounded-full px-3.5 py-1.5 text-[12px] font-medium transition active:scale-95"
         style={active
-          ? { background: 'var(--accent)', color: '#fff' }
+          ? { background: 'var(--primary)', color: 'var(--on-primary)' }
           : { background: 'var(--panel-strong)', color: 'var(--text-soft)' }
         }
       >
@@ -582,7 +582,7 @@ export default function SettingsPage() {
         {/* Page header */}
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-[15px] font-extrabold tracking-tight md:text-base" style={{ color: 'var(--text)' }}>Настройки</h1>
+            <h1 className="text-[15px] font-semibold tracking-tight md:text-base" style={{ color: 'var(--text)' }}>Настройки</h1>
             <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
               Очередь, уведомления, интеграции
             </p>
@@ -594,14 +594,10 @@ export default function SettingsPage() {
               style={{ background: sync.enabled ? 'var(--success-soft)' : 'var(--panel)', color: sync.enabled ? 'var(--success)' : 'var(--text-muted)' }}>
               {sync.enabled ? `${sync.intervalMinutes}м` : 'Выкл.'}
             </span>
-            <span className="shrink-0 rounded-[7px] px-2.5 py-1 text-[12px] font-semibold"
-              style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-              {sync.queueLength} в очереди
-            </span>
             <button
               onClick={() => requestImmediateSyncRun()}
               className="shrink-0 rounded-[8px] px-3 py-1.5 text-[12px] font-semibold text-white transition active:scale-95 hover:brightness-110"
-              style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+              style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
             >
               Запустить
             </button>
@@ -638,7 +634,7 @@ export default function SettingsPage() {
 
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
-                    <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Интервал</p>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>Интервал</p>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {[5, 15, 30, 60].map(m => (
                         <ChipButton key={m} value={String(m)} current={form.auto_check_interval} onSelect={v => update('auto_check_interval', v)} label={`${m}м`} />
@@ -650,7 +646,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
-                    <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-muted)' }}>Пауза между проверками</p>
+                    <p className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>Пауза между проверками</p>
                     <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>Чтобы не перегружать сервер</p>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {[{ v: '0', l: 'нет' }, { v: '1000', l: '1 сек' }, { v: '2500', l: '2.5 сек' }, { v: '5000', l: '5 сек' }].map(({ v, l }) => (
@@ -663,7 +659,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
-                    <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-muted)' }}>Одновременных потоков</p>
+                    <p className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>Одновременных потоков</p>
                     <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>Рекомендуем 1–2 для my.gov</p>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {[{ v: '1', l: '1 поток' }, { v: '2', l: '2 потока' }, { v: '3', l: '3 потока' }].map(({ v, l }) => (
@@ -701,7 +697,7 @@ export default function SettingsPage() {
                     onClick={() => void saveSettings('queue')}
                     disabled={savingMode !== null || !queueDirty}
                     className="rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110 active:scale-95 disabled:opacity-60"
-                    style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+                    style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
                   >
                     {savingMode === 'queue' ? 'Сохраняю…' : 'Сохранить'}
                   </button>
@@ -808,7 +804,7 @@ export default function SettingsPage() {
                     onClick={handleTelegramTest}
                     disabled={testing || savingMode !== null}
                     className="rounded-[10px] px-3 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110 active:scale-95 disabled:opacity-60"
-                    style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)' }}
+                    style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
                   >
                     {testing ? 'Отправляю…' : 'Отправить тест'}
                   </button>

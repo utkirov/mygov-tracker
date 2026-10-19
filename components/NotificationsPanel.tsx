@@ -5,6 +5,7 @@ import { Bell } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate } from '@/lib/format-utils';
 import { syncEngineEvents } from '@/lib/sync-engine';
+import { getApplicationChangeFieldLabel, type ApplicationChangeField } from '@/types';
 
 interface CheckLogEntry {
   id: string;
@@ -37,7 +38,7 @@ export function NotificationsPanel() {
     try {
       const data = await fetch('/api/check-log?limit=60').then(r => r.json()) as CheckLogEntry[];
       const relevant = data
-        .filter(e => e.result !== 'success' || e.changed_fields !== '[]')
+        .filter(e => e.result === 'changed' || e.result === 'error')
         .map(e => ({
           ...e,
           parsedChangedFields: (() => { try { return JSON.parse(e.changed_fields); } catch { return []; } })(),
@@ -86,15 +87,15 @@ export function NotificationsPanel() {
       <button
         onClick={toggle}
         aria-label="Уведомления"
-        className="relative flex h-11 w-11 items-center justify-center rounded-[9px] transition hover:bg-white/10 active:scale-90 md:h-9 md:w-9"
-        style={{ color: open ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)' }}
+        className="relative flex h-11 w-11 items-center justify-center rounded-[9px] transition hover:bg-[var(--panel)] active:scale-90 md:h-9 md:w-9"
+        style={{ color: open ? 'var(--text)' : 'var(--text-muted)', background: open ? 'var(--panel)' : undefined }}
         title="История событий"
       >
         <Bell size={15} />
         {unread > 0 && (
           <span
             aria-live="polite"
-            className="absolute right-[5px] top-[5px] flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-0.5 text-[9px] font-black text-white animate-pop"
+            className="absolute right-[5px] top-[5px] flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-0.5 text-[9px] font-semibold text-white animate-pop"
             style={{ background: 'var(--danger)' }}
           >
             {unread > 9 ? '9+' : unread}
@@ -104,7 +105,7 @@ export function NotificationsPanel() {
 
       {open && (
         <div
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[340px] overflow-hidden rounded-[16px] animate-scale-in"
+          className="fixed inset-x-3 top-[64px] z-50 overflow-hidden md:absolute md:inset-x-auto md:right-0 md:top-[calc(100%+8px)] md:w-[340px] rounded-[12px] animate-scale-in"
           style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', boxShadow: 'var(--shadow-float)' }}
         >
           {/* Header */}
@@ -144,7 +145,7 @@ export function NotificationsPanel() {
                       {isError
                         ? (e.error_message ?? 'Ошибка при проверке')
                         : isChanged
-                          ? `Изменено: ${fields.join(', ')}`
+                          ? `Изменено: ${fields.map(f => getApplicationChangeFieldLabel(f as ApplicationChangeField)).join(', ')}`
                           : 'Проверка прошла успешно'}
                     </p>
                     <p className="mt-1 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>

@@ -82,56 +82,56 @@ const STATUS_MAP: Record<string, MyGovStatus> = {
   'новое': {
     label: 'Новое',
     type: 'in_progress',
-    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
-    dotColor: '#60A5FA',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-new)',
   },
   'в обработке': {
     label: 'В обработке',
     type: 'in_progress',
-    badge: 'bg-amber-100 text-amber-800 dark:bg-amber-400/20 dark:text-amber-200',
-    dotColor: '#FBBF24',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-processing)',
   },
   'обработано': {
     label: 'Обработано',
     type: 'completed',
-    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-200',
-    dotColor: '#34D399',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-done)',
   },
   'отклонено': {
     label: 'Отклонено',
     type: 'completed',
-    badge: 'bg-red-100 text-red-800 dark:bg-red-400/20 dark:text-red-200',
-    dotColor: '#FB7185',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-rejected)',
   },
   'аннулировано': {
     label: 'Аннулировано',
     type: 'completed',
-    badge: 'bg-gray-100 text-gray-600 dark:bg-gray-400/20 dark:text-gray-300',
-    dotColor: '#94A3B8',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-canceled)',
   },
   'переотправлена': {
     label: 'Переотправлена',
     type: 'in_progress',
-    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
-    dotColor: '#FBBF24',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-processing)',
   },
   'черновик': {
     label: 'Черновик',
     type: 'in_progress',
-    badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-400/20 dark:text-yellow-200',
-    dotColor: '#60A5FA',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-canceled)',
   },
   'в ожидании другого заявителя': {
     label: 'В ожидании другого заявителя',
     type: 'action_required',
-    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-400/20 dark:text-orange-200',
-    dotColor: '#F87171',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-waiting)',
   },
   'в ожидании оплаты': {
     label: 'В ожидании оплаты',
     type: 'action_required',
-    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-400/20 dark:text-blue-200',
-    dotColor: '#F87171',
+    badge: 'text-[color:var(--text)]',
+    dotColor: 'var(--col-waiting)',
   },
 };
 
@@ -143,7 +143,7 @@ export function getMyGovStatus(status: string): MyGovStatus {
   return STATUS_MAP[normalizeStatus(status)] ?? {
     label: status,
     type: 'in_progress' as StatusType,
-    badge: 'bg-[var(--panel-strong)] text-[var(--text-soft)]',
+    badge: 'text-[color:var(--text-soft)]',
     dotColor: 'var(--text-soft)',
   };
 }

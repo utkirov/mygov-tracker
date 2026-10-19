@@ -117,7 +117,7 @@ export function CommandPalette({ open, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Поиск"
-        className="w-full max-w-[540px] overflow-hidden rounded-[20px] animate-scale-in"
+        className="w-full max-w-[540px] overflow-hidden rounded-[12px] animate-scale-in"
         style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', boxShadow: 'var(--shadow-float)' }}
         onClick={e => e.stopPropagation()}
       >
@@ -150,7 +150,7 @@ export function CommandPalette({ open, onClose }: Props) {
           {navItems.length > 0 && (
             <>
               {!query && (
-                <p className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                <p className="px-3 pb-1.5 pt-2 text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
                   Навигация
                 </p>
               )}
@@ -176,7 +176,7 @@ export function CommandPalette({ open, onClose }: Props) {
 
           {appItems.length > 0 && (
             <>
-              <p className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+              <p className="px-3 pb-1.5 pt-2 text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
                 Заявления
               </p>
               {appItems.map((app, i) => {

@@ -73,7 +73,7 @@ export default function EditPage() {
 
   if (!form.id) {
     return (
-      <div className="flex h-[calc(100svh-60px)] items-center justify-center text-[13px]"
+      <div className="flex h-[calc(100svh-56px)] items-center justify-center text-[13px]"
         style={{ color: 'var(--text-muted)' }}>
         Загрузка…
       </div>
@@ -85,7 +85,7 @@ export default function EditPage() {
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
 
         {/* Header card */}
-        <div className="rounded-[16px] border p-4 md:p-5" style={cardSty}>
+        <div className="rounded-[12px] border p-4 md:p-5" style={cardSty}>
           <div className="flex items-start gap-3">
             <button
               onClick={() => router.back()}
@@ -95,10 +95,10 @@ export default function EditPage() {
               <ArrowLeft size={16} />
             </button>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
                 Редактирование
               </p>
-              <h1 className="mt-1 text-[18px] font-extrabold leading-[1.3] tracking-[-0.02em] md:text-[20px]"
+              <h1 className="mt-1 text-[18px] font-semibold leading-[1.3] tracking-[-0.02em] md:text-[20px]"
                 style={{ color: 'var(--text)' }}>
                 {form.object_name || form.service_name || 'Заявка'}
               </h1>
@@ -110,7 +110,7 @@ export default function EditPage() {
         </div>
 
         {/* Fields */}
-        <div className="rounded-[16px] border p-4 md:p-5" style={cardSty}>
+        <div className="rounded-[12px] border p-4 md:p-5" style={cardSty}>
           <h2 className="mb-4 text-[13px] font-bold tracking-tight" style={{ color: 'var(--text)' }}>
             Данные заявки
           </h2>
@@ -140,13 +140,13 @@ export default function EditPage() {
         </div>
 
         {/* Actions */}
-        <div className="rounded-[16px] border p-4 md:p-5" style={cardSty}>
+        <div className="rounded-[12px] border p-4 md:p-5" style={cardSty}>
           <div className="flex flex-col gap-3">
             <button
               onClick={handleSave}
               disabled={saving}
               className="w-full rounded-[11px] px-4 py-3.5 text-[14px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #3B6EFA 0%, #7C3AED 100%)', boxShadow: '0 4px 14px rgba(59,110,250,0.35)' }}
+              style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
             >
               {saving ? 'Сохраняю…' : 'Сохранить изменения'}
             </button>
