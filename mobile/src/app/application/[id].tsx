@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
@@ -22,7 +22,8 @@ import { font, radius, useTheme } from '@/lib/theme';
 const NO_ARTIFACTS: ApplicationArtifacts = { screenshot: null, status_pdf: null, results: [] };
 
 export default function ApplicationScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, open: openParam } = useLocalSearchParams<{ id: string; open?: string }>();
+  const openedFromPush = useRef(false);
   const t = useTheme();
   const { expire } = useAuth();
   const [app, setApp] = useState<Application | null>(null);
@@ -64,6 +65,14 @@ export default function ApplicationScreen() {
   }, [id, expire]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // «Скриншот» button on the push (design A10): show the screenshot right away.
+  useEffect(() => {
+    if (openParam !== 'screenshot' || openedFromPush.current || !app || !artifacts.screenshot) return;
+    openedFromPush.current = true;
+    void downloadAndOpen(artifactUrl(id, 'screenshot.png', artifacts.screenshot.saved_at), `screenshot-${app.application_number}.png`, 'image/png')
+      .catch(() => {});
+  }, [openParam, app, artifacts.screenshot, id]);
 
   async function check() {
     setChecking(true);

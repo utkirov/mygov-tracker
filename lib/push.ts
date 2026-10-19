@@ -16,7 +16,72 @@ import { openDb } from './sqlite-db';
 
 interface ServiceAccount { project_id: string; client_email: string; private_key: string }
 
-export interface PushMessage { title: string; body: string; data?: Record<string, string> }
+/** What a push is about — each phone chooses which kinds it wants (app Settings, design A7). */
+export type PushKind = 'status-change' | 'completed' | 'error' | 'cycle';
+
+export interface PushMessage {
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+  kind?: PushKind;
+  /** Delivered even during quiet hours (the applicant must act, or a result arrived). */
+  urgent?: boolean;
+}
+
+export interface PushPrefs {
+  status: boolean;
+  errors: boolean;
+  completed: boolean;
+  cycle: boolean;
+  quiet: { enabled: boolean; from: string; to: string };
+}
+
+export const DEFAULT_PUSH_PREFS: PushPrefs = {
+  status: true,
+  errors: true,
+  completed: true,
+  cycle: false,
+  quiet: { enabled: false, from: '23:00', to: '08:00' },
+};
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export function normalizePushPrefs(input: unknown): PushPrefs {
+  const raw = (input && typeof input === 'object' ? input : {}) as Partial<PushPrefs>;
+  const quiet = (raw.quiet && typeof raw.quiet === 'object' ? raw.quiet : {}) as Partial<PushPrefs['quiet']>;
+  const bool = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback);
+  return {
+    status: bool(raw.status, DEFAULT_PUSH_PREFS.status),
+    errors: bool(raw.errors, DEFAULT_PUSH_PREFS.errors),
+    completed: bool(raw.completed, DEFAULT_PUSH_PREFS.completed),
+    cycle: bool(raw.cycle, DEFAULT_PUSH_PREFS.cycle),
+    quiet: {
+      enabled: bool(quiet.enabled, DEFAULT_PUSH_PREFS.quiet.enabled),
+      from: typeof quiet.from === 'string' && TIME_RE.test(quiet.from) ? quiet.from : DEFAULT_PUSH_PREFS.quiet.from,
+      to: typeof quiet.to === 'string' && TIME_RE.test(quiet.to) ? quiet.to : DEFAULT_PUSH_PREFS.quiet.to,
+    },
+  };
+}
+
+function minutesOf(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** Whether a phone with these preferences should get this push right now (server local time). */
+export function shouldDeliver(prefs: PushPrefs, kind: PushKind, urgent: boolean, now = new Date()): boolean {
+  const wanted = kind === 'status-change' ? prefs.status
+    : kind === 'completed' ? prefs.completed
+      : kind === 'error' ? prefs.errors
+        : prefs.cycle;
+  if (!wanted) return false;
+  if (!prefs.quiet.enabled || urgent) return true;
+  const current = now.getHours() * 60 + now.getMinutes();
+  const from = minutesOf(prefs.quiet.from);
+  const to = minutesOf(prefs.quiet.to);
+  const inQuiet = from <= to ? current >= from && current < to : current >= from || current < to;
+  return !inQuiet;
+}
 
 export function serviceAccountPath(rootPath?: string): string {
   return path.join(resolveLocalProjectRoot(rootPath), 'data', 'firebase-service-account.json');
@@ -55,13 +120,39 @@ export async function unregisterPushDevice(token: string, rootPath?: string): Pr
   db.prepare('DELETE FROM push_devices WHERE token = ?').run(token);
 }
 
+/** Phones whose login session is still valid, with their notification preferences. */
+export async function listActivePushTargets(rootPath?: string): Promise<Array<{ token: string; prefs: PushPrefs }>> {
+  const db = await openDb(rootPath);
+  const rows = db.prepare(`SELECT d.token, d.prefs FROM push_devices d
+    JOIN auth_sessions s ON s.id = d.session_id
+    WHERE s.revoked_at IS NULL AND s.expires_at > ?`).all(new Date().toISOString()) as Array<{ token: string; prefs: string }>;
+  return rows.map(r => {
+    let parsed: unknown = null;
+    try { parsed = r.prefs ? JSON.parse(r.prefs) : null; } catch { parsed = null; }
+    return { token: r.token, prefs: normalizePushPrefs(parsed) };
+  });
+}
+
 /** Tokens whose login session is still valid. */
 export async function listActivePushTokens(rootPath?: string): Promise<string[]> {
+  return (await listActivePushTargets(rootPath)).map(t => t.token);
+}
+
+/** Preferences of one phone, only if the token belongs to the given session. */
+export async function getPushPrefs(token: string, sessionId: string, rootPath?: string): Promise<PushPrefs | null> {
   const db = await openDb(rootPath);
-  const rows = db.prepare(`SELECT d.token FROM push_devices d
-    JOIN auth_sessions s ON s.id = d.session_id
-    WHERE s.revoked_at IS NULL AND s.expires_at > ?`).all(new Date().toISOString()) as Array<{ token: string }>;
-  return rows.map(r => r.token);
+  const row = db.prepare('SELECT prefs FROM push_devices WHERE token = ? AND session_id = ?').get(token, sessionId) as { prefs: string } | undefined;
+  if (!row) return null;
+  let parsed: unknown = null;
+  try { parsed = row.prefs ? JSON.parse(row.prefs) : null; } catch { parsed = null; }
+  return normalizePushPrefs(parsed);
+}
+
+export async function setPushPrefs(token: string, sessionId: string, prefs: unknown, rootPath?: string): Promise<PushPrefs | null> {
+  const db = await openDb(rootPath);
+  const normalized = normalizePushPrefs(prefs);
+  const result = db.prepare('UPDATE push_devices SET prefs = ? WHERE token = ? AND session_id = ?').run(JSON.stringify(normalized), token, sessionId);
+  return result.changes > 0 ? normalized : null;
 }
 
 // ── FCM ────────────────────────────────────────────────────────────────────
@@ -109,7 +200,11 @@ export function isDeadTokenResponse(status: number, body: string): boolean {
 export async function sendPushToAll(message: PushMessage, rootPath?: string): Promise<number> {
   const account = readServiceAccount(rootPath);
   if (!account) return 0;
-  const tokens = await listActivePushTokens(rootPath);
+  const kind = message.kind ?? 'status-change';
+  const now = new Date();
+  const tokens = (await listActivePushTargets(rootPath))
+    .filter(t => shouldDeliver(t.prefs, kind, message.urgent === true, now))
+    .map(t => t.token);
   if (tokens.length === 0) return 0;
 
   const accessToken = await getAccessToken(account);
@@ -120,11 +215,19 @@ export async function sendPushToAll(message: PushMessage, rootPath?: string): Pr
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        // Data-only: the app's expo-notifications builds the notification itself,
+        // which is what lets it add the «Открыть / Скриншот / Прочитано» buttons
+        // (categoryId) — FCM-rendered notifications can't carry them.
         message: {
           token,
-          notification: { title: message.title, body: message.body },
-          data: message.data ?? {},
-          android: { priority: 'high', notification: { channel_id: 'status-changes' } },
+          data: {
+            title: message.title,
+            message: message.body,
+            body: JSON.stringify({ ...(message.data ?? {}), kind }),
+            categoryId: kind === 'cycle' ? '' : 'application',
+            channelId: 'status-changes',
+          },
+          android: { priority: 'high' },
         },
       }),
     });

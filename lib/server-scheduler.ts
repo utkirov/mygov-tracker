@@ -29,7 +29,7 @@ import {
   sendApplicationChangeNotification,
   sendTelegramMessage,
 } from './telegram';
-import { isCompletedStatus } from '@/types';
+import { getMyGovStatus, getStatusType, isCompletedStatus } from '@/types';
 
 let _timer: ReturnType<typeof setTimeout> | null = null;
 let _running = false;
@@ -161,6 +161,15 @@ export async function checkOne(
       sendTelegramMessage(settings, buildApplicationErrorMessage({ ...entry, ...errorPatch }, errorMessage))
         .catch(err => console.error('[Scheduler] Telegram error (check error):', err));
     }
+    // Only the first failure of a streak — retries every 5 minutes would spam the phone.
+    if (application.sync_state !== 'error') {
+      sendPushToAll({
+        title: `№ ${entry.application_number} — ошибка проверки`,
+        body: `${entry.object_name || entry.service_name} · ${errorMessage}`,
+        data: { applicationId: entry.id },
+        kind: 'error',
+      }).catch(err => console.error('[Scheduler] Push error (check error):', err));
+    }
     return { result: 'error', session };
   }
 
@@ -249,10 +258,15 @@ export async function checkOne(
   if (options.awaitOutputs) return { result, session, outputs: await outputs };
 
   if (changedFields.length > 0) {
+    const completedNow = isCompletedStatus(updatedEntry.status) && !isCompletedStatus(previousValues.status ?? '');
+    const changes = changedFields.map(f => `${CHANGE_FIELD_LABELS[f]}: «${fmt(previousValues[f])}» → «${fmt(nextValues[f])}»`);
     sendPushToAll({
-      title: updatedEntry.object_name || `Заявка № ${updatedEntry.application_number}`,
-      body: changedFields.map(f => `${CHANGE_FIELD_LABELS[f]}: ${fmt(nextValues[f])}`).join('\n'),
-      data: { applicationId: updatedEntry.id, kind: 'status-change' },
+      title: `№ ${updatedEntry.application_number} — ${getMyGovStatus(updatedEntry.status).label}${completedNow ? ' ✓' : ''}`,
+      body: [updatedEntry.object_name || updatedEntry.service_name, ...changes].filter(Boolean).join(' · '),
+      data: { applicationId: updatedEntry.id },
+      kind: completedNow ? 'completed' : 'status-change',
+      // The applicant has to act, or the final result is in — worth waking up for.
+      urgent: completedNow || getStatusType(updatedEntry.acting_party, updatedEntry.status) === 'action_required',
     }).catch(err => console.error('[Scheduler] Push error (change):', err));
   }
 
@@ -322,6 +336,11 @@ async function runCycle(onlyIds?: string[]): Promise<void> {
           buildCycleSummaryMessage({ checkedCount, changedCount, errorCount, finishedAt: new Date().toISOString() }),
         ).catch(err => console.error('[Scheduler] Telegram error (cycle summary):', err));
       }
+      sendPushToAll({
+        title: 'Цикл проверки завершён',
+        body: `Проверено ${checkedCount} · изменений ${changedCount} · ошибок ${errorCount}`,
+        kind: 'cycle',
+      }).catch(err => console.error('[Scheduler] Push error (cycle summary):', err));
     }
 
     // Retry failed applications in 5 minutes (only once, no cascade)

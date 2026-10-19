@@ -2,7 +2,20 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { isDeadTokenResponse, isPushConfigured, listActivePushTokens, registerPushDevice, sendPushToAll, unregisterPushDevice } from '../push';
+import {
+  DEFAULT_PUSH_PREFS,
+  getPushPrefs,
+  isDeadTokenResponse,
+  isPushConfigured,
+  listActivePushTargets,
+  listActivePushTokens,
+  normalizePushPrefs,
+  registerPushDevice,
+  sendPushToAll,
+  setPushPrefs,
+  shouldDeliver,
+  unregisterPushDevice,
+} from '../push';
 import { closeDb, openDb } from '../sqlite-db';
 
 let root: string;
@@ -50,9 +63,37 @@ describe('push devices', () => {
     expect(await sendPushToAll({ title: 't', body: 'b' }, root)).toBe(0);
   });
 
+  it('stores per-phone preferences only for the owning session', async () => {
+    await addSession('s1');
+    await registerPushDevice({ token: tok('a'), sessionId: 's1' }, root);
+    expect(await getPushPrefs(tok('a'), 's1', root)).toEqual(DEFAULT_PUSH_PREFS);
+    expect(await setPushPrefs(tok('a'), 'other', { cycle: true }, root)).toBeNull();
+    const saved = await setPushPrefs(tok('a'), 's1', { cycle: true, quiet: { enabled: true, from: '22:00', to: 'bad' } }, root);
+    expect(saved).toEqual({ ...DEFAULT_PUSH_PREFS, cycle: true, quiet: { enabled: true, from: '22:00', to: '08:00' } });
+    expect((await listActivePushTargets(root))[0].prefs.cycle).toBe(true);
+  });
+
   it('recognises tokens FCM has dropped', () => {
     expect(isDeadTokenResponse(404, '{"error":{"status":"NOT_FOUND"}}')).toBe(true);
     expect(isDeadTokenResponse(400, '{"details":[{"errorCode":"UNREGISTERED"}]}')).toBe(true);
     expect(isDeadTokenResponse(500, 'internal')).toBe(false);
+  });
+});
+
+describe('shouldDeliver', () => {
+  const at = (h: number, m = 0) => new Date(2026, 9, 20, h, m);
+  const quiet = normalizePushPrefs({ quiet: { enabled: true, from: '23:00', to: '08:00' } });
+
+  it('respects the per-kind switches', () => {
+    expect(shouldDeliver(DEFAULT_PUSH_PREFS, 'status-change', false, at(12))).toBe(true);
+    expect(shouldDeliver(DEFAULT_PUSH_PREFS, 'cycle', false, at(12))).toBe(false);
+    expect(shouldDeliver(normalizePushPrefs({ errors: false }), 'error', true, at(12))).toBe(false);
+  });
+
+  it('holds back non-urgent pushes during quiet hours that cross midnight', () => {
+    expect(shouldDeliver(quiet, 'status-change', false, at(23, 30))).toBe(false);
+    expect(shouldDeliver(quiet, 'status-change', false, at(3))).toBe(false);
+    expect(shouldDeliver(quiet, 'status-change', false, at(8))).toBe(true);
+    expect(shouldDeliver(quiet, 'status-change', true, at(3))).toBe(true);
   });
 });

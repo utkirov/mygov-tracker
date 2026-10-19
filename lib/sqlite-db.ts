@@ -45,6 +45,10 @@ function applyMigrations(db: Database.Database): void {
   if (!settingsCols.includes('telegram_commands_chat_id')) {
     db.exec("ALTER TABLE settings ADD COLUMN telegram_commands_chat_id TEXT NOT NULL DEFAULT ''");
   }
+  const pushCols = (db.prepare("PRAGMA table_info(push_devices)").all() as { name: string }[]).map(c => c.name);
+  if (pushCols.length > 0 && !pushCols.includes('prefs')) {
+    db.exec("ALTER TABLE push_devices ADD COLUMN prefs TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 function applySchema(db: Database.Database): void {

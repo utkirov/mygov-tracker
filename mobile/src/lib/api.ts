@@ -54,6 +54,14 @@ export interface CheckLogEntry {
   changed_fields: string;
 }
 
+export interface PushPrefs {
+  status: boolean;
+  errors: boolean;
+  completed: boolean;
+  cycle: boolean;
+  quiet: { enabled: boolean; from: string; to: string };
+}
+
 export interface HealthInfo {
   ok: boolean;
   scheduler?: { nextCycleAt: string | null; lastCycleFinishedAt: string | null };
@@ -184,9 +192,47 @@ export const api = {
   check: (id: string) => request<unknown>(`/api/applications/${enc(id)}/check?manual=true`, { method: 'POST' }),
   saveNotes: (id: string, notes: string) => request<Application>(`/api/applications/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),
   fetchResultDocuments: (id: string) => request<ApplicationArtifacts>(`/api/applications/${enc(id)}/artifacts`, { method: 'POST' }),
+  pushPrefs: (token: string) => request<{ prefs: PushPrefs; registered: boolean }>(`/api/push/prefs?token=${enc(token)}`),
+  savePushPrefs: (token: string, prefs: PushPrefs) => request<{ prefs: PushPrefs }>('/api/push/prefs', { method: 'PUT', body: JSON.stringify({ token, prefs }) }),
+  me: () => request<{ username: string | null; authenticated: boolean }>('/api/auth/me'),
   registerPush: (token: string) => request('/api/push/register', { method: 'POST', body: JSON.stringify({ token, platform: 'android', deviceName: Device.modelName ?? '' }) }),
   unregisterPush: (token: string) => request(`/api/push/register?token=${enc(token)}`, { method: 'DELETE' }),
 };
+
+export interface ParsedPdf {
+  application_number: string;
+  service_name: string;
+  organization: string;
+  status: string;
+  submission_date: string;
+  last_changed_date: string;
+  current_action: string;
+  acting_party: string;
+  verification_password: string;
+  sms_phone: string;
+}
+
+/** Uploads a PDF from the phone (picker or "open with") for recognition, like the website's add page. */
+export async function parsePdf(file: { uri: string; name: string }): Promise<{ fields: ParsedPdf; filename: string; pdfStorageKey: string }> {
+  const form = new FormData();
+  // React Native's FormData accepts { uri, name, type } and streams content:// URIs itself.
+  form.append('file', { uri: file.uri, name: file.name.toLowerCase().endsWith('.pdf') ? file.name : `${file.name}.pdf`, type: 'application/pdf' } as unknown as Blob);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/applications/parse-pdf`, { method: 'POST', body: form, headers: { Accept: 'application/json', ...(await authHeaders()) } });
+  } catch {
+    throw new NetworkError('Сервер недоступен');
+  }
+  const payload = await response.json().catch(() => ({})) as { fields?: ParsedPdf; filename?: string; pdfStorageKey?: string; error?: string };
+  if (!response.ok || !payload.fields || !payload.filename || !payload.pdfStorageKey) throw new Error(payload.error ?? 'Не удалось прочитать PDF');
+  return { fields: payload.fields, filename: payload.filename, pdfStorageKey: payload.pdfStorageKey };
+}
+
+export async function createApplication(body: Record<string, unknown>): Promise<string> {
+  const payload = await request<{ id?: string }>('/api/applications', { method: 'POST', body: JSON.stringify(body) });
+  if (!payload.id) throw new Error('Сервер не вернул заявление');
+  return payload.id;
+}
 
 /** URL of a stored file; load it with authHeaders() (Image source headers / downloadAndOpen). */
 export function artifactUrl(id: string, file: string, version?: string): string {

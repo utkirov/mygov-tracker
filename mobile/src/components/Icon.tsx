@@ -19,6 +19,9 @@ const ICONS = {
   link: <><Path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><Path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
   download: <><Path d="M12 15V3" /><Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><Path d="m7 10 5 5 5-5" /></>,
   alert: <><Path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><Path d="M12 9v4" /><Path d="M12 17h.01" /></>,
+  plus: <><Path d="M5 12h14" /><Path d="M12 5v14" /></>,
+  qr: <><Rect width="5" height="5" x="3" y="3" rx="1" /><Rect width="5" height="5" x="16" y="3" rx="1" /><Rect width="5" height="5" x="3" y="16" rx="1" /><Path d="M21 16h-3a2 2 0 0 0-2 2v3" /><Path d="M21 21v.01" /><Path d="M12 7v3a2 2 0 0 1-2 2H7" /><Path d="M3 12h.01" /><Path d="M12 3h.01" /><Path d="M12 16v.01" /><Path d="M16 12h1" /><Path d="M21 12v.01" /><Path d="M12 21v-1" /></>,
+  phone: <><Rect width="14" height="20" x="5" y="2" rx="2" ry="2" /><Path d="M12 18h.01" /></>,
 } as const;
 
 export type IconName = keyof typeof ICONS;

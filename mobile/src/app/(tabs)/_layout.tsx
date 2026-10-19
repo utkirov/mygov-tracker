@@ -1,4 +1,5 @@
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
+import { Pressable } from 'react-native';
 
 import { Icon, type IconName } from '@/components/Icon';
 import { useUnreadEvents } from '@/lib/events';
@@ -24,7 +25,19 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: t.bg },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Доска заявлений', tabBarLabel: 'Доска', tabBarIcon: icon('board') }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Доска заявлений',
+          tabBarLabel: 'Доска',
+          tabBarIcon: icon('board'),
+          headerRight: () => (
+            <Pressable onPress={() => router.push('/add')} hitSlop={10} style={{ marginRight: 16 }} accessibilityLabel="Добавить заявление">
+              <Icon name="plus" size={22} color={t.text} />
+            </Pressable>
+          ),
+        }}
+      />
       <Tabs.Screen name="archive" options={{ title: 'Архив', tabBarIcon: icon('archive') }} />
       <Tabs.Screen
         name="events"
