@@ -78,3 +78,4 @@ start-server.vbs
 # personal documents
 *.docx
 /data/firebase-*.json
+/data/google-services.json
