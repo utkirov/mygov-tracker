@@ -55,6 +55,20 @@ function scrubForwardingHeaders(req) {
   }
 }
 
+// A restore chosen in Settings is staged by the previous run; swap the files in
+// now, before anything opens the database.
+{
+  const { createRequire } = await import('node:module');
+  const { join, resolve } = await import('node:path');
+  const { applyPendingRestore } = createRequire(import.meta.url)('./scripts/apply-pending-restore.cjs');
+  const root = process.env.LOCAL_APP_ROOT?.trim() ? resolve(process.env.LOCAL_APP_ROOT.trim()) : process.cwd();
+  try {
+    applyPendingRestore(join(root, 'data'));
+  } catch (error) {
+    console.error('[restore] failed to apply the pending restore:', error);
+  }
+}
+
 // Imported after NODE_ENV is set — Next reads it while loading.
 const { default: next } = await import('next');
 

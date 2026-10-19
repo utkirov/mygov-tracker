@@ -15,5 +15,7 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ lanIps, port: Number.parseInt(process.env.PORT || '3040', 10), token: getAppToken() });
+  // Public address through the Cloudflare Tunnel (see docs/HANDOFF.md); override with PUBLIC_BASE_URL.
+  const publicUrl = process.env.PUBLIC_BASE_URL?.trim() || 'https://tracker.turonproject.uz';
+  return NextResponse.json({ lanIps, port: Number.parseInt(process.env.PORT || '3040', 10), token: getAppToken(), publicUrl });
 }

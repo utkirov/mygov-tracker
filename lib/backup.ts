@@ -158,8 +158,10 @@ function backupFileName(date: Date): string {
 }
 
 function parseBackupDate(name: string): Date | null {
-  const m = name.match(/^mygov-backup-(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})\.mgbk$/);
-  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
+  // "-SS" is added only when two backups land in the same minute (e.g. the
+  // safety copy taken right before a restore).
+  const m = name.match(/^mygov-backup-(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(?:-(\d{2}))?\.mgbk$/);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], m[6] ? +m[6] : 0) : null;
 }
 
 function isoWeekKey(date: Date): string {
@@ -204,12 +206,12 @@ export function selectBackupsToDelete(names: string[], keepDaily = KEEP_DAILY, k
 let running: Promise<BackupStatus> | null = null;
 
 /** Creates an encrypted backup of the SQLite database and all PDFs. Concurrent calls share one run. */
-export function createBackup(rootPath?: string): Promise<BackupStatus> {
-  if (!running) running = runBackup(rootPath).finally(() => { running = null; });
+export function createBackup(rootPath?: string, options: { prune?: boolean } = {}): Promise<BackupStatus> {
+  if (!running) running = runBackup(rootPath, options.prune ?? true).finally(() => { running = null; });
   return running;
 }
 
-async function runBackup(rootPath?: string): Promise<BackupStatus> {
+async function runBackup(rootPath: string | undefined, prune: boolean): Promise<BackupStatus> {
   const status = await readBackupStatus(rootPath);
   const now = new Date();
   status.lastAttemptAt = now.toISOString();
@@ -246,13 +248,17 @@ async function runBackup(rootPath?: string): Promise<BackupStatus> {
     const blob = encryptBackup(files, key, now);
     const dir = status.dir;
     await mkdir(dir, { recursive: true });
-    const finalName = backupFileName(now);
+    let finalName = backupFileName(now);
+    if (existsSync(path.join(dir, finalName))) {
+      finalName = finalName.replace(FILE_EXT, `-${String(now.getSeconds()).padStart(2, '0')}${FILE_EXT}`);
+    }
     const tmp = path.join(dir, `${finalName}.partial`);
     await writeFile(tmp, blob);
     await rename(tmp, path.join(dir, finalName));
 
     const existing = (await readdir(dir)).filter((n) => n.startsWith(FILE_PREFIX) && n.endsWith(FILE_EXT));
-    for (const old of selectBackupsToDelete(existing)) await rm(path.join(dir, old), { force: true });
+    // A safety copy before a restore must not rotate out the copy being restored.
+    if (prune) for (const old of selectBackupsToDelete(existing)) await rm(path.join(dir, old), { force: true });
 
     Object.assign(status, { lastSuccessAt: now.toISOString(), lastFile: finalName, lastSize: (await stat(path.join(dir, finalName))).size, lastError: null });
   } catch (error) {
@@ -263,4 +269,61 @@ async function runBackup(rootPath?: string): Promise<BackupStatus> {
 
   await writeBackupStatus(status, rootPath);
   return status;
+}
+
+export interface BackupListEntry { name: string; createdAt: string | null; size: number }
+
+/** Backups in the configured folder, newest first (Settings → «Восстановить…»). */
+export async function listBackups(rootPath?: string): Promise<BackupListEntry[]> {
+  const status = await readBackupStatus(rootPath);
+  if (!existsSync(status.dir)) return [];
+  const names = (await readdir(status.dir)).filter((n) => n.startsWith(FILE_PREFIX) && n.endsWith(FILE_EXT));
+  const entries = await Promise.all(names.map(async (name) => ({
+    name,
+    createdAt: parseBackupDate(name)?.toISOString() ?? null,
+    size: (await stat(path.join(status.dir, name))).size,
+  })));
+  return entries.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+}
+
+// Only these paths may come out of an archive — anything else (or "..") is refused.
+// Same rule as scripts/apply-pending-restore.cjs, which moves them into place.
+const RESTORABLE_NAME = /^(local-db\.sqlite|pdfs\/[\w.-]+\.pdf|artifacts\/[\w-]{1,64}\/(result-\d{1,2}\.pdf|meta\.json))$/;
+
+/**
+ * First half of a restore: checks and decrypts the backup, takes a fresh
+ * backup of the current state (so a wrong choice can itself be undone) and
+ * stages the files in data/restore-pending/. The live data is untouched until
+ * the server restarts — server.mjs applies the staged files before the
+ * database is opened (scripts/apply-pending-restore.cjs).
+ */
+export async function stageRestore(name: string, rootPath?: string): Promise<{ safetyBackup: string | null; restoredFiles: number }> {
+  if (!name.startsWith(FILE_PREFIX) || !name.endsWith(FILE_EXT) || name.includes('/') || name.includes('\\')) {
+    throw new Error('Неверное имя файла резервной копии');
+  }
+  const status = await readBackupStatus(rootPath);
+  const blob = await readFile(path.join(status.dir, name));
+  const { files } = decryptBackup(blob, ensureBackupKey(rootPath));
+  if (!files.some((f) => f.name === 'local-db.sqlite')) throw new Error('В копии нет базы данных');
+  const bad = files.find((f) => !RESTORABLE_NAME.test(f.name));
+  if (bad) throw new Error(`Неожиданный файл в копии: ${bad.name}`);
+
+  const safety = await createBackup(rootPath, { prune: false });
+  if (safety.lastError) throw new Error(`Не удалось сохранить текущее состояние перед восстановлением: ${safety.lastError}`);
+
+  const pendingDir = path.join(resolveLocalProjectRoot(rootPath), 'data', 'restore-pending');
+  await rm(pendingDir, { recursive: true, force: true });
+  for (const file of files) {
+    const target = path.join(pendingDir, ...file.name.split('/'));
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, file.data);
+  }
+  // Written last: without the manifest an interrupted staging is simply discarded.
+  await writeFile(path.join(pendingDir, 'manifest.json'), JSON.stringify({
+    backup: name,
+    safetyBackup: safety.lastFile,
+    files: files.map((f) => f.name),
+    stagedAt: new Date().toISOString(),
+  }, null, 2), 'utf8');
+  return { safetyBackup: safety.lastFile, restoredFiles: files.length };
 }

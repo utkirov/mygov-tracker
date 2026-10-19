@@ -3,7 +3,9 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { createBackup, decryptBackup, encryptBackup, selectBackupsToDelete } from '../backup';
+import { createBackup, decryptBackup, encryptBackup, listBackups, selectBackupsToDelete, stageRestore } from '../backup';
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- plain CommonJS helper shared with server.mjs
+const { applyPendingRestore } = require('../../scripts/apply-pending-restore.cjs') as { applyPendingRestore: (dataDir: string, log?: (m: string) => void) => number };
 import { readLocalDb, writeLocalDb } from '../local-db';
 import { closeDb } from '../sqlite-db';
 
@@ -103,5 +105,37 @@ describe('createBackup', () => {
 
     const saved = JSON.parse(await readFile(path.join(root, 'data', 'backup-status.json'), 'utf8'));
     expect(saved.lastFile).toBe(status.lastFile);
+  });
+
+  it('restores a backup and keeps a safety copy of the replaced state', async () => {
+    const db = await readLocalDb(root);
+    db.settings.telegram.chat_id = 'before';
+    await writeLocalDb(db, root);
+    await mkdir(path.join(root, 'data', 'pdfs'), { recursive: true });
+    await writeFile(path.join(root, 'data', 'pdfs', '1-x.pdf'), '%PDF-1.4 original');
+    const original = await createBackup(root);
+
+    const changed = await readLocalDb(root);
+    changed.settings.telegram.chat_id = 'after';
+    await writeLocalDb(changed, root);
+    await writeFile(path.join(root, 'data', 'pdfs', '1-x.pdf'), '%PDF-1.4 edited');
+
+    const result = await stageRestore(original.lastFile!, root);
+    expect(result.safetyBackup).not.toBe(original.lastFile);
+    // Nothing live changes until the server restarts.
+    expect(await readFile(path.join(root, 'data', 'pdfs', '1-x.pdf'), 'utf8')).toBe('%PDF-1.4 edited');
+
+    closeDb();
+    expect(applyPendingRestore(path.join(root, 'data'), () => {})).toBe(2);
+    expect(applyPendingRestore(path.join(root, 'data'), () => {})).toBe(0);
+    expect((await listBackups(root)).map((b) => b.name).sort()).toEqual([original.lastFile, result.safetyBackup].sort());
+
+    expect((await readLocalDb(root)).settings.telegram.chat_id).toBe('before');
+    expect(await readFile(path.join(root, 'data', 'pdfs', '1-x.pdf'), 'utf8')).toBe('%PDF-1.4 original');
+  });
+
+  it('refuses names outside the backup folder', async () => {
+    await expect(stageRestore('../local-db.sqlite', root)).rejects.toThrow();
+    await expect(stageRestore('mygov-backup-x/../../y.mgbk', root)).rejects.toThrow();
   });
 });

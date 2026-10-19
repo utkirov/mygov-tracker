@@ -110,6 +110,113 @@ function formatBytes(size: number | null) {
   return size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} МБ` : `${Math.round(size / 1024)} КБ`;
 }
 
+interface BackupListEntry { name: string; createdAt: string | null; size: number }
+
+function RestoreBlock() {
+  const [open, setOpen] = useState(false);
+  const [backups, setBackups] = useState<BackupListEntry[] | null>(null);
+  const [selected, setSelected] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  async function show() {
+    setOpen(true);
+    try {
+      const { backups: list } = await fetch('/api/backup/restore', { cache: 'no-store' }).then(r => r.json()) as { backups: BackupListEntry[] };
+      setBackups(list);
+      setSelected(list[0]?.name ?? '');
+    } catch {
+      setBackups([]);
+    }
+  }
+
+  async function waitForServer() {
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const health = await fetch('/api/health', { cache: 'no-store' });
+        if (health.ok) { window.location.reload(); return; }
+      } catch { /* still restarting */ }
+    }
+    showToast({ title: 'Сервер долго не отвечает', description: 'Обновите страницу через минуту.', tone: 'warning' });
+  }
+
+  async function restore() {
+    setRestoring(true);
+    try {
+      const response = await fetch('/api/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: selected }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; safetyBackup?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Не удалось восстановить');
+      showToast({ title: 'Данные восстановлены', description: `Прежнее состояние сохранено в ${payload.safetyBackup}. Сервер перезапускается…`, tone: 'success' });
+      await waitForServer();
+    } catch (error) {
+      showToast({ title: 'Восстановление не выполнено', description: error instanceof Error ? error.message : '', tone: 'error' });
+      setRestoring(false);
+    }
+  }
+
+  const label = (b: BackupListEntry) =>
+    `${b.createdAt ? new Date(b.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : b.name} · ${formatBytes(b.size)}`;
+
+  if (!open) {
+    return (
+      <button onClick={() => void show()} className="rounded-[8px] border px-3 py-2 text-[12px] font-semibold"
+        style={{ borderColor: 'var(--border-strong)', color: 'var(--text)' }}>
+        Восстановить…
+      </button>
+    );
+  }
+
+  return (
+    <div className="w-full space-y-2 rounded-[10px] border p-3" style={{ borderColor: 'var(--border)' }}>
+      {backups === null ? (
+        <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>Ищу копии…</p>
+      ) : backups.length === 0 ? (
+        <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>В папке копий нет.</p>
+      ) : (
+        <>
+          <select value={selected} onChange={e => { setSelected(e.target.value); setConfirming(false); }} disabled={restoring}
+            className="block h-9 w-full rounded-[8px] px-2 text-[13px]"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--text)' }}>
+            {backups.map(b => <option key={b.name} value={b.name}>{label(b)}</option>)}
+          </select>
+          {confirming ? (
+            <div className="space-y-2 rounded-[8px] p-2.5" style={{ background: 'var(--warning-soft)' }}>
+              <p className="text-[12px]" style={{ color: 'var(--warning)' }}>
+                База, PDF и документы будут заменены содержимым копии. Текущее состояние сначала сохранится отдельной копией. Сервер перезапустится.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => void restore()} disabled={restoring}
+                  className="rounded-[8px] px-3 py-1.5 text-[12px] font-semibold disabled:opacity-60" style={{ background: 'var(--warning)', color: '#fff' }}>
+                  {restoring ? 'Восстанавливаю…' : 'Да, восстановить'}
+                </button>
+                <button onClick={() => setConfirming(false)} disabled={restoring}
+                  className="rounded-[8px] px-3 py-1.5 text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>
+                  Отмена
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => setConfirming(true)} disabled={!selected}
+                className="rounded-[8px] px-3 py-1.5 text-[12px] font-semibold" style={{ background: 'var(--text)', color: 'var(--surface)' }}>
+                Восстановить выбранную
+              </button>
+              <button onClick={() => setOpen(false)} className="rounded-[8px] px-3 py-1.5 text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>
+                Закрыть
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function BackupSection() {
   const [status, setStatusState] = useState<BackupStatus | null>(null);
   const [stale, setStale] = useState(false);
@@ -172,6 +279,7 @@ function BackupSection() {
         >
           {running ? 'Создаю копию…' : 'Сделать копию сейчас'}
         </button>
+        <RestoreBlock />
       </div>
     </SectionCard>
   );
@@ -296,6 +404,14 @@ function SecuritySection() {
             className="rounded-[8px] border px-3 py-2 text-[12px] font-semibold disabled:opacity-60" style={{ borderColor: 'var(--border-strong)', color: 'var(--text)' }}>
             Сменить пароль
           </button>
+
+          <div className="flex items-center justify-between gap-3 rounded-[8px] px-3 py-2" style={{ background: 'var(--panel)' }}>
+            <div>
+              <p className="text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Защита от подбора</p>
+              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>5 неверных попыток → пауза 15 мин, сообщение в Telegram</p>
+            </div>
+            <span className="text-[11px] font-semibold" style={{ color: 'var(--success)' }}>Включена</span>
+          </div>
 
           <div>
             <p className="mb-2 text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Активные устройства</p>
@@ -521,13 +637,15 @@ export default function SettingsPage() {
   const [lanIps, setLanIps] = useState<string[]>([]);
   const [lanToken, setLanToken] = useState<string | null>(null);
   const [lanPort, setLanPort] = useState(3040);
+  const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [showTelegramToken, setShowTelegramToken] = useState(false);
 
   useEffect(() => {
     fetch('/api/network-info')
       .then(r => r.json())
-      .then((d: { lanIps: string[]; port?: number; token?: string }) => {
+      .then((d: { lanIps: string[]; port?: number; token?: string; publicUrl?: string }) => {
         setLanIps(d.lanIps);
+        setPublicUrl(typeof d.publicUrl === 'string' ? d.publicUrl : null);
         if (typeof d.port === 'number') setLanPort(d.port);
         setLanToken(typeof d.token === 'string' ? d.token : null);
       })
@@ -1026,10 +1144,25 @@ export default function SettingsPage() {
             </SectionCard>
 
             <SectionCard
-              title="Доступ по локальной сети"
-              subtitle="Открой эту ссылку один раз на другом устройстве в той же Wi-Fi сети (например, на телефоне), чтобы дать ему доступ."
+              title="Доступ"
+              subtitle="Через интернет нужен вход по логину и паролю. В той же Wi-Fi сети откройте ссылку один раз — устройство получит доступ без пароля."
             >
               <div className="space-y-2">
+                {publicUrl && (
+                  <div className="flex items-center justify-between gap-2 rounded-[9px] px-3 py-2" style={{ background: 'var(--panel)' }}>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text)' }}>Через интернет</p>
+                      <p className="truncate font-mono text-[12px]" style={{ color: 'var(--text-soft)' }}>{publicUrl} · Cloudflare Tunnel · требуется вход</p>
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(publicUrl).then(() => showToast({ title: 'Скопировано', tone: 'success' }))}
+                      className="shrink-0 rounded-[6px] px-2 py-1 text-[10px] font-medium transition hover:bg-white/10"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      Скопировать
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
                   <Wifi size={13} className="shrink-0" />
                   <span>С любого устройства в той же сети:</span>
