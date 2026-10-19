@@ -1,0 +1,16 @@
+# What EAS Build uploads when run with EAS_NO_VCS=1 (the repo itself contains
+# symlinks that Windows can't recreate in eas-cli's temp clone).
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+/android
+/ios
+.claude/
+*.jks
+*.p8
+*.p12
+*.key
+npm-debug.*
+.DS_Store
