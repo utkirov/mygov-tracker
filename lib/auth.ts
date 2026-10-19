@@ -2,7 +2,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypt
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { readLocalDb } from './local-db';
+import { readSettings } from './local-db';
 import { resolveLocalProjectRoot } from './local-paths';
 import { getAuthState, signSession, verifySession, type SessionPayload } from './session-token';
 import { openDb } from './sqlite-db';
@@ -191,7 +191,7 @@ export function describeUserAgent(ua: string): string {
 
 export async function notifySecurity(text: string): Promise<void> {
   try {
-    const { settings } = await readLocalDb();
+    const settings = await readSettings();
     if (isTelegramConfigured(settings)) await sendTelegramMessage(settings, esc(text));
   } catch (err) {
     console.error('[Auth] Telegram notify failed:', err);

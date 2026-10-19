@@ -45,11 +45,9 @@ function stopRunningServer() {
   try {
     const pid = Number(readFileSync(PID_FILE_PATH, 'utf8').trim());
     if (Number.isInteger(pid) && pid > 0) {
-      try {
-        process.kill(pid);
+      // /T: the PID is the supervisor — take its server child down with it.
+      if (run('taskkill', ['/PID', String(pid), '/T', '/F']).ok) {
         console.log(`Остановлен работающий сервер (PID ${pid}).`);
-      } catch {
-        // Process is already gone — nothing to do.
       }
     }
   } catch {

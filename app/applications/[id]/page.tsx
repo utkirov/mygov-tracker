@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, GitBranch } from 'lucide-react';
 
-import { requestImmediateSyncRun, syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
+import { syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import { formatDate, getChangeHeadline } from '@/lib/format-utils';
 import { showToast } from '@/lib/toast';
 import type { Application, StatusHistory as TStatusHistory } from '@/types';
@@ -132,7 +132,9 @@ export default function DetailPage() {
         const result = await response.json().catch(() => null);
         throw new Error(typeof result?.error === 'string' ? result.error : 'Не удалось выполнить проверку');
       }
-      requestImmediateSyncRun();
+      // Only this application was checked — refresh it (and the list views),
+      // don't kick off a full cycle over every application.
+      window.dispatchEvent(new CustomEvent(syncEngineEvents.applications));
       await loadApplication();
     } catch (error) {
       showToast({ title: 'Проверка не выполнена', description: error instanceof Error ? error.message : 'Повтори попытку.', tone: 'error' });

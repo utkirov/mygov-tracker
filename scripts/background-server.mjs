@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, openSync, readFileSync } from 'node:fs';
+import { createWriteStream, existsSync, readFileSync } from 'node:fs';
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -17,14 +17,14 @@ const {
 
 const projectDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const nextBinPath = join(projectDir, 'node_modules', 'next', 'dist', 'bin', 'next');
-// Served through server.mjs instead of `next start` so clients can't spoof x-forwarded-for.
-const serverScriptPath = join(projectDir, 'server.mjs');
+// supervisor.mjs runs server.mjs (not `next start`, so clients can't spoof
+// x-forwarded-for), restarts it on crash/hang and rotates logs/server.log.
+const supervisorPath = join(projectDir, 'scripts', 'supervisor.mjs');
 const buildMarkerPath = join(projectDir, '.next', 'BUILD_ID');
 const buildStampPath = join(projectDir, 'data', 'build-stamp.txt');
 const pidFilePath = join(projectDir, 'data', 'server.pid');
 const logPath = join(projectDir, 'autostart.log');
 const buildLogPath = join(projectDir, 'autostart-build.log');
-const serverLogPath = join(projectDir, 'autostart-server.log');
 const healthUrl = 'http://127.0.0.1:3000/api/health';
 const networkInfoUrl = 'http://127.0.0.1:3000/api/network-info';
 const port = 3000;
@@ -200,11 +200,10 @@ async function writePidFile(pid) {
 }
 
 async function startDetachedServer() {
-  const serverLogFd = openSync(serverLogPath, 'a');
-  const child = spawn(process.execPath, [serverScriptPath], {
+  const child = spawn(process.execPath, [supervisorPath], {
     cwd: projectDir,
     detached: true,
-    stdio: ['ignore', serverLogFd, serverLogFd],
+    stdio: 'ignore',
     windowsHide: true,
   });
 

@@ -3,16 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { deletePdfFile } from '@/lib/local-storage';
 import {
   deleteApplicationRow,
+  getApplicationById,
+  getStatusHistory,
   readLocalDb,
   touchMeta,
   updateApplicationFields,
   type LocalDbApplication,
 } from '@/lib/local-db';
 import { getStatusType } from '@/types';
-
-function sortHistory(history: Array<{ recorded_at: string }>) {
-  return [...history].sort((left, right) => right.recorded_at.localeCompare(left.recorded_at));
-}
 
 function toProjectId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -41,15 +39,13 @@ function ancestorChainReaches(
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const db = await readLocalDb();
-  const application = db.applications.find((entry) => entry.id === id);
+  const application = await getApplicationById(id);
 
   if (!application) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const history = sortHistory(db.status_history.filter((entry) => entry.application_id === id));
-  return NextResponse.json({ application, history });
+  return NextResponse.json({ application, history: await getStatusHistory(id) });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

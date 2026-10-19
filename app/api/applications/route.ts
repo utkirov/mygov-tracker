@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   insertApplication,
   insertStatusHistory,
+  listApplications,
   readLocalDb,
   touchMeta,
   type LocalDbApplication,
@@ -18,9 +19,8 @@ function sortByUpdatedAtDesc(applications: LocalDbApplication[]): LocalDbApplica
 }
 
 export async function GET(request: NextRequest) {
-  const db = await readLocalDb();
   const showArchived = request.nextUrl.searchParams.get('archived') === 'true';
-  const applications = db.applications.filter((application) => application.archived === showArchived);
+  const applications = await listApplications({ archived: showArchived });
 
   return NextResponse.json(sortByUpdatedAtDesc(applications));
 }

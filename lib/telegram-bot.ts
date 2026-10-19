@@ -5,7 +5,11 @@
  * has no public HTTPS endpoint for a webhook. Loaded once on server startup
  * via instrumentation.ts, same as lib/server-scheduler.ts.
  */
-import { readLocalDb, type LocalDbApplication, type LocalDbStatusHistory } from './local-db';
+import path from 'node:path';
+
+import { readLocalDb, readSettings, type LocalDbApplication, type LocalDbStatusHistory } from './local-db';
+import { resolveLocalProjectRoot } from './local-paths';
+import { acquireProcessLock, releaseProcessLock } from './process-lock';
 import { fetchRepositoryFiles } from './repository-files';
 import { checkOne, triggerImmediateCycle } from './server-scheduler';
 import { fetchApplicationHtml } from './status-checker';
@@ -355,14 +359,35 @@ async function handleUpdate(botToken: string, chatId: string, update: TelegramUp
   await sendMainMenu(botToken, chatId);
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const CONFLICT_BACKOFF_MS = 10 * 60 * 1000;
+let _networkFailures = 0;
+let _conflictReported = false;
+
+/** 409 = a webhook is set for this bot or another process polls it. Explain once, then retry rarely. */
+async function handleConflict(botToken: string): Promise<void> {
+  if (!_conflictReported) {
+    _conflictReported = true;
+    let reason = 'другой процесс уже опрашивает этого бота (getUpdates)';
+    try {
+      const info = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`).then((r) => r.json()) as { result?: { url?: string } };
+      if (info.result?.url) reason = `для бота установлен webhook на ${new URL(info.result.url).host} — Telegram отдаёт команды туда`;
+    } catch {
+      // keep the generic reason
+    }
+    console.error(`[TelegramBot] 409 Conflict: ${reason}. Команды и кнопки бота не работают; уведомления отправляются. Повтор раз в 10 минут.`);
+  }
+  await sleep(CONFLICT_BACKOFF_MS);
+}
+
 async function pollOnce(): Promise<void> {
-  const db = await readLocalDb();
-  if (!isTelegramConfigured(db.settings)) {
-    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  const settings = await readSettings();
+  if (!isTelegramConfigured(settings)) {
+    await sleep(10_000);
     return;
   }
 
-  const { bot_token: botToken, chat_id: notificationsChatId, commands_chat_id: commandsChatId } = db.settings.telegram;
+  const { bot_token: botToken, chat_id: notificationsChatId, commands_chat_id: commandsChatId } = settings.telegram;
   // The notifications chat_id is usually a broadcast channel, which can't
   // hold a two-way conversation — interactive commands (browse/history) come
   // through the separate commands_chat_id instead, once the user has set it.
@@ -372,21 +397,36 @@ async function pollOnce(): Promise<void> {
   try {
     resp = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?offset=${_offset}&timeout=25`);
   } catch (err) {
-    console.error('[TelegramBot] getUpdates network error:', err);
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    // No internet: log the first failure of a streak only, back off up to 2 min.
+    if (_networkFailures === 0) console.error('[TelegramBot] getUpdates network error:', err instanceof Error ? err.message : err);
+    _networkFailures++;
+    await sleep(Math.min(5_000 * 2 ** Math.min(_networkFailures, 5), 120_000));
     return;
+  }
+  if (_networkFailures > 0) {
+    console.log(`[TelegramBot] Connection restored after ${_networkFailures} failed attempts`);
+    _networkFailures = 0;
+  }
+
+  if (resp.status === 409) {
+    await handleConflict(botToken);
+    return;
+  }
+  if (_conflictReported) {
+    console.log('[TelegramBot] Conflict resolved — receiving commands again');
+    _conflictReported = false;
   }
 
   if (!resp.ok) {
     console.error('[TelegramBot] getUpdates failed:', resp.status);
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    await sleep(30_000);
     return;
   }
 
   const data = (await resp.json()) as GetUpdatesResponse;
   if (!data.ok || !data.result) {
     console.error('[TelegramBot] getUpdates returned not-ok:', data.description);
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    await sleep(30_000);
     return;
   }
 
@@ -422,6 +462,13 @@ async function pollOnce(): Promise<void> {
 
 export function startTelegramBotPolling(): void {
   if (_polling) return;
+  const lockFile = path.join(resolveLocalProjectRoot(), 'data', 'telegram-bot.lock');
+  const lock = acquireProcessLock(lockFile);
+  if (!lock.ok) {
+    console.error(`[TelegramBot] Another server (PID ${lock.holder}) already polls the bot — this one only sends notifications`);
+    return;
+  }
+  process.once('exit', () => releaseProcessLock(lockFile));
   _polling = true;
   console.log('[TelegramBot] Polling started');
 

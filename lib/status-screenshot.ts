@@ -43,22 +43,53 @@ export async function captureApplicationStatusScreenshot(
     ? redactedHtml.replace('<head>', `<head><base href="${ORIGIN}/">`)
     : `<base href="${ORIGIN}/">${redactedHtml}`;
 
-  // Dynamic import — puppeteer-core is an ESM-only package; a static import
-  // would break under Jest's CommonJS transform. Also keeps it unloaded when
-  // no browser is installed (the early return above).
-  let browser: Awaited<ReturnType<(typeof import('puppeteer-core'))['default']['launch']>> | null = null;
+  let tab: Awaited<ReturnType<Browser['newPage']>> | null = null;
   try {
-    const { default: puppeteer } = await import('puppeteer-core');
-    browser = await puppeteer.launch({ executablePath, headless: true });
-    const tab = await browser.newPage();
+    const browser = await getBrowser(executablePath);
+    tab = await browser.newPage();
     await tab.setViewport({ width: 1000, height: 800 });
     await tab.setContent(patched, { waitUntil: 'load', timeout: 20000 });
     const buffer = await tab.screenshot({ fullPage: true, type: 'png' });
     return Buffer.from(buffer);
   } catch (err) {
     console.error('[StatusScreenshot] Failed to render screenshot:', err);
+    await closeBrowser();
     return null;
   } finally {
-    await browser?.close();
+    await tab?.close().catch(() => {});
+    scheduleIdleClose();
   }
+}
+
+// One Chrome reused across screenshots (launching it costs several seconds),
+// closed after 5 idle minutes so it doesn't sit in memory between cycles.
+type Browser = Awaited<ReturnType<(typeof import('puppeteer-core'))['default']['launch']>>;
+const IDLE_CLOSE_MS = 5 * 60 * 1000;
+let browserPromise: Promise<Browser> | null = null;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getBrowser(executablePath: string): Promise<Browser> {
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  if (!browserPromise) {
+    // Dynamic import — puppeteer-core is ESM-only; a static import would break
+    // under Jest's CommonJS transform, and it stays unloaded without a browser.
+    browserPromise = import('puppeteer-core').then(({ default: puppeteer }) => puppeteer.launch({ executablePath, headless: true }));
+    browserPromise.then((b) => b.on('disconnected', () => { browserPromise = null; })).catch(() => { browserPromise = null; });
+  }
+  return browserPromise;
+}
+
+function scheduleIdleClose(): void {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => void closeBrowser(), IDLE_CLOSE_MS);
+  idleTimer.unref?.();
+}
+
+export { closeBrowser as closeScreenshotBrowser };
+
+async function closeBrowser(): Promise<void> {
+  const pending = browserPromise;
+  browserPromise = null;
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  await pending?.then((b) => b.close()).catch(() => {});
 }

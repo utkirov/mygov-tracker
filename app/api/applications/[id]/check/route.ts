@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
+  getApplicationById,
   insertStatusHistory,
-  readLocalDb,
+  readSettings,
   touchMeta,
   updateApplicationFields,
   type LocalDbApplication,
@@ -54,8 +55,7 @@ function buildChangeSummary(
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const isManual = req.nextUrl.searchParams.get('manual') === 'true';
-  const db = await readLocalDb();
-  const application = db.applications.find((entry) => entry.id === id);
+  const [application, settings] = await Promise.all([getApplicationById(id), readSettings()]);
 
   if (!application) {
     return NextResponse.json({ error: 'Application not found' }, { status: 404 });
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const checked = session?.status ?? null;
 
   const now = new Date().toISOString();
-  const nextCheckAt = getNextCheckAt(now, db.settings.auto_check);
+  const nextCheckAt = getNextCheckAt(now, settings.auto_check);
 
   if (!checked) {
     const errorMessage = fetchError ?? 'Не удалось получить статус от my.gov.uz';
@@ -113,10 +113,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await updateApplicationFields(id, errorPatch);
     await touchMeta(now);
 
-    if (isTelegramConfigured(db.settings)) {
+    if (isTelegramConfigured(settings)) {
       try {
         await sendTelegramMessage(
-          db.settings,
+          settings,
           buildApplicationErrorMessage({ ...application, ...errorPatch }, errorMessage)
         );
       } catch {
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const updatedApplication: LocalDbApplication = { ...application, ...patch };
 
-  if (isTelegramConfigured(db.settings)) {
+  if (isTelegramConfigured(settings)) {
     try {
       if (changedFields.length > 0) {
         const isNowCompleted = isCompletedStatus(updatedApplication.status) && !isCompletedStatus(previousValues.status ?? '');
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           isNowCompleted && session ? fetchRepositoryFiles(session.page.html) : [],
         ]);
         await sendApplicationChangeNotification({
-          settings: db.settings,
+          settings: settings,
           application: updatedApplication,
           changedFields,
           previousValues,
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           repositoryFiles,
         });
       } else if (isManual) {
-        await sendTelegramMessage(db.settings, buildManualCheckResultMessage(updatedApplication));
+        await sendTelegramMessage(settings, buildManualCheckResultMessage(updatedApplication));
       }
     } catch (err) {
       console.error('[check route] Telegram error:', err);

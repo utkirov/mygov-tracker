@@ -259,19 +259,68 @@ export async function readLocalDb(rootPath?: string): Promise<LocalDb> {
       expires_at: nullableString(sub?.expires_at),
       updated_at: nullableString(sub?.updated_at),
     },
-    settings: {
-      theme: (settings?.theme === 'light' || settings?.theme === 'dark' ? settings.theme : 'system') as LocalDbSettings['theme'],
-      telegram: {
-        bot_token: String(settings?.telegram_bot_token ?? ''),
-        chat_id: String(settings?.telegram_chat_id ?? ''),
-        commands_chat_id: String(settings?.telegram_commands_chat_id ?? ''),
-      },
-      auto_check: rowToAutoCheckSettings(settings, defaults.settings.auto_check),
-      sound_enabled: settings?.sound_enabled !== undefined
-        ? boolFromSqlite(settings.sound_enabled)
-        : defaults.settings.sound_enabled,
-    },
+    settings: rowToSettings(settings),
   };
+}
+
+function rowToSettings(settings: Record<string, unknown> | undefined): LocalDbSettings {
+  const defaults = createDefaultLocalDb();
+  return {
+    theme: (settings?.theme === 'light' || settings?.theme === 'dark' ? settings.theme : 'system') as LocalDbSettings['theme'],
+    telegram: {
+      bot_token: String(settings?.telegram_bot_token ?? ''),
+      chat_id: String(settings?.telegram_chat_id ?? ''),
+      commands_chat_id: String(settings?.telegram_commands_chat_id ?? ''),
+    },
+    auto_check: rowToAutoCheckSettings(settings, defaults.settings.auto_check),
+    sound_enabled: settings?.sound_enabled !== undefined
+      ? boolFromSqlite(settings.sound_enabled)
+      : defaults.settings.sound_enabled,
+  };
+}
+
+// ── targeted reads ─────────────────────────────────────────────────────────
+// readLocalDb() loads every table; hot paths (bot polling every 25 s, each
+// scheduler check, list/detail API) only need one slice of it.
+
+export async function readSettings(rootPath?: string): Promise<LocalDbSettings> {
+  const db = await openDb(rootPath);
+  return rowToSettings(db.prepare('SELECT * FROM settings WHERE id = 1').get() as Record<string, unknown> | undefined);
+}
+
+export async function listApplications(opts: { archived?: boolean; projectId?: string } = {}, rootPath?: string): Promise<LocalDbApplication[]> {
+  const db = await openDb(rootPath);
+  const where: string[] = [];
+  const args: unknown[] = [];
+  if (opts.archived !== undefined) { where.push('archived = ?'); args.push(opts.archived ? 1 : 0); }
+  if (opts.projectId !== undefined) { where.push('project_id = ?'); args.push(opts.projectId); }
+  const sql = `SELECT * FROM applications ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at`;
+  return (db.prepare(sql).all(...args) as Record<string, unknown>[]).map(rowToApplication);
+}
+
+export async function getApplicationById(id: string, rootPath?: string): Promise<LocalDbApplication | null> {
+  const db = await openDb(rootPath);
+  const row = db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  return row ? rowToApplication(row) : null;
+}
+
+export async function getStatusHistory(applicationId: string, rootPath?: string): Promise<LocalDbStatusHistory[]> {
+  const db = await openDb(rootPath);
+  return db.prepare('SELECT * FROM status_history WHERE application_id = ? ORDER BY recorded_at DESC').all(applicationId) as LocalDbStatusHistory[];
+}
+
+/**
+ * check_log grows by every check (70k+ rows after five months). Routine
+ * "unchanged" rows are kept 30 days, changes and errors 180 days.
+ */
+export async function pruneCheckLog(now = new Date(), rootPath?: string): Promise<number> {
+  const db = await openDb(rootPath);
+  const day = 24 * 60 * 60 * 1000;
+  const routineCutoff = new Date(now.getTime() - 30 * day).toISOString();
+  const keepCutoff = new Date(now.getTime() - 180 * day).toISOString();
+  const routine = db.prepare(`DELETE FROM check_log WHERE result = 'unchanged' AND checked_at < ?`).run(routineCutoff).changes;
+  const old = db.prepare(`DELETE FROM check_log WHERE checked_at < ?`).run(keepCutoff).changes;
+  return routine + old;
 }
 
 /**

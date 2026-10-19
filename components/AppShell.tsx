@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Archive, Keyboard, LayoutDashboard, Moon, Plus, RefreshCw, Search, Settings, Sun, X } from 'lucide-react';
 
 import { useSyncEngineSnapshot, startSyncEngine, stopSyncEngine, requestImmediateSyncRun } from '@/lib/sync-engine';
-import { showToast } from '@/lib/toast';
 import { useTheme } from './ThemeProvider';
 import { CommandPalette } from './CommandPalette';
 import { NotificationsPanel } from './NotificationsPanel';
@@ -142,7 +141,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const handleCheckNow = useCallback(() => {
     if (sync.isRunning) return;
     requestImmediateSyncRun();
-    showToast({ title: 'Проверка запущена', description: 'Очередь обходит все активные заявления.', tone: 'success' });
   }, [sync.isRunning]);
 
   // Global keyboard shortcuts

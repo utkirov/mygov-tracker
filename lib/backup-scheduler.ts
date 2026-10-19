@@ -4,7 +4,7 @@
  * off at 03:00). Loaded once via instrumentation.ts, like server-scheduler.ts.
  */
 import { createBackup, readBackupStatus } from './backup';
-import { readLocalDb } from './local-db';
+import { readSettings } from './local-db';
 import { isTelegramConfigured, sendTelegramMessage } from './telegram';
 
 const BACKUP_HOUR = 3;
@@ -25,7 +25,7 @@ export function msUntilNextRun(now: Date, hour = BACKUP_HOUR): number {
 
 async function notify(text: string): Promise<void> {
   try {
-    const { settings } = await readLocalDb();
+    const settings = await readSettings();
     if (isTelegramConfigured(settings)) await sendTelegramMessage(settings, text);
   } catch (err) {
     console.error('[Backup] Telegram notify failed:', err);

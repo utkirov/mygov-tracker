@@ -158,5 +158,11 @@ function applySchema(db: Database.Database): void {
       expires_at TEXT NOT NULL,
       revoked_at TEXT
     );
+
+    CREATE INDEX IF NOT EXISTS idx_check_log_checked_at ON check_log(checked_at);
+    CREATE INDEX IF NOT EXISTS idx_check_log_app ON check_log(application_id, checked_at);
+    CREATE INDEX IF NOT EXISTS idx_status_history_app ON status_history(application_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_applications_archived ON applications(archived);
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(username);
   `);
 }

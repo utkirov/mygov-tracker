@@ -8,11 +8,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import {
+  getApplicationById,
   insertStatusHistory,
-  readLocalDb,
+  listApplications,
+  pruneCheckLog,
+  readSettings,
   touchMeta,
   updateApplicationFields,
-  writeLocalDb,
   type LocalDbApplication,
   type LocalDbApplicationChangeField,
 } from './local-db';
@@ -109,8 +111,7 @@ export interface CheckOneResult {
 export async function checkOne(application: LocalDbApplication): Promise<CheckOneResult> {
   // Mark as checking — single targeted update instead of a full-snapshot read/write,
   // so a concurrent PATCH/DELETE (or another checkOne call) can't race and lose data.
-  const initialDb = await readLocalDb();
-  if (!initialDb.applications.some(a => a.id === application.id)) return { result: 'error', session: null };
+  if (!(await getApplicationById(application.id))) return { result: 'error', session: null };
 
   const checkingAt = new Date().toISOString();
   await updateApplicationFields(application.id, {
@@ -129,13 +130,12 @@ export async function checkOne(application: LocalDbApplication): Promise<CheckOn
   }
   const checked = session?.status ?? null;
 
-  const db = await readLocalDb();
-  const entry = db.applications.find(a => a.id === application.id);
+  const [entry, settings] = await Promise.all([getApplicationById(application.id), readSettings()]);
   if (!entry) return { result: 'error', session };
 
   const now = new Date().toISOString();
-  const intervalMinutes = db.settings.auto_check.interval_minutes ?? 15;
-  const nextCheckAt = db.settings.auto_check.enabled && intervalMinutes > 0
+  const intervalMinutes = settings.auto_check.interval_minutes ?? 15;
+  const nextCheckAt = settings.auto_check.enabled && intervalMinutes > 0
     ? (() => { const d = new Date(now); d.setMinutes(d.getMinutes() + intervalMinutes); return d.toISOString(); })()
     : null;
 
@@ -153,8 +153,8 @@ export async function checkOne(application: LocalDbApplication): Promise<CheckOn
 
     await writeCheckLog(entry.id, entry.application_number, 'error', [], errorMessage);
 
-    if (isTelegramConfigured(db.settings)) {
-      sendTelegramMessage(db.settings, buildApplicationErrorMessage({ ...entry, ...errorPatch }, errorMessage))
+    if (isTelegramConfigured(settings)) {
+      sendTelegramMessage(settings, buildApplicationErrorMessage({ ...entry, ...errorPatch }, errorMessage))
         .catch(err => console.error('[Scheduler] Telegram error (check error):', err));
     }
     return { result: 'error', session };
@@ -219,7 +219,7 @@ export async function checkOne(application: LocalDbApplication): Promise<CheckOn
   const result: 'changed' | 'unchanged' = changedFields.length > 0 ? 'changed' : 'unchanged';
   await writeCheckLog(updatedEntry.id, updatedEntry.application_number, result, changedFields);
 
-  if (isTelegramConfigured(db.settings) && changedFields.length > 0) {
+  if (isTelegramConfigured(settings) && changedFields.length > 0) {
     const isNowCompleted = isCompletedStatus(updatedEntry.status) && !isCompletedStatus(previousValues.status ?? '');
     Promise.all([
       buildStatusSnapshotPdf({ application: updatedEntry, changedFields, previousValues, nextValues }),
@@ -228,7 +228,7 @@ export async function checkOne(application: LocalDbApplication): Promise<CheckOn
       // the page once the application is finalized — fetch them then.
       isNowCompleted && session ? fetchRepositoryFiles(session.page.html) : [],
     ]).then(([readablePdf, screenshotPng, repositoryFiles]) => sendApplicationChangeNotification({
-      settings: db.settings,
+      settings: settings,
       application: updatedEntry,
       changedFields,
       previousValues,
@@ -255,16 +255,15 @@ async function runCycle(onlyIds?: string[]): Promise<void> {
   void persistSchedulerStatus();
 
   try {
-    const db = await readLocalDb();
-    if (!db.settings.auto_check.enabled && !onlyIds) return;
+    const settings = await readSettings();
+    if (!settings.auto_check.enabled && !onlyIds) return;
 
-    const concurrency = Math.max(1, db.settings.auto_check.concurrency_limit ?? 1);
-    const delayMs = db.settings.auto_check.delay_between_checks_ms ?? 2500;
+    const concurrency = Math.max(1, settings.auto_check.concurrency_limit ?? 1);
+    const delayMs = settings.auto_check.delay_between_checks_ms ?? 2500;
 
-    const candidates = db.applications.filter(a => {
-      if (onlyIds) return onlyIds.includes(a.id);
-      return !a.archived && !isCompletedStatus(a.status);
-    });
+    const candidates = onlyIds
+      ? (await Promise.all(onlyIds.map(id => getApplicationById(id)))).filter((a): a is LocalDbApplication => a !== null)
+      : (await listApplications({ archived: false })).filter(a => !isCompletedStatus(a.status));
 
     if (candidates.length === 0) {
       console.log('[Scheduler] No candidates to check');
@@ -300,10 +299,10 @@ async function runCycle(onlyIds?: string[]): Promise<void> {
 
     // Don't send cycle summary for retry runs — the original cycle already sent one
     if (!onlyIds) {
-      const freshDb = await readLocalDb();
-      if (isTelegramConfigured(freshDb.settings)) {
+      const freshSettings = await readSettings();
+      if (isTelegramConfigured(freshSettings)) {
         sendTelegramMessage(
-          freshDb.settings,
+          freshSettings,
           buildCycleSummaryMessage({ checkedCount, changedCount, errorCount, finishedAt: new Date().toISOString() }),
         ).catch(err => console.error('[Scheduler] Telegram error (cycle summary):', err));
       }
@@ -333,15 +332,15 @@ function scheduleNext(): void {
     _timer = null;
   }
 
-  readLocalDb().then(db => {
-    if (!db.settings.auto_check.enabled) {
+  readSettings().then(settings => {
+    if (!settings.auto_check.enabled) {
       console.log('[Scheduler] Auto-check disabled, not scheduling');
       _nextCycleAt = null;
       void persistSchedulerStatus();
       return;
     }
-    const intervalMs = (db.settings.auto_check.interval_minutes ?? 15) * 60 * 1000;
-    console.log(`[Scheduler] Next cycle in ${db.settings.auto_check.interval_minutes ?? 15} min`);
+    const intervalMs = (settings.auto_check.interval_minutes ?? 15) * 60 * 1000;
+    console.log(`[Scheduler] Next cycle in ${settings.auto_check.interval_minutes ?? 15} min`);
     _nextCycleAt = new Date(Date.now() + intervalMs).toISOString();
     void persistSchedulerStatus();
     _timer = setTimeout(async () => {
@@ -363,22 +362,33 @@ function scheduleNext(): void {
 /** Archive any applications whose status is completed but archived flag was never set. */
 async function archiveCompletedApplications(): Promise<void> {
   try {
-    const db = await readLocalDb();
-    const stale = db.applications.filter(a => !a.archived && isCompletedStatus(a.status));
+    const stale = (await listApplications({ archived: false })).filter(a => isCompletedStatus(a.status));
     if (stale.length === 0) return;
 
     const now = new Date().toISOString();
     for (const entry of stale) {
-      entry.archived = true;
-      entry.sync_state = 'idle';
-      entry.next_check_at = null;
-      entry.updated_at = now;
+      await updateApplicationFields(entry.id, { archived: true, sync_state: 'idle', next_check_at: null, updated_at: now });
     }
-    db.meta.updated_at = now;
-    await writeLocalDb(db);
+    await touchMeta(now);
     console.log(`[Scheduler] Auto-archived ${stale.length} completed application(s)`);
   } catch (err) {
     console.error('[Scheduler] Failed to auto-archive completed applications:', err);
+  }
+}
+
+/** Daily: drop old check_log rows; compact the file after a large cleanup. */
+async function runMaintenance(): Promise<void> {
+  try {
+    const removed = await pruneCheckLog();
+    if (removed > 0) console.log(`[Scheduler] Pruned ${removed} old check_log row(s)`);
+    if (removed > 5000) {
+      const sqlite = await openDb();
+      sqlite.exec('VACUUM');
+      sqlite.pragma('wal_checkpoint(TRUNCATE)');
+      console.log('[Scheduler] Database compacted');
+    }
+  } catch (err) {
+    console.error('[Scheduler] Maintenance failed:', err);
   }
 }
 
@@ -392,6 +402,8 @@ export function startServerScheduler(): void {
   _startedAt = new Date().toISOString();
   void persistSchedulerStatus();
   archiveCompletedApplications().catch(() => {});
+  void runMaintenance();
+  setInterval(() => void runMaintenance(), 24 * 60 * 60 * 1000);
   scheduleNext();
 }
 

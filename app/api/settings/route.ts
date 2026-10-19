@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { readLocalDb, writeLocalDb, type LocalDbSettings } from '@/lib/local-db';
+import { readLocalDb, readSettings, writeLocalDb, type LocalDbSettings } from '@/lib/local-db';
 import { reschedule } from '@/lib/server-scheduler';
 import { sendTelegramMessage } from '@/lib/telegram';
 
@@ -205,8 +205,7 @@ function mergeSettings(current: LocalDbSettings, body: Record<string, unknown>):
 }
 
 export async function GET() {
-  const db = await readLocalDb();
-  return NextResponse.json(toFlatSettings(db.settings));
+  return NextResponse.json(toFlatSettings(await readSettings()));
 }
 
 export async function POST(request: NextRequest) {

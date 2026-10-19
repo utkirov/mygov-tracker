@@ -64,6 +64,11 @@ next-env.d.ts
 /data/.backup-snapshot-*
 *.mgbk
 
+# supervisor runtime
+/logs/
+/data/supervisor.pid
+/data/telegram-bot.lock
+
 # autostart runtime artifacts
 autostart.log
 autostart-build.log
