@@ -7,13 +7,14 @@
  */
 import path from 'node:path';
 
+import { saveArtifacts } from './application-artifacts';
+import type { CheckOutputs } from './check-outputs';
 import { readLocalDb, readSettings, type LocalDbApplication, type LocalDbStatusHistory } from './local-db';
 import { resolveLocalProjectRoot } from './local-paths';
 import { acquireProcessLock, releaseProcessLock, startLockHeartbeat } from './process-lock';
 import { fetchRepositoryFiles } from './repository-files';
 import { checkOne, triggerImmediateCycle } from './server-scheduler';
 import { fetchApplicationHtml } from './status-checker';
-import { captureApplicationStatusScreenshot } from './status-screenshot';
 import { isTelegramConfigured, sendTelegramDocumentToChat } from './telegram';
 import { isApplicationCheckable, isCompletedStatus } from '@/types';
 
@@ -163,18 +164,21 @@ async function sendApplicationCard(botToken: string, chatId: string, application
 
   let screenshotPng: Buffer | null = null;
   let statusHtml: string | null = null;
+  let outputs: CheckOutputs | undefined;
 
   if (isApplicationCheckable(application)) {
     await callTelegramApi(botToken, 'sendMessage', {
       chat_id: chatId,
       text: `🔄 Проверяю № ${escapeHtml(application.application_number)} через my.gov.uz…`,
     });
-    const { session } = await checkOne(application);
+    const checked = await checkOne(application, { manual: true, awaitOutputs: true });
+    const { session } = checked;
+    outputs = checked.outputs;
     db = await readLocalDb();
     application = db.applications.find((a) => a.id === applicationId) ?? application;
     if (session) {
       statusHtml = session.page.html;
-      screenshotPng = await captureApplicationStatusScreenshot(session.page, application.verification_password);
+      screenshotPng = outputs?.screenshotPng ?? null;
     }
   } else if (isCompletedStatus(application.status)) {
     const page = await fetchApplicationHtml(application.application_number, application.verification_password);
@@ -204,7 +208,8 @@ async function sendApplicationCard(botToken: string, chatId: string, application
   }
 
   if (statusHtml && isCompletedStatus(application.status)) {
-    const files = await fetchRepositoryFiles(statusHtml);
+    const files = outputs?.repositoryFiles.length ? outputs.repositoryFiles : await fetchRepositoryFiles(statusHtml);
+    await saveArtifacts(application.id, { results: files }).catch((err) => console.error('[TelegramBot] Failed to save result documents:', err));
     for (let i = 0; i < files.length; i++) {
       const { ref, file } = files[i];
       await sendTelegramDocumentToChat(

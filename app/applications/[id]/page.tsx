@@ -15,11 +15,12 @@ import { ArrowLeft, GitBranch } from 'lucide-react';
 import { syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import { formatDate, getChangeHeadline } from '@/lib/format-utils';
 import { showToast } from '@/lib/toast';
-import type { Application, StatusHistory as TStatusHistory } from '@/types';
+import type { Application, ApplicationArtifacts, StatusHistory as TStatusHistory } from '@/types';
 import {
   getApplicationChangeFieldLabel,
   getMyGovStatus,
   isApplicationCheckable,
+  isCompletedStatus,
 } from '@/types';
 
 const HistorySection = dynamic(
@@ -63,6 +64,21 @@ const PdfSection = dynamic(
   }
 );
 
+const ScreenshotSection = dynamic(
+  () => import('@/components/detail/ScreenshotSection'),
+  {
+    loading: () => (
+      <div className="rounded-[12px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <div className="h-5 w-48 rounded-lg animate-shimmer" />
+        <div className="mt-4 h-64 rounded-[10px] animate-shimmer" />
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
+const EMPTY_ARTIFACTS: ApplicationArtifacts = { screenshot: null, status_pdf: null, results: [] };
+
 const OperationalDataSection = dynamic(
   () => import('@/components/detail/OperationalDataSection'),
   {
@@ -92,13 +108,18 @@ export default function DetailPage() {
   const [pdfUploading, setPdfUploading] = useState(false);
   const [chain, setChain] = useState<Application[]>([]);
   const [loadError, setLoadError] = useState(false);
+  const [artifacts, setArtifacts] = useState<ApplicationArtifacts>(EMPTY_ARTIFACTS);
 
   const loadApplication = useCallback(async () => {
     try {
       const response = await fetch(`/api/applications/${id}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Не удалось загрузить заявление');
       const payload = await response.json() as { application: Application; history: TStatusHistory[] };
+      const files = await fetch(`/api/applications/${id}/artifacts`, { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() as Promise<ApplicationArtifacts> : EMPTY_ARTIFACTS))
+        .catch(() => EMPTY_ARTIFACTS);
       startTransition(() => {
+        setArtifacts(files);
         setApplication(payload.application);
         setHistory(payload.history);
         setNotes(payload.application.notes);
@@ -540,6 +561,11 @@ export default function DetailPage() {
               )}
             </div>
 
+            <ScreenshotSection
+              applicationId={id}
+              screenshot={artifacts.screenshot}
+              checkable={checkable}
+            />
             <HistorySection timelineItems={timelineItems} />
           </div>
 
@@ -560,6 +586,9 @@ export default function DetailPage() {
               pdfFilename={application.pdf_filename}
               pdfUploading={pdfUploading}
               onPdfReupload={handlePdfReupload}
+              artifacts={artifacts}
+              completed={isCompletedStatus(application.status)}
+              onArtifactsChange={setArtifacts}
             />
           </div>
         </div>

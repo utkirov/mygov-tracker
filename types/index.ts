@@ -186,3 +186,22 @@ export const PROJECT_COLORS = [
   '#0071e3', '#34c759', '#ff9500', '#ff3b30',
   '#af52de', '#ff2d55', '#5ac8fa', '#ffcc00',
 ];
+
+/** Files a status check stored for an application (see lib/application-artifacts.ts). */
+export interface ArtifactFile {
+  file: string;
+  size: number;
+  saved_at: string;
+}
+
+export interface ResultDocument extends ArtifactFile {
+  title: string;
+  state: string;
+  pin: string;
+}
+
+export interface ApplicationArtifacts {
+  screenshot: ArtifactFile | null;
+  status_pdf: ArtifactFile | null;
+  results: ResultDocument[];
+}

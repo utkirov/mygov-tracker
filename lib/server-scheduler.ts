@@ -18,12 +18,10 @@ import {
   type LocalDbApplication,
   type LocalDbApplicationChangeField,
 } from './local-db';
+import { produceCheckOutputs, type CheckOutputs } from './check-outputs';
 import { openDb } from './sqlite-db';
-import { fetchRepositoryFiles } from './repository-files';
 import { sendPushToAll } from './push';
 import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, parseMyGovDate } from './status-checker';
-import { captureApplicationStatusScreenshot } from './status-screenshot';
-import { buildStatusSnapshotPdf } from './status-pdf';
 import {
   buildApplicationErrorMessage,
   buildCycleSummaryMessage,
@@ -107,9 +105,14 @@ export interface CheckOneResult {
   result: 'changed' | 'unchanged' | 'error';
   /** The fetched my.gov.uz session, when the check reached that point — lets callers (e.g. the Telegram bot) build a status screenshot without re-fetching. */
   session: Awaited<ReturnType<typeof fetchApplicationStatusSession>> | null;
+  /** Screenshot / PDFs built for this check — only filled when called with `awaitOutputs`. */
+  outputs?: CheckOutputs;
 }
 
-export async function checkOne(application: LocalDbApplication): Promise<CheckOneResult> {
+export async function checkOne(
+  application: LocalDbApplication,
+  options: { manual?: boolean; awaitOutputs?: boolean } = {},
+): Promise<CheckOneResult> {
   // Mark as checking — single targeted update instead of a full-snapshot read/write,
   // so a concurrent PATCH/DELETE (or another checkOne call) can't race and lose data.
   if (!(await getApplicationById(application.id))) return { result: 'error', session: null };
@@ -220,15 +223,18 @@ export async function checkOne(application: LocalDbApplication): Promise<CheckOn
   const result: 'changed' | 'unchanged' = changedFields.length > 0 ? 'changed' : 'unchanged';
   await writeCheckLog(updatedEntry.id, updatedEntry.application_number, result, changedFields);
 
+  // Screenshot / status PDF / result documents: stored for the site and app,
+  // and reused for the Telegram notification below. Official result documents
+  // only appear on the page once the application is finalized.
+  const outputs = produceCheckOutputs({ application: updatedEntry, session, changedFields, previousValues, nextValues, manual: options.manual })
+    .catch(err => {
+      console.error('[Scheduler] Failed to build check outputs:', err);
+      return { readablePdf: null, screenshotPng: null, repositoryFiles: [] };
+    });
+
   if (isTelegramConfigured(settings) && changedFields.length > 0) {
     const isNowCompleted = isCompletedStatus(updatedEntry.status) && !isCompletedStatus(previousValues.status ?? '');
-    Promise.all([
-      buildStatusSnapshotPdf({ application: updatedEntry, changedFields, previousValues, nextValues }),
-      session ? captureApplicationStatusScreenshot(session.page, application.verification_password) : null,
-      // Official result documents (approval/rejection notices) only appear on
-      // the page once the application is finalized — fetch them then.
-      isNowCompleted && session ? fetchRepositoryFiles(session.page.html) : [],
-    ]).then(([readablePdf, screenshotPng, repositoryFiles]) => sendApplicationChangeNotification({
+    outputs.then(({ readablePdf, screenshotPng, repositoryFiles }) => sendApplicationChangeNotification({
       settings: settings,
       application: updatedEntry,
       changedFields,
@@ -237,9 +243,10 @@ export async function checkOne(application: LocalDbApplication): Promise<CheckOn
       isNowCompleted,
       screenshotPng,
       readablePdf,
-      repositoryFiles,
+      repositoryFiles: isNowCompleted ? repositoryFiles : [],
     })).catch(err => console.error('[Scheduler] Telegram error (change):', err));
   }
+  if (options.awaitOutputs) return { result, session, outputs: await outputs };
 
   if (changedFields.length > 0) {
     sendPushToAll({

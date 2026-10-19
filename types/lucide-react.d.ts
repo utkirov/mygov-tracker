@@ -42,6 +42,29 @@ declare module 'lucide-react' {
   export const Wifi: LucideIcon;
   export const X: LucideIcon;
   export const Zap: LucideIcon;
+  export const Check: LucideIcon;
+  export const ChevronLeft: LucideIcon;
+  export const ChevronRight: LucideIcon;
+  export const CircleCheck: LucideIcon;
+  export const Clock: LucideIcon;
+  export const CloudUpload: LucideIcon;
+  export const Download: LucideIcon;
+  export const ExternalLink: LucideIcon;
+  export const Folder: LucideIcon;
+  export const Inbox: LucideIcon;
+  export const KeyRound: LucideIcon;
+  export const Link: LucideIcon;
+  export const LogOut: LucideIcon;
+  export const Pencil: LucideIcon;
+  export const QrCode: LucideIcon;
+  export const RotateCcw: LucideIcon;
+  export const Send: LucideIcon;
+  export const ShieldCheck: LucideIcon;
+  export const Smartphone: LucideIcon;
+  export const Trash2: LucideIcon;
+  export const TriangleAlert: LucideIcon;
+  export const Upload: LucideIcon;
+  export const User: LucideIcon;
 
   // Re-export the shared type so callers can annotate icon props
   export type { LucideIcon, LucideProps };

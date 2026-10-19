@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/p
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 
+import { getArtifactsRootDir } from './application-artifacts';
 import { resolveLocalProjectRoot } from './local-paths';
 import { getPdfStorageDir } from './local-storage';
 import { openDb } from './sqlite-db';
@@ -225,6 +226,20 @@ async function runBackup(rootPath?: string): Promise<BackupStatus> {
     if (existsSync(pdfDir)) {
       for (const name of (await readdir(pdfDir)).sort()) {
         if (name.toLowerCase().endsWith('.pdf')) files.push({ name: `pdfs/${name}`, data: await readFile(path.join(pdfDir, name)) });
+      }
+    }
+    // Official result documents and their metadata (screenshots and status
+    // PDFs are re-created by the next check, so they're left out).
+    const artifactsDir = getArtifactsRootDir(rootPath);
+    if (existsSync(artifactsDir)) {
+      for (const appId of (await readdir(artifactsDir)).sort()) {
+        const appDir = path.join(artifactsDir, appId);
+        if (!(await stat(appDir)).isDirectory()) continue;
+        for (const name of (await readdir(appDir)).sort()) {
+          if (/^result-\d+\.pdf$/.test(name) || name === 'meta.json') {
+            files.push({ name: `artifacts/${appId}/${name}`, data: await readFile(path.join(appDir, name)) });
+          }
+        }
       }
     }
 

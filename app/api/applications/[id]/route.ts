@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { deleteArtifacts } from '@/lib/application-artifacts';
 import { deletePdfFile } from '@/lib/local-storage';
 import {
   deleteApplicationRow,
@@ -158,6 +159,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   if (pdfStorageKey) {
     await deletePdfFile(pdfStorageKey);
   }
+  await deleteArtifacts(id);
 
   return NextResponse.json({ ok: true });
 }

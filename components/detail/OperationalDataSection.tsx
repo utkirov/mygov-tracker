@@ -5,7 +5,7 @@ import { Copy, Eye, EyeOff } from 'lucide-react';
 
 import type { Application } from '@/types';
 import type { SyncEngineSnapshot } from '@/lib/sync-engine';
-import { formatDate } from '@/lib/format-utils';
+import { formatDate, formatTimeUntil } from '@/lib/format-utils';
 import { showToast } from '@/lib/toast';
 
 import SectionHeading from './SectionHeading';
@@ -77,6 +77,16 @@ export default function OperationalDataSection({ application, sync, checkable }:
           <span className="text-[var(--text-muted)]">SMS-телефон</span>
           <p className="mt-1 font-medium text-[var(--text)]">{application.sms_phone || '—'}</p>
         </div>
+        {checkable && (
+          <div className="flex items-center justify-between gap-3 rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
+            <span className="text-[var(--text-muted)]">Следующая проверка</span>
+            <span className="font-medium" style={{ color: 'var(--accent)' }} title={formatDate(sync.nextRunAt ?? application.next_check_at ?? null)}>
+              {sync.isRunning && sync.currentApplicationId === application.id
+                ? 'идёт сейчас'
+                : formatTimeUntil(sync.nextRunAt ?? application.next_check_at ?? null)}
+            </span>
+          </div>
+        )}
         <div className="rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
           <span className="text-[var(--text-muted)]">Состояние фоновой очереди</span>
           <p className="mt-1 font-medium text-[var(--text)]">

@@ -12,6 +12,23 @@ export function formatTimeAgo(value: string | null): string {
   return `${days}д`;
 }
 
+/** "через 16 мин" / "через 2 ч" for a future timestamp; "сейчас" once it has passed. */
+export function formatTimeUntil(value: string | null): string {
+  if (!value) return '—';
+  const mins = Math.ceil((new Date(value).getTime() - Date.now()) / 60_000);
+  if (Number.isNaN(mins)) return '—';
+  if (mins <= 0) return 'сейчас';
+  if (mins < 60) return `через ${mins} мин`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 24 ? `через ${hrs} ч` : `через ${Math.round(hrs / 24)} д`;
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+  return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`;
+}
+
 export function formatDate(value: string | null, options?: { long?: boolean }): string {
   if (!value) {
     return '—';

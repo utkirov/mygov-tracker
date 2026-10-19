@@ -8,15 +8,24 @@ const ORIGIN = 'https://oldmy.gov.uz:4433';
 // ponytail: no bundled-Chromium dependency — reuse whatever browser is
 // already installed. Add more candidate paths if this ever runs on a
 // machine without Chrome or Edge.
-const BROWSER_CANDIDATES = [
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-];
+// Edge is last on purpose: on this PC it exits immediately (code 0) when
+// launched headless, while Chrome and Yandex Browser (Chromium) work.
+// SCREENSHOT_BROWSER in .env.local overrides the search.
+function browserCandidates(): string[] {
+  const localAppData = process.env.LOCALAPPDATA ?? '';
+  return [
+    process.env.SCREENSHOT_BROWSER?.trim() ?? '',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    localAppData && `${localAppData}\\Google\\Chrome\\Application\\chrome.exe`,
+    localAppData && `${localAppData}\\Yandex\\YandexBrowser\\Application\\browser.exe`,
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+  ].filter(Boolean);
+}
 
 function findBrowserExecutable(): string | null {
-  return BROWSER_CANDIDATES.find(existsSync) ?? null;
+  return browserCandidates().find((candidate) => existsSync(candidate)) ?? null;
 }
 
 /**
