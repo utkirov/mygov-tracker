@@ -2,20 +2,54 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, GitBranch } from 'lucide-react';
+import { Check, ChevronRight, X } from 'lucide-react';
 
 import { PdfUpload } from '@/components/PdfUpload';
 import { requestImmediateSyncRun } from '@/lib/sync-engine';
 import { showToast } from '@/lib/toast';
-import type { Application, ParsedPdf } from '@/types';
+import type { Application, ParsedPdf, Project } from '@/types';
 
-function Section({ children }: { children: React.ReactNode }) {
+type Step = 1 | 2 | 3;
+
+// The fields a my.gov.uz application PDF normally contains — "Распознано N полей из 8".
+const RECOGNISED_KEYS = [
+  'application_number', 'verification_password', 'service_name', 'organization',
+  'status', 'submission_date', 'current_action', 'sms_phone',
+] as const satisfies ReadonlyArray<keyof ParsedPdf>;
+
+function Card({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div
-      className="rounded-[12px] border p-4 md:p-5"
-      style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}
-    >
+    <section className="rounded-[14px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-semibold" style={{ color: 'var(--text)' }}>{title}</h2>
+        {aside}
+      </div>
       {children}
+    </section>
+  );
+}
+
+function Steps({ step }: { step: Step }) {
+  const items = ['Загрузка PDF', 'Проверка данных', 'Первая проверка статуса'];
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      {items.map((label, i) => {
+        const n = (i + 1) as Step;
+        const reached = n <= step;
+        return (
+          <div key={label} className="flex items-center gap-2">
+            {i > 0 && <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
+            <span className="inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-[12px] font-medium"
+              style={{ background: reached ? 'var(--accent-soft)' : 'var(--panel)', color: reached ? 'var(--accent)' : 'var(--text-muted)' }}>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold"
+                style={reached ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--panel-strong)', color: 'var(--text-muted)' }}>
+                {n < step ? <Check size={11} /> : n}
+              </span>
+              {label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -23,37 +57,50 @@ function Section({ children }: { children: React.ReactNode }) {
 function AddPageInner() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const parentId     = searchParams.get('parent_id');
+  const initialParent  = searchParams.get('parent_id');
+  const initialProject = searchParams.get('project_id');
 
-  const [parsed,         setParsed]         = useState<ParsedPdf | null>(null);
-  const [filename,       setFilename]       = useState('');
-  const [pdfStorageKey,  setPdfStorageKey]  = useState('');
-  const [objectName,     setObjectName]     = useState('');
-  const [notes,          setNotes]          = useState('');
-  const [saving,         setSaving]         = useState(false);
-  const [status,         setStatus]         = useState('');
-  const [error,          setError]          = useState('');
-  const [confirmReset,   setConfirmReset]   = useState(false);
-  const [parentApp,      setParentApp]      = useState<Application | null>(null);
+  const [parsed,        setParsed]        = useState<ParsedPdf | null>(null);
+  const [filename,      setFilename]      = useState('');
+  const [pdfStorageKey, setPdfStorageKey] = useState('');
+  const [objectName,    setObjectName]    = useState('');
+  const [notes,         setNotes]         = useState('');
+  const [projectId,     setProjectId]     = useState(initialProject ?? '');
+  const [parentId,      setParentId]      = useState(initialParent ?? '');
+  const [projects,      setProjects]      = useState<Project[]>([]);
+  const [candidates,    setCandidates]    = useState<Application[]>([]);
+  const [step,          setStep]          = useState<Step>(1);
+  const [saving,        setSaving]        = useState(false);
+  const [error,         setError]         = useState('');
 
   const pdfStorageKeyRef      = useRef('');
   const createdApplicationRef = useRef(false);
 
   useEffect(() => { pdfStorageKeyRef.current = pdfStorageKey; }, [pdfStorageKey]);
 
-  // Load parent application info if continuing a chain
   useEffect(() => {
-    if (!parentId) return;
-    fetch(`/api/applications/${parentId}`)
+    fetch('/api/projects', { cache: 'no-store' }).then(r => r.json())
+      .then((list: Project[]) => setProjects(Array.isArray(list) ? list : [])).catch(() => {});
+    Promise.all([
+      fetch('/api/applications', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
+      fetch('/api/applications?archived=true', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
+    ]).then(([active, archived]: [Application[], Application[]]) => {
+      setCandidates([...(Array.isArray(active) ? active : []), ...(Array.isArray(archived) ? archived : [])]);
+    });
+  }, []);
+
+  // Continuing a chain: prefill object, notes and project from the parent.
+  useEffect(() => {
+    if (!initialParent) return;
+    fetch(`/api/applications/${initialParent}`)
       .then(r => r.json())
       .then(({ application }: { application: Application }) => {
-        setParentApp(application);
-        // Prefill from the parent as a starting point — still editable before saving.
         setObjectName(application.object_name ?? '');
         setNotes(application.notes ?? '');
+        if (application.project_id) setProjectId(application.project_id);
       })
       .catch(() => {});
-  }, [parentId]);
+  }, [initialParent]);
 
   async function cleanupTempPdf(pdfKey: string) {
     if (!pdfKey) return;
@@ -94,20 +141,27 @@ function AddPageInner() {
     setFilename(nextFilename);
     setPdfStorageKey(storageKey);
     setError('');
-    setStatus('');
+    setStep(2);
   }
 
-  async function resetUnsavedUpload() {
+  async function removePdf() {
     const key = pdfStorageKeyRef.current;
     if (!createdApplicationRef.current && key) await cleanupTempPdf(key);
     setParsed(null); setFilename(''); setPdfStorageKey('');
-    setObjectName(''); setNotes('');
-    setError(''); setStatus('');
+    setError(''); setStep(1);
+  }
+
+  function setField(key: keyof ParsedPdf, value: string) {
+    setParsed(prev => (prev ? { ...prev, [key]: value } : prev));
   }
 
   async function handleSave() {
     if (!parsed || !pdfStorageKey) { setError('Сначала загрузите PDF заявления'); return; }
-    setSaving(true); setError(''); setStatus('Сохраняю заявление…');
+    if (!parsed.application_number.trim() || !parsed.verification_password.trim()) {
+      setError('Нужны номер заявления и пароль проверки — без них my.gov.uz не отдаст статус');
+      return;
+    }
+    setSaving(true); setError('');
     try {
       const response = await fetch('/api/applications', {
         method: 'POST',
@@ -118,208 +172,139 @@ function AddPageInner() {
           notes:           notes.trim(),
           pdf_filename:    filename,
           pdf_storage_key: pdfStorageKey,
-          parent_id:       parentId ?? null,
-          project_id:      parentApp?.project_id ?? null,
+          parent_id:       parentId || null,
+          project_id:      projectId || null,
         }),
       });
       const payload = await response.json().catch(() => null) as { id?: string; error?: string } | null;
       if (!response.ok || !payload?.id) throw new Error(payload?.error ?? 'Не удалось сохранить заявление');
       createdApplicationRef.current = true;
-      void fetch(`/api/applications/${payload.id}/check`, { method: 'POST' }).catch(() => {
-        showToast({ title: 'Заявление сохранено', description: 'Первичная проверка не стартовала сразу.', tone: 'warning' });
-      });
+
+      // Step 3: first status check right away, then open the application.
+      setStep(3);
+      const check = await fetch(`/api/applications/${payload.id}/check?manual=true`, { method: 'POST' }).catch(() => null);
       requestImmediateSyncRun();
-      showToast({ title: 'Заявление добавлено', description: 'Запись появилась в общем мониторинге.', tone: 'success' });
-      router.push('/dashboard');
+      if (check?.ok) {
+        showToast({ title: 'Заявление добавлено', description: 'Первая проверка статуса выполнена.', tone: 'success' });
+      } else {
+        showToast({ title: 'Заявление добавлено', description: 'Первая проверка не прошла — повторится автоматически.', tone: 'warning' });
+      }
+      router.push(`/applications/${payload.id}`);
     } catch (saveError) {
-      setStatus('');
+      setStep(2);
       setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить заявление');
     } finally {
       setSaving(false);
     }
   }
 
-  const fields = [
-    { label: 'Номер заявления',  key: 'application_number' },
-    { label: 'Услуга',           key: 'service_name' },
-    { label: 'Организация',      key: 'organization' },
-    { label: 'Статус из PDF',    key: 'status' },
-    { label: 'Дата подачи',      key: 'submission_date' },
-    { label: 'Текущее действие', key: 'current_action' },
-    { label: 'Пароль проверки',  key: 'verification_password' },
-  ] as const;
+  const recognised = parsed ? RECOGNISED_KEYS.filter(k => parsed[k]?.trim()).length : 0;
 
-  const inputCls = "w-full rounded-[10px] border px-3 py-2.5 text-[13px] outline-none transition focus:border-[var(--accent)]";
+  const inputCls = 'mt-1 block h-10 w-full rounded-[10px] border px-3 text-[13px] outline-none transition focus:border-[var(--accent)] disabled:opacity-60';
   const inputSty = { background: 'var(--panel)', borderColor: 'var(--border)', color: 'var(--text)' };
+  const labelCls = 'block text-[12px]';
+  const disabled = !parsed || saving;
+
+  const field = (label: string, key: keyof ParsedPdf, placeholder = '') => (
+    <label className={labelCls} style={{ color: 'var(--text-muted)' }}>
+      {label}
+      <input value={parsed?.[key] ?? ''} onChange={e => setField(key, e.target.value)} placeholder={placeholder}
+        disabled={disabled} className={inputCls} style={inputSty} />
+    </label>
+  );
 
   return (
-    <div className="overflow-y-auto px-3 py-4 md:px-5 md:py-6">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+    <div className="h-[calc(100svh-56px)] overflow-y-auto">
+      <div className="mx-auto w-full max-w-[1040px] px-4 py-5 md:px-6 md:py-8">
+        <h1 className="text-[24px] font-bold tracking-tight" style={{ color: 'var(--text)' }}>
+          {initialParent ? 'Продолжение заявки' : 'Новое заявление'}
+        </h1>
+        <p className="mt-1 text-[13px]" style={{ color: 'var(--text-muted)' }}>
+          Загрузите PDF из my.gov.uz — номер, пароль и данные заполнятся автоматически
+        </p>
+        <Steps step={step} />
 
-        {/* Header */}
-        <Section>
-          <div className="flex items-start gap-3">
-            <button
-              onClick={() => router.back()}
-              className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition hover:bg-[var(--panel)] active:scale-90"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
-                {parentId ? 'Продолжение заявки' : 'Новое заявление'}
-              </p>
-              <h1 className="mt-1 text-[18px] font-bold leading-[1.3] md:text-xl" style={{ color: 'var(--text)' }}>
-                {parentId ? 'Подать повторно' : 'Добавить в мониторинг'}
-              </h1>
-              <p className="mt-1.5 text-[12px] leading-[1.6]" style={{ color: 'var(--text-soft)' }}>
-                Загрузите PDF заявления — данные извлекутся автоматически.
-              </p>
-            </div>
-          </div>
-        </Section>
-
-        {/* Continuation banner */}
-        {parentId && (
-          <div
-            className="flex items-start gap-3 rounded-[14px] border p-3.5 animate-slide-down"
-            style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', borderStyle: 'solid', borderWidth: '1px' }}
-          >
-            <GitBranch size={15} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
-            <div className="min-w-0">
-              <p className="text-[12px] font-semibold" style={{ color: 'var(--accent)' }}>
-                Продолжение цепочки
-              </p>
-              <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-soft)' }}>
-                {parentApp
-                  ? `После сохранения будет связано с «${parentApp.object_name || parentApp.service_name}» № ${parentApp.application_number}`
-                  : 'Новая заявка будет связана с предыдущей в цепочке'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* PDF upload or parsed data */}
-        {!parsed ? (
-          <Section>
+        <div className="mt-5 grid items-start gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
+          <Card title="PDF заявления">
             <PdfUpload onParsed={handleParsed} />
-          </Section>
-        ) : (
-          <>
-            {/* Extracted fields */}
-            <Section>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
-                    Извлечено из PDF
+            {parsed && (
+              <div className="mt-3 flex items-center gap-3 rounded-[10px] px-3 py-2.5" style={{ background: 'var(--success-soft, var(--panel))' }}>
+                <Check size={16} style={{ color: 'var(--success)' }} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{filename}</p>
+                  <p className="text-[11px]" style={{ color: 'var(--success)' }}>
+                    Распознано {recognised} {recognised === 1 ? 'поле' : recognised < 5 && recognised > 0 ? 'поля' : 'полей'} из {RECOGNISED_KEYS.length}
                   </p>
-                  <h2 className="mt-1 text-[15px] font-bold" style={{ color: 'var(--text)' }}>
-                    Базовые данные готовы
-                  </h2>
                 </div>
-                <button
-                  onClick={() => { void resetUnsavedUpload(); }}
-                  className="rounded-[9px] border px-3 py-1.5 text-[12px] font-medium transition hover:border-[var(--border-strong)]"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-soft)' }}
-                >
-                  Заменить PDF
+                <button onClick={() => void removePdf()} disabled={saving} aria-label="Убрать PDF" style={{ color: 'var(--text-muted)' }}>
+                  <X size={16} />
                 </button>
               </div>
+            )}
+          </Card>
 
-              <div className="grid gap-2 md:grid-cols-2">
-                {fields.map(field => (
-                  <div key={field.key} className="rounded-[9px] p-3" style={{ background: 'var(--panel)' }}>
-                    <p className="text-[10px] font-semibold " style={{ color: 'var(--text-muted)' }}>
-                      {field.label}
-                    </p>
-                    <p className="mt-1.5 text-[13px] font-medium leading-[1.4]" style={{ color: 'var(--text)' }}>
-                      {parsed[field.key] || '—'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </Section>
+          <Card title="Данные заявления" aside={<span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>проверьте перед сохранением</span>}>
+            {!parsed && (
+              <p className="mb-4 rounded-[10px] px-3 py-2.5 text-[12px]" style={{ background: 'var(--panel)', color: 'var(--text-muted)' }}>
+                Поля заполнятся после загрузки PDF.
+              </p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {field('Номер заявления', 'application_number')}
+              {field('Пароль проверки', 'verification_password')}
+              <label className={labelCls} style={{ color: 'var(--text-muted)' }}>
+                Объект
+                <input value={objectName} onChange={e => setObjectName(e.target.value)} disabled={disabled}
+                  placeholder="Жилой дом, участок, помещение" className={inputCls} style={inputSty} />
+              </label>
+              {field('Услуга', 'service_name')}
+              {field('Организация', 'organization')}
+              {field('Статус', 'status')}
+              {field('Дата подачи', 'submission_date')}
+              {field('SMS-телефон', 'sms_phone')}
+              <label className={labelCls} style={{ color: 'var(--text-muted)' }}>
+                Проект
+                <select value={projectId} onChange={e => setProjectId(e.target.value)} disabled={disabled} className={inputCls} style={inputSty}>
+                  <option value="">Без проекта</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </label>
+              <label className={labelCls} style={{ color: 'var(--text-muted)' }}>
+                Родительское заявление (цепочка)
+                <select value={parentId} onChange={e => setParentId(e.target.value)} disabled={disabled} className={inputCls} style={inputSty}>
+                  <option value="">Не выбрано</option>
+                  {candidates.map(a => (
+                    <option key={a.id} value={a.id}>№ {a.application_number} · {a.object_name || a.service_name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className={`${labelCls} mt-3`} style={{ color: 'var(--text-muted)' }}>
+              Заметки
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} disabled={disabled} placeholder="Необязательно"
+                className="mt-1 block min-h-[64px] w-full resize-y rounded-[10px] border px-3 py-2.5 text-[13px] outline-none focus:border-[var(--accent)] disabled:opacity-60"
+                style={inputSty} />
+            </label>
 
-            {/* Extra fields */}
-            <Section>
-              <div className="space-y-4">
-                <h2 className="text-[13px] font-bold" style={{ color: 'var(--text)' }}>Дополнить запись</h2>
+            {error && (
+              <p className="mt-3 rounded-[10px] px-3 py-2.5 text-[12px] font-medium" style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
+                {error}
+              </p>
+            )}
 
-                <label className="block">
-                  <span className="text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>Название объекта</span>
-                  <input
-                    value={objectName}
-                    onChange={e => setObjectName(e.target.value)}
-                    placeholder="Напр.: жилой дом, участок, помещение"
-                    className={`mt-1.5 ${inputCls}`}
-                    style={inputSty}
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-[12px] font-medium" style={{ color: 'var(--text-soft)' }}>Внутренняя заметка</span>
-                  <textarea
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Контекст, договорённости, важные детали…"
-                    className={`mt-1.5 min-h-[100px] resize-none ${inputCls}`}
-                    style={inputSty}
-                  />
-                </label>
-              </div>
-
-              {(error || status) && (
-                <div
-                  className={`mt-4 rounded-[9px] px-3.5 py-2.5 text-[12px] font-medium ${
-                    error
-                      ? 'border border-red-400/20 bg-red-400/10 text-red-400'
-                      : 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-400'
-                  }`}
-                >
-                  {error || status}
-                </div>
-              )}
-
-              <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
-                {confirmReset ? (
-                  <div className="flex flex-1 items-center gap-2 rounded-[10px] border px-3 py-2"
-                    style={{ borderColor: 'var(--warning)', background: 'var(--warning-soft)' }}>
-                    <span className="flex-1 text-[12px] font-medium" style={{ color: 'var(--warning)' }}>
-                      Данные будут сброшены. Продолжить?
-                    </span>
-                    <button onClick={() => setConfirmReset(false)}
-                      className="rounded-[7px] px-2.5 py-1 text-[11px] font-medium"
-                      style={{ color: 'var(--text-soft)' }}>
-                      Отмена
-                    </button>
-                    <button onClick={() => { setConfirmReset(false); void resetUnsavedUpload(); }}
-                      className="rounded-[7px] px-2.5 py-1 text-[11px] font-semibold"
-                      style={{ background: 'var(--warning)', color: '#fff' }}>
-                      Сбросить
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmReset(true)}
-                    className="flex-1 rounded-[10px] border px-4 py-2.5 text-[13px] font-medium transition hover:border-[var(--border-strong)]"
-                    style={{ borderColor: 'var(--border)', color: 'var(--text-soft)' }}
-                  >
-                    Начать заново
-                  </button>
-                )}
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex-1 rounded-[11px] px-4 py-3.5 text-[14px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
-                  style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
-                >
-                  {saving ? 'Сохраняю…' : parentId ? 'Сохранить продолжение' : 'Сохранить и поставить в очередь'}
-                </button>
-              </div>
-            </Section>
-          </>
-        )}
+            <div className="mt-4 flex items-center justify-end gap-4">
+              <button onClick={() => router.back()} disabled={saving} className="text-[13px] font-medium" style={{ color: 'var(--accent)' }}>
+                Отмена
+              </button>
+              <button onClick={() => void handleSave()} disabled={!parsed || saving}
+                className="inline-flex items-center gap-2 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold transition active:scale-[0.98] disabled:opacity-50"
+                style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}>
+                <Check size={15} />
+                {step === 3 ? 'Проверяю статус…' : saving ? 'Сохраняю…' : 'Добавить и проверить'}
+              </button>
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );
