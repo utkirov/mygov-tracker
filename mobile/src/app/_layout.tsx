@@ -10,12 +10,14 @@ import { Button } from '@/components/ui';
 import { AuthProvider, useAuth } from '@/lib/auth';
 // Also registers the background sync task — must load at startup.
 import { applyTheme, isBiometricLockOn, loadTheme, unlockWithBiometrics } from '@/lib/preferences';
-import { ACTION_READ, ACTION_SCREENSHOT, registerNotificationActions } from '@/lib/push';
+import { ACTION_READ, ACTION_SCREENSHOT, ensureNotificationChannels, registerNotificationActions } from '@/lib/push';
 import { font, useTheme } from '@/lib/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 void loadTheme().then(applyTheme);
 void registerNotificationActions();
+// Channels carry the vibration patterns; created on every start so an OTA update brings them too.
+void ensureNotificationChannels();
 
 // Re-lock after the app has been in the background this long.
 const RELOCK_AFTER_MS = 60_000;

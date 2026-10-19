@@ -58,6 +58,8 @@ next-env.d.ts
 /data/server.pid
 /data/build-stamp.txt
 /data/pdfs/
+/data/artifacts/
+/data/app-release/
 /data/backups/
 /data/backup-status.json
 /data/restore-*/

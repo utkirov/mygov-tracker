@@ -46,6 +46,45 @@ export async function currentPushToken(): Promise<string | null> {
 }
 
 /**
+ * Android fixes a channel's vibration when it is created, so each vibration
+ * pattern gets its own channel; the server picks one per push (lib/push.ts on
+ * the website). Patterns: [wait, buzz, pause, buzz…] in ms.
+ */
+export const CHANNELS = {
+  urgent: 'status-urgent',
+  alerts: 'status-alerts',
+  quiet: 'cycle-summary',
+} as const;
+
+export async function ensureNotificationChannels(): Promise<void> {
+  try {
+    await Notifications.setNotificationChannelAsync(CHANNELS.urgent, {
+      name: 'Нужно ваше действие и завершение',
+      description: 'Заявление ждёт заявителя или пришёл итоговый результат',
+      importance: Notifications.AndroidImportance.MAX,
+      enableVibrate: true,
+      vibrationPattern: [0, 400, 200, 400, 200, 400],
+      lightColor: '#2563EB',
+    });
+    await Notifications.setNotificationChannelAsync(CHANNELS.alerts, {
+      name: 'Изменения статусов и ошибки',
+      importance: Notifications.AndroidImportance.HIGH,
+      enableVibrate: true,
+      vibrationPattern: [0, 250, 150, 250],
+      lightColor: '#2563EB',
+    });
+    await Notifications.setNotificationChannelAsync(CHANNELS.quiet, {
+      name: 'Итог цикла проверки',
+      importance: Notifications.AndroidImportance.LOW,
+      enableVibrate: false,
+      sound: null,
+    });
+  } catch {
+    // Older OS / no notification service — pushes fall back to the default channel.
+  }
+}
+
+/**
  * Asks for permission and sends this phone's native FCM token to the server,
  * which pushes status changes straight through Firebase (not Expo's service).
  * Safe to call on every launch — the server upserts the token.
@@ -57,6 +96,7 @@ export async function registerForPush(): Promise<string | null> {
     name: 'Изменения статусов',
     importance: Notifications.AndroidImportance.HIGH,
   });
+  await ensureNotificationChannels();
   const current = await Notifications.getPermissionsAsync();
   const granted = current.granted || (await Notifications.requestPermissionsAsync()).granted;
   if (!granted) return null;

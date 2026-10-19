@@ -10,6 +10,7 @@ import {
   listActivePushTargets,
   listActivePushTokens,
   normalizePushPrefs,
+  pushChannel,
   registerPushDevice,
   sendPushToAll,
   setPushPrefs,
@@ -95,5 +96,13 @@ describe('shouldDeliver', () => {
     expect(shouldDeliver(quiet, 'status-change', false, at(3))).toBe(false);
     expect(shouldDeliver(quiet, 'status-change', false, at(8))).toBe(true);
     expect(shouldDeliver(quiet, 'status-change', true, at(3))).toBe(true);
+  });
+});
+
+describe('pushChannel', () => {
+  it('picks the vibration channel by urgency', () => {
+    expect(pushChannel('status-change', true)).toBe('status-urgent');
+    expect(pushChannel('error', false)).toBe('status-alerts');
+    expect(pushChannel('cycle', true)).toBe('cycle-summary');
   });
 });

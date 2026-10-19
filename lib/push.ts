@@ -68,6 +68,12 @@ function minutesOf(hhmm: string): number {
   return h * 60 + m;
 }
 
+/** Android channel (= vibration pattern): long triple buzz when urgent, short double otherwise, silent for cycle summaries. */
+export function pushChannel(kind: PushKind, urgent: boolean): string {
+  if (kind === 'cycle') return 'cycle-summary';
+  return urgent ? 'status-urgent' : 'status-alerts';
+}
+
 /** Whether a phone with these preferences should get this push right now (server local time). */
 export function shouldDeliver(prefs: PushPrefs, kind: PushKind, urgent: boolean, now = new Date()): boolean {
   const wanted = kind === 'status-change' ? prefs.status
@@ -225,7 +231,9 @@ export async function sendPushToAll(message: PushMessage, rootPath?: string): Pr
             message: message.body,
             body: JSON.stringify({ ...(message.data ?? {}), kind }),
             categoryId: kind === 'cycle' ? '' : 'application',
-            channelId: 'status-changes',
+            // Channels created by the app, each with its own vibration pattern
+            // (mobile/src/lib/push.ts). Unknown on an older app → Android's default channel.
+            channelId: pushChannel(kind, message.urgent === true),
           },
           android: { priority: 'high' },
         },
