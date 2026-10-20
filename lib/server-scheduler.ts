@@ -19,6 +19,7 @@ import {
   type LocalDbApplicationChangeField,
 } from './local-db';
 import { produceCheckOutputs, type CheckOutputs } from './check-outputs';
+import { describeVerdicts, refreshChecklist, rejectionSummary } from './checklist-updates';
 import { openDb } from './sqlite-db';
 import { sendPushToAll } from './push';
 import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, parseMyGovDate } from './status-checker';
@@ -232,6 +233,27 @@ export async function checkOne(
   const result: 'changed' | 'unchanged' = changedFields.length > 0 ? 'changed' : 'unchanged';
   await writeCheckLog(updatedEntry.id, updatedEntry.application_number, result, changedFields);
 
+  // Approvals checklist from the same page: who has answered, the final verdict.
+  const checklistUpdate = session
+    ? await refreshChecklist(updatedEntry, session.page.html).catch(err => { console.error('[Scheduler] Checklist failed:', err); return null; })
+    : null;
+  const completedNow = isCompletedStatus(updatedEntry.status) && !isCompletedStatus(previousValues.status ?? '');
+  if (checklistUpdate && checklistUpdate.newVerdicts.length > 0 && !completedNow) {
+    const { title, body, urgent } = describeVerdicts(checklistUpdate);
+    sendPushToAll({
+      title: `№ ${updatedEntry.application_number} · ${title}`,
+      body: [updatedEntry.object_name || updatedEntry.service_name, body].filter(Boolean).join(' · '),
+      data: { applicationId: updatedEntry.id },
+      kind: 'status-change',
+      urgent,
+    }).catch(err => console.error('[Scheduler] Push error (approvals):', err));
+    if (isTelegramConfigured(settings)) {
+      const esc = (s: string) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+      sendTelegramMessage(settings, `🧾 <b>№ ${updatedEntry.application_number}</b> · ${esc(title)}\n${esc(body)}`)
+        .catch(err => console.error('[Scheduler] Telegram error (approvals):', err));
+    }
+  }
+
   // Screenshot / status PDF / result documents: stored for the site and app,
   // and reused for the Telegram notification below. Official result documents
   // only appear on the page once the application is finalized.
@@ -255,14 +277,12 @@ export async function checkOne(
       repositoryFiles: isNowCompleted ? repositoryFiles : [],
     })).catch(err => console.error('[Scheduler] Telegram error (change):', err));
   }
-  if (options.awaitOutputs) return { result, session, outputs: await outputs };
-
   if (changedFields.length > 0) {
-    const completedNow = isCompletedStatus(updatedEntry.status) && !isCompletedStatus(previousValues.status ?? '');
     const changes = changedFields.map(f => `${CHANGE_FIELD_LABELS[f]}: «${fmt(previousValues[f])}» → «${fmt(nextValues[f])}»`);
     sendPushToAll({
       title: `№ ${updatedEntry.application_number} — ${getMyGovStatus(updatedEntry.status).label}${completedNow ? ' ✓' : ''}`,
-      body: [updatedEntry.object_name || updatedEntry.service_name, ...changes].filter(Boolean).join(' · '),
+      body: [updatedEntry.object_name || updatedEntry.service_name, ...changes, completedNow ? rejectionSummary(checklistUpdate?.checklist) : '']
+        .filter(Boolean).join(' · '),
       data: { applicationId: updatedEntry.id },
       kind: completedNow ? 'completed' : 'status-change',
       // The applicant has to act, or the final result is in — worth waking up for.
@@ -281,6 +301,7 @@ export async function checkOne(
     }
   }
 
+  if (options.awaitOutputs) return { result, session, outputs: await outputs };
   return { result, session };
 }
 

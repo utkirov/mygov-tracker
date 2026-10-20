@@ -85,6 +85,33 @@ function StatusDot({ status, size = 7 }: { status: string; size?: number }) {
   return <span className="shrink-0 rounded-full" style={{ width: size, height: size, background: color }} />;
 }
 
+/** «Согласования 7/10» bar, or the rejection, from the approvals checklist. */
+function ApprovalsLine({ summary }: { summary?: Application['checklist_summary'] }) {
+  if (!summary || (summary.total === 0 && !summary.result)) return null;
+  if (summary.result === 'rejected') {
+    return (
+      <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--danger)' }}>
+        ✕ Отказ{summary.failed ? ` · не выполнено критериев: ${summary.failed}` : ''}
+      </p>
+    );
+  }
+  if (summary.total === 0) return null;
+  const seg = (n: number, color: string) => n > 0 && <span style={{ flex: n, background: color }} />;
+  return (
+    <div className="mt-2.5">
+      <div className="flex h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--panel)' }}>
+        {seg(summary.ok, 'var(--success)')}
+        {seg(summary.other, 'var(--text-muted)')}
+        {seg(summary.bad, 'var(--danger)')}
+        {seg(summary.wait, 'var(--border-strong)')}
+      </div>
+      <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        Согласования {summary.ok}/{summary.total}{summary.bad ? ` · отказ ${summary.bad}` : ''}{summary.wait ? ` · ждём ${summary.wait}` : ''}
+      </p>
+    </div>
+  );
+}
+
 function KanbanCard({ application, index = 0 }: { application: Application; index?: number }) {
   const statusInfo = getMyGovStatus(application.status);
   const isUrgent   = getStatusType(application.acting_party, application.status) === 'action_required';
@@ -141,6 +168,8 @@ function KanbanCard({ application, index = 0 }: { application: Application; inde
         )}
         {category && <Tag>{category}</Tag>}
       </div>
+
+      <ApprovalsLine summary={application.checklist_summary} />
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2.5" style={{ borderColor: 'var(--border)' }}>
         <span className="font-mono text-[11px]" style={{ color: 'var(--text-soft)' }}>

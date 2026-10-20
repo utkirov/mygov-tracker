@@ -34,6 +34,8 @@ export interface Application {
   archived: boolean;
   /** Number of stored result documents — only sent by the archive list. */
   result_documents?: number;
+  /** Approvals progress for cards — sent by the list API. */
+  checklist_summary?: ChecklistSummary | null;
   sync_state: SyncState;
   last_checked_at: string | null;
   next_check_at: string | null;
@@ -207,3 +209,27 @@ export interface ApplicationArtifacts {
   status_pdf: ArtifactFile | null;
   results: ResultDocument[];
 }
+
+/** Approvals checklist (lib/checklist.ts) — mirrored for the client. */
+export type ApprovalStatus = 'ok' | 'bad' | 'other' | 'wait';
+export interface ChecklistOrg { name: string; status: ApprovalStatus; verdict: string; comment: string; date: string; num: number | null }
+export interface ChecklistCriterion { label: string; value: string; status: ApprovalStatus }
+export interface Checklist {
+  parsed_at: string;
+  stages: Array<{ title: string; date: string; actor: string }>;
+  orgs: ChecklistOrg[];
+  counts: Record<ApprovalStatus, number> & { total: number };
+  result: {
+    kind: 'rejected' | 'approved';
+    stage: string;
+    date: string;
+    actor: string;
+    number: string;
+    conclusionDate: string;
+    criteria: ChecklistCriterion[];
+    texts: Array<{ label: string; text: string }>;
+  } | null;
+  chain: string[];
+  correction: string;
+}
+export interface ChecklistSummary extends Record<ApprovalStatus, number> { total: number; result: 'rejected' | 'approved' | null; failed: number }

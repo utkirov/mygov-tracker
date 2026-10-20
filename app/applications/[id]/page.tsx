@@ -15,7 +15,7 @@ import { ArrowLeft, GitBranch } from 'lucide-react';
 import { syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import { formatDate, getChangeHeadline } from '@/lib/format-utils';
 import { showToast } from '@/lib/toast';
-import type { Application, ApplicationArtifacts, StatusHistory as TStatusHistory } from '@/types';
+import type { Application, ApplicationArtifacts, Checklist, StatusHistory as TStatusHistory } from '@/types';
 import {
   getApplicationChangeFieldLabel,
   getMyGovStatus,
@@ -77,6 +77,19 @@ const ScreenshotSection = dynamic(
   }
 );
 
+const ChecklistSection = dynamic(
+  () => import('@/components/detail/ChecklistSection'),
+  {
+    loading: () => (
+      <div className="rounded-[12px] border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <div className="h-5 w-36 rounded-lg animate-shimmer" />
+        <div className="mt-4 h-24 rounded-[10px] animate-shimmer" />
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
 const EMPTY_ARTIFACTS: ApplicationArtifacts = { screenshot: null, status_pdf: null, results: [] };
 
 const OperationalDataSection = dynamic(
@@ -109,6 +122,7 @@ export default function DetailPage() {
   const [chain, setChain] = useState<Application[]>([]);
   const [loadError, setLoadError] = useState(false);
   const [artifacts, setArtifacts] = useState<ApplicationArtifacts>(EMPTY_ARTIFACTS);
+  const [checklist, setChecklist] = useState<Checklist | null>(null);
 
   const loadApplication = useCallback(async () => {
     try {
@@ -118,8 +132,12 @@ export default function DetailPage() {
       const files = await fetch(`/api/applications/${id}/artifacts`, { cache: 'no-store' })
         .then(r => (r.ok ? r.json() as Promise<ApplicationArtifacts> : EMPTY_ARTIFACTS))
         .catch(() => EMPTY_ARTIFACTS);
+      const approvals = await fetch(`/api/applications/${id}/checklist`, { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() as Promise<{ checklist: Checklist | null }> : { checklist: null }))
+        .catch(() => ({ checklist: null }));
       startTransition(() => {
         setArtifacts(files);
+        setChecklist(approvals.checklist);
         setApplication(payload.application);
         setHistory(payload.history);
         setNotes(payload.application.notes);
@@ -561,6 +579,7 @@ export default function DetailPage() {
               )}
             </div>
 
+            <ChecklistSection applicationId={id} checklist={checklist} onChange={setChecklist} />
             <ScreenshotSection
               applicationId={id}
               screenshot={artifacts.screenshot}

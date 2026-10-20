@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { ChecklistCard } from '@/components/ChecklistCard';
 import { Icon } from '@/components/Icon';
 import { Button, Card, Empty, OfflineBanner, StatusDot, Tag } from '@/components/ui';
 import {
@@ -13,6 +14,7 @@ import {
   UnauthorizedError,
   type Application,
   type ApplicationArtifacts,
+  type Checklist,
   type StatusHistoryEntry,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -34,6 +36,8 @@ export default function ApplicationScreen() {
   const [history, setHistory] = useState<StatusHistoryEntry[]>([]);
   const [artifacts, setArtifacts] = useState<ApplicationArtifacts>(NO_ARTIFACTS);
   const [chain, setChain] = useState<Application[]>([]);
+  const [checklist, setChecklist] = useState<Checklist | null>(null);
+  const [refreshingChecklist, setRefreshingChecklist] = useState(false);
   const [offlineSince, setOfflineSince] = useState<string | null>(null);
   const [nextCycleAt, setNextCycleAt] = useState<string | null>(null);
   const [headers, setHeaders] = useState<Record<string, string>>({});
@@ -47,12 +51,14 @@ export default function ApplicationScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [main, files, related, h] = await Promise.all([
+      const [main, files, related, h, approvals] = await Promise.all([
         api.application(id),
         api.artifacts(id).catch(() => null),
         api.chain(id).catch(() => null),
         authHeaders(),
+        api.checklist(id).catch(() => null),
       ]);
+      if (approvals) setChecklist(approvals.data.checklist);
       setApp(main.data.application);
       setHistory(main.data.history);
       setNotes(main.data.application.notes ?? '');
@@ -90,6 +96,17 @@ export default function ApplicationScreen() {
     } finally {
       liveUpdate.end(LIVE_CHECK_ID);
       setChecking(false);
+    }
+  }
+
+  async function refreshChecklist() {
+    setRefreshingChecklist(true);
+    try {
+      setChecklist((await api.refreshChecklist(id)).checklist);
+    } catch (e) {
+      Alert.alert('Не обновлено', e instanceof Error ? e.message : 'Повторите попытку');
+    } finally {
+      setRefreshingChecklist(false);
     }
   }
 
@@ -160,6 +177,8 @@ export default function ApplicationScreen() {
         {error && <Text style={[styles.text, { color: t.danger }]}>{error}</Text>}
         {!completed && <Button title="Проверить сейчас" onPress={check} busy={checking} disabled={!!offlineSince} />}
       </Card>
+
+      <ChecklistCard checklist={checklist} onRefresh={() => void refreshChecklist()} busy={refreshingChecklist || !!offlineSince} />
 
       <Card style={{ gap: 10 }}>
         <View style={styles.sectionHead}>

@@ -7,7 +7,8 @@
  */
 import path from 'node:path';
 
-import { saveArtifacts } from './application-artifacts';
+import { readChecklist, saveArtifacts } from './application-artifacts';
+import type { Checklist } from './checklist';
 import type { CheckOutputs } from './check-outputs';
 import { readLocalDb, readSettings, type LocalDbApplication, type LocalDbStatusHistory } from './local-db';
 import { resolveLocalProjectRoot } from './local-paths';
@@ -137,6 +138,27 @@ export function buildApplicationCardMessage(application: LocalDbApplication, his
   return lines.join('\n');
 }
 
+/** Approvals checklist (lib/checklist.ts) for the bot card: progress, pending organisations, rejection reasons. */
+export function checklistBlock(checklist: Checklist | null): string {
+  if (!checklist) return '';
+  const lines: string[] = [];
+  const { counts, orgs, result } = checklist;
+  if (counts.total > 0) {
+    lines.push('', `🧾 <b>Согласования:</b> ${counts.ok} из ${counts.total}${counts.bad ? ` · ❌ ${counts.bad}` : ''}`);
+    for (const o of orgs) {
+      const mark = o.status === 'ok' ? '✅' : o.status === 'bad' ? '❌' : o.status === 'wait' ? '⏳' : '•';
+      lines.push(`${mark} ${escapeHtml(o.name)}${o.status !== 'wait' && o.date ? ` · ${escapeHtml(o.date.split(' ')[0])}` : ''}`);
+    }
+  }
+  if (result) {
+    lines.push('', result.kind === 'rejected' ? '❌ <b>Отказ</b>' : `✅ <b>Заключение выдано</b>${result.number ? ` № ${escapeHtml(result.number)}` : ''}`);
+    result.criteria.filter(c => c.status === 'bad').forEach(c => lines.push(`• не выполнено: ${escapeHtml(c.label)}`));
+    const reason = result.texts.find(t => /рекомендац|kamchilik|причин/i.test(t.label)) ?? result.texts[0];
+    if (reason) lines.push(`<i>${escapeHtml(reason.text.slice(0, 600))}</i>`);
+  }
+  return lines.join('\n');
+}
+
 /**
  * Shows an application's card. When the application is still checkable
  * (not archived/completed), this first triggers a live check against
@@ -191,7 +213,7 @@ async function sendApplicationCard(botToken: string, chatId: string, application
 
   await callTelegramApi(botToken, 'sendMessage', {
     chat_id: chatId,
-    text: buildApplicationCardMessage(application, history),
+    text: buildApplicationCardMessage(application, history) + checklistBlock(await readChecklist(application.id)),
     parse_mode: 'HTML',
     reply_markup: { inline_keyboard: [[{ text: '⬅️ В меню', callback_data: MENU_HOME_CALLBACK }]] },
   });

@@ -36,6 +36,22 @@ export interface Application {
   sms_phone: string;
   pdf_filename: string;
   result_documents?: number;
+  checklist_summary?: ({ total: number; result: 'rejected' | 'approved' | null; failed: number } & Record<ApprovalStatus, number>) | null;
+}
+
+export type ApprovalStatus = 'ok' | 'bad' | 'other' | 'wait';
+export interface Checklist {
+  parsed_at: string;
+  stages: Array<{ title: string; date: string; actor: string }>;
+  orgs: Array<{ name: string; status: ApprovalStatus; verdict: string; comment: string; date: string; num: number | null }>;
+  counts: Record<ApprovalStatus, number> & { total: number };
+  result: {
+    kind: 'rejected' | 'approved'; stage: string; date: string; actor: string; number: string; conclusionDate: string;
+    criteria: Array<{ label: string; value: string; status: ApprovalStatus }>;
+    texts: Array<{ label: string; text: string }>;
+  } | null;
+  chain: string[];
+  correction: string;
 }
 
 export interface StatusHistoryEntry { id: string; status: string; current_action: string; acting_party: string; recorded_at: string }
@@ -192,6 +208,8 @@ export const api = {
   artifacts: (id: string) => cachedRequest<ApplicationArtifacts>(`artifacts:${id}`, `/api/applications/${enc(id)}/artifacts`),
   chain: (id: string) => cachedRequest<Application[]>(`chain:${id}`, `/api/applications/${enc(id)}/chain`),
   checkLog: (limit = 100) => cachedRequest<CheckLogEntry[]>('check-log', `/api/check-log?limit=${limit}`),
+  checklist: (id: string) => cachedRequest<{ checklist: Checklist | null }>(`checklist:${id}`, `/api/applications/${enc(id)}/checklist`),
+  refreshChecklist: (id: string) => request<{ checklist: Checklist }>(`/api/applications/${enc(id)}/checklist`, { method: 'POST' }),
   health: () => request<HealthInfo>('/api/health'),
   check: (id: string) => request<unknown>(`/api/applications/${enc(id)}/check?manual=true`, { method: 'POST' }),
   saveNotes: (id: string, notes: string) => request<Application>(`/api/applications/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),

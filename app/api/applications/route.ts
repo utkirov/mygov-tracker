@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { readArtifacts } from '@/lib/application-artifacts';
+import { readArtifacts, readChecklist } from '@/lib/application-artifacts';
 import {
   insertApplication,
   insertStatusHistory,
@@ -22,14 +22,20 @@ function sortByUpdatedAtDesc(applications: LocalDbApplication[]): LocalDbApplica
 export async function GET(request: NextRequest) {
   const showArchived = request.nextUrl.searchParams.get('archived') === 'true';
   const applications = sortByUpdatedAtDesc(await listApplications({ archived: showArchived }));
-  if (!showArchived) return NextResponse.json(applications);
 
-  // The archive table shows how many result documents each application has.
-  const withDocuments = await Promise.all(applications.map(async (application) => ({
-    ...application,
-    result_documents: (await readArtifacts(application.id)).results.length,
-  })));
-  return NextResponse.json(withDocuments);
+  // Cards show the approvals progress («7 из 10»); the archive table also counts result documents.
+  const enriched = await Promise.all(applications.map(async (application) => {
+    const checklist = await readChecklist(application.id);
+    const summary = checklist
+      ? { ...checklist.counts, result: checklist.result?.kind ?? null, failed: checklist.result?.criteria.filter(c => c.status === 'bad').length ?? 0 }
+      : null;
+    return {
+      ...application,
+      checklist_summary: summary,
+      ...(showArchived ? { result_documents: (await readArtifacts(application.id)).results.length } : {}),
+    };
+  }));
+  return NextResponse.json(enriched);
 }
 
 export async function POST(request: NextRequest) {

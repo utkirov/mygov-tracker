@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
+import { ApprovalsBar } from '@/components/ChecklistCard';
 import { Card, Chip, Empty, Notice, OfflineBanner, StatusDot, Tag } from '@/components/ui';
 import { api, UnauthorizedError, type Application } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -166,6 +167,16 @@ function ApplicationCard({ app, theme: t, archived }: { app: Application; theme:
         {!!app.object_name && <Text style={[styles.service, { color: t.textSoft }]} numberOfLines={2}>{app.service_name}</Text>}
         <StatusDot color={s.color} label={s.label} />
         {needsAction && !archived && <Text style={[styles.action, { color: t.danger }]}>Нужно ваше действие</Text>}
+        {app.checklist_summary?.result === 'rejected' ? (
+          <Text style={[styles.action, { color: t.danger }]}>✕ Отказ{app.checklist_summary.failed ? ` · не выполнено критериев: ${app.checklist_summary.failed}` : ''}</Text>
+        ) : app.checklist_summary && app.checklist_summary.total > 0 ? (
+          <View style={{ gap: 4 }}>
+            <ApprovalsBar counts={app.checklist_summary} />
+            <Text style={[styles.meta, { color: t.textMuted }]}>
+              Согласования {app.checklist_summary.ok}/{app.checklist_summary.total}{app.checklist_summary.wait ? ` · ждём ${app.checklist_summary.wait}` : ''}
+            </Text>
+          </View>
+        ) : null}
         {!archived && app.last_change_fields.length > 0 && (
           <View style={styles.tags}>
             {app.last_change_fields.map(f => <Tag key={f}>{CHANGE_FIELD_LABELS[f] ?? f}</Tag>)}

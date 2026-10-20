@@ -10,6 +10,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { resolveLocalProjectRoot } from './local-paths';
+import type { Checklist } from './checklist';
 import type { RepositoryFileRef } from './repository-files';
 
 export interface ArtifactFileInfo {
@@ -118,6 +119,24 @@ export async function saveArtifacts(
 
   await writeFile(path.join(dir, 'meta.json'), JSON.stringify(current, null, 2), 'utf8');
   return current;
+}
+
+/** Approvals checklist parsed from the status page (lib/checklist.ts), kept next to the other files. */
+export async function readChecklist(applicationId: string, rootPath?: string): Promise<Checklist | null> {
+  const dir = artifactDir(applicationId, rootPath);
+  if (!dir) return null;
+  try {
+    return JSON.parse(await readFile(path.join(dir, 'checklist.json'), 'utf8')) as Checklist;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveChecklist(applicationId: string, checklist: Checklist, rootPath?: string): Promise<void> {
+  const dir = artifactDir(applicationId, rootPath);
+  if (!dir) return;
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, 'checklist.json'), JSON.stringify(checklist), 'utf8');
 }
 
 export async function deleteArtifacts(applicationId: string, rootPath?: string): Promise<void> {
