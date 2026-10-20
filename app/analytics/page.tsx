@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { startTransition, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
@@ -98,7 +98,7 @@ export default function AnalyticsPage() {
         <Card title="Сейчас в работе — прогноз" hint="Ожидаемая дата — подача + медианный срок такой же услуги (если их меньше 3 — по всем услугам).">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px]">
-              <thead><tr style={muted}><th className={th}>Заявление</th><th className={th}>Идёт</th><th className={th}>Обычно</th><th className={th}>Ожидается</th><th className={th}>Последний этап · сколько стоит</th></tr></thead>
+              <thead><tr style={muted}><th className={th}>Заявление</th><th className={th}>Идёт</th><th className={th}>Обычно</th><th className={th}>Ожидается</th><th className={th}>Последний этап · сколько на нём</th></tr></thead>
               <tbody>
                 {data.forecasts.map(f => (
                   <tr key={f.applicationId} className="border-t" style={{ borderColor: 'var(--border)' }}>
