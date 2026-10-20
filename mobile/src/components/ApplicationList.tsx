@@ -8,6 +8,7 @@ import { api, UnauthorizedError, type Application } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { CHANGE_FIELD_LABELS, formatAgo, formatDate, statusInfo, statusType, type StatusType } from '@/lib/status';
 import { font, radius, useTheme, type Theme } from '@/lib/theme';
+import { refreshWidgets, widgetFromApplications } from '@/widget/widget-data';
 
 const BOARD_FILTERS: Array<{ key: 'all' | StatusType; label: string }> = [
   { key: 'all', label: 'Все' },
@@ -37,6 +38,8 @@ export function ApplicationList({ archived, header }: { archived: boolean; heade
       const loaded = await api.applications(archived);
       setItems(loaded.data);
       setOfflineSince(loaded.offlineSince);
+      // Keep the home screen widget in step with what the board shows.
+      if (!archived && !loaded.offlineSince) void refreshWidgets(widgetFromApplications(loaded.data));
       setError(null);
     } catch (e) {
       if (e instanceof UnauthorizedError) expire();

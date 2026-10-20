@@ -2,7 +2,7 @@
   "expo": {
     "name": "my.gov tracker",
     "slug": "mygov-tracker",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,9 +16,10 @@
       "predictiveBackGestureEnabled": false,
       "package": "uz.turonproject.tracker",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
-        "REQUEST_INSTALL_PACKAGES"
+        "REQUEST_INSTALL_PACKAGES",
+        "android.permission.POST_PROMOTED_NOTIFICATIONS"
       ],
       "intentFilters": [
         {
@@ -71,7 +72,26 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "Tracker",
+              "label": "my.gov tracker",
+              "description": "Сколько заявлений ждут вашего действия и последние изменения",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "maxResizeHeight": "400dp",
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "scheme": "mygovtracker",
     "experiments": {

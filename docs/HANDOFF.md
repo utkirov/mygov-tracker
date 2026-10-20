@@ -196,7 +196,16 @@ PDF, заметки, цепочка); добавление по PDF (drag-drop);
 - Nothing Phone (3a) = модель A059. Glyph SDK поддерживает 3a, но только для приложения на
   переднем плане; фоновое свечение — через «Важные уведомления» Glyph в настройках телефона
   или Glyph Progress (Live Updates Android 16, нужен нативный модуль). Виджет — через
-  react-native-android-widget (нужен новый APK). Не сделано, ждёт решения пользователя.
+  react-native-android-widget (нужен новый APK).
+- Сделано в 1.2.0 (code 3, 2026-10-20):
+  - Виджет «my.gov tracker» (`mobile/src/widget/`, вход `mobile/index.ts` регистрирует headless-
+    обработчик): «N ждут действия», активные, последние заявления, «Обновить», тап открывает
+    заявку (mygovtracker:///application/<id>). Обновляется раз в 30 мин, при открытии доски и в
+    фоновой синхронизации; офлайн — из кэша.
+  - Live Updates / Glyph Progress: локальный модуль `mobile/modules/live-update` (Kotlin,
+    Notification.ProgressStyle + extra android.requestPromotedOngoing, разрешение
+    POST_PROMOTED_NOTIFICATIONS) — показывается при скачивании APK, ручной проверке и первой
+    проверке нового заявления. Kotlin компилируется только в EAS (на ПК нет Android SDK).
 - Кнопки Telegram-бота не работали: у бота остался `allowed_updates` без `callback_query`
   (след удалённого вебхука). Теперь `getUpdates` всегда передаёт
   `allowed_updates=["message","callback_query"]` (2026-10-20, проверено через getWebhookInfo).

@@ -19,6 +19,10 @@ import { useAuth } from '@/lib/auth';
 import { CHANGE_FIELD_LABELS, formatAgo, formatDate, formatSize, formatUntil, statusInfo, statusType } from '@/lib/status';
 import { font, radius, useTheme } from '@/lib/theme';
 
+import { liveUpdate } from '../../../modules/live-update';
+
+const LIVE_CHECK_ID = 7102;
+
 const NO_ARTIFACTS: ApplicationArtifacts = { screenshot: null, status_pdf: null, results: [] };
 
 export default function ApplicationScreen() {
@@ -76,12 +80,15 @@ export default function ApplicationScreen() {
 
   async function check() {
     setChecking(true);
+    // Shown as a Live Update (Glyph Progress on Nothing) — a my.gov.uz check takes 10–30 s.
+    liveUpdate.show(LIVE_CHECK_ID, `Проверяю № ${app?.application_number ?? ''}`, 'Запрос к my.gov.uz…', 0, 100, true);
     try {
       await api.check(id);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Проверка не удалась');
     } finally {
+      liveUpdate.end(LIVE_CHECK_ID);
       setChecking(false);
     }
   }

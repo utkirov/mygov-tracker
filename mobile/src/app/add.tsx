@@ -8,6 +8,10 @@ import { Button, Card, Field } from '@/components/ui';
 import { api, createApplication, parsePdf, type ParsedPdf } from '@/lib/api';
 import { font, radius, useTheme } from '@/lib/theme';
 
+import { liveUpdate } from '../../modules/live-update';
+
+const LIVE_ADD_ID = 7103;
+
 const RECOGNISED: Array<keyof ParsedPdf> = [
   'application_number', 'verification_password', 'service_name', 'organization',
   'status', 'submission_date', 'current_action', 'sms_phone',
@@ -69,7 +73,8 @@ export default function AddScreen() {
     setError(null);
     try {
       const id = await createApplication({ ...parsed, object_name: objectName.trim(), pdf_filename: filename, pdf_storage_key: storageKey });
-      await api.check(id).catch(() => null);
+      liveUpdate.show(LIVE_ADD_ID, `Первая проверка № ${parsed.application_number}`, 'Запрос к my.gov.uz…', 0, 100, true);
+      await api.check(id).catch(() => null).finally(() => liveUpdate.end(LIVE_ADD_ID));
       router.replace({ pathname: '/application/[id]', params: { id } });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось сохранить');

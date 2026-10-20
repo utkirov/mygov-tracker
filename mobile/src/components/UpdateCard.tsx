@@ -6,6 +6,11 @@ import { formatSize } from '@/lib/status';
 import { font, useTheme } from '@/lib/theme';
 import { downloadAndInstall, type AppRelease } from '@/lib/updates';
 
+import { liveUpdate } from '../../modules/live-update';
+
+// Live Update / Glyph Progress while the APK downloads.
+const LIVE_ID = 7101;
+
 /** Design A8 «Доступно обновление»: shown on top of the board. */
 export function UpdateCard({ release, onDismiss }: { release: AppRelease; onDismiss: () => void }) {
   const t = useTheme();
@@ -17,10 +22,19 @@ export function UpdateCard({ release, onDismiss }: { release: AppRelease; onDism
     setError(null);
     setProgress({ fraction: 0, bytes: 0 });
     try {
-      await downloadAndInstall(release, (fraction, bytes) => setProgress({ fraction, bytes }));
+      let lastPercent = -1;
+      await downloadAndInstall(release, (fraction, bytes) => {
+        setProgress({ fraction, bytes });
+        const percent = Math.round(fraction * 100);
+        if (percent !== lastPercent) {
+          lastPercent = percent;
+          liveUpdate.show(LIVE_ID, `Обновление ${release.version}`, `${percent}% · ${formatSize(bytes)} из ${formatSize(release.size)}`, percent, 100);
+        }
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось скачать обновление');
     } finally {
+      liveUpdate.end(LIVE_ID);
       setProgress(null);
     }
   }

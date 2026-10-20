@@ -5,6 +5,7 @@ import { Appearance } from 'react-native';
 
 import { api } from '@/lib/api';
 import { readValue, writeValue } from '@/lib/cache';
+import { refreshWidgets } from '@/widget/widget-data';
 
 /** App-only settings from design A7 (stored on the phone, not on the server). */
 
@@ -64,6 +65,7 @@ TaskManager.defineTask(SYNC_TASK, async () => {
   try {
     // Refreshing the lists also refreshes the offline copy (lib/api.ts cachedRequest).
     await Promise.all([api.applications(false), api.applications(true), api.checkLog(100)]);
+    await refreshWidgets();
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch {
     return BackgroundTask.BackgroundTaskResult.Failed;
