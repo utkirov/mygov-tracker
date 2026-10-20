@@ -206,6 +206,8 @@ PDF, заметки, цепочка); добавление по PDF (drag-drop);
     Notification.ProgressStyle + extra android.requestPromotedOngoing, разрешение
     POST_PROMOTED_NOTIFICATIONS) — показывается при скачивании APK, ручной проверке и первой
     проверке нового заявления. Kotlin компилируется только в EAS (на ПК нет Android SDK).
+  - Собран build 2e929e2a, опубликован на сервере (Настройки → «Приложение Android»), 112 МБ —
+    все ABI; можно уменьшить ~в 3 раза, собирая только arm64-v8a.
 - Кнопки Telegram-бота не работали: у бота остался `allowed_updates` без `callback_query`
   (след удалённого вебхука). Теперь `getUpdates` всегда передаёт
   `allowed_updates=["message","callback_query"]` (2026-10-20, проверено через getWebhookInfo).
