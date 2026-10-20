@@ -70,3 +70,11 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
   return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`;
 }
+
+/** «5 ч», «1,5 дн», «12 дн» — durations from the server analytics. */
+export function formatDays(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  if (value < 1) return `${Math.max(1, Math.round(value * 24))} ч`;
+  const v = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+  return `${String(v).replace('.', ',')} дн`;
+}

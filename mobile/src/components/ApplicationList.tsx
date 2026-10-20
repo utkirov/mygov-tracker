@@ -172,6 +172,14 @@ function ApplicationCard({ app, theme: t, archived }: { app: Application; theme:
             Этап {app.checklist_summary.stageIndex} из {app.checklist_summary.stageCount}: {app.checklist_summary.stage}
           </Text>
         )}
+        {!archived && app.forecast?.pace === 'slow' && (
+          <Text style={[styles.meta, { color: t.status.processing }]} numberOfLines={2}>Дольше обычного: {app.forecast.reason}</Text>
+        )}
+        {!archived && app.forecast?.pace === 'on_track' && !!app.forecast.expectedAt && (
+          <Text style={[styles.meta, { color: t.textMuted }]}>
+            Ожидается к {new Date(app.forecast.expectedAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+          </Text>
+        )}
         {app.checklist_summary?.result === 'rejected' ? (
           <Text style={[styles.action, { color: t.danger }]}>✕ Отказ{app.checklist_summary.failed ? ` · не выполнено критериев: ${app.checklist_summary.failed}` : ''}</Text>
         ) : app.checklist_summary && app.checklist_summary.total > 0 ? (

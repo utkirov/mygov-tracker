@@ -37,6 +37,29 @@ export interface Application {
   pdf_filename: string;
   result_documents?: number;
   checklist_summary?: ({ total: number; result: 'rejected' | 'approved' | null; failed: number; stage?: string; stageIndex?: number; stageCount?: number } & Record<ApprovalStatus, number>) | null;
+  forecast?: Forecast | null;
+}
+
+/** Server lib/analytics.ts — terms, stage waits, commissions, forecasts. */
+export interface DurationStats { n: number; median: number; p80: number; min: number; max: number }
+export interface Forecast {
+  applicationId: string; application_number: string; title: string; service: string;
+  elapsedDays: number; typicalDays: number | null; typicalBasis: 'service' | 'all' | null; expectedAt: string | null;
+  stage: string; stageDays: number | null; stageTypicalDays: number | null;
+  pace: 'on_track' | 'slow' | 'unknown'; reason: string;
+}
+export interface Analytics {
+  generated_at: string;
+  totals: {
+    applications: number; finished: number; approved: number; rejected: number; cancelled: number; active: number;
+    approvalRate: number | null; duration: DurationStats | null; approvedDuration: DurationStats | null; rejectedDuration: DurationStats | null;
+  };
+  services: Array<DurationStats & { service: string; total: number; approved: number; rejected: number; cancelled: number; active: number; approvalRate: number | null }>;
+  stages: Array<DurationStats & { stage: string; actor: string }>;
+  orgs: Array<{ name: string; total: number; ok: number; bad: number; other: number; wait: number; rejectRate: number | null; response: DurationStats | null }>;
+  rejections: { criteria: Array<{ label: string; count: number }>; orgs: Array<{ name: string; count: number }>; withResult: number };
+  resubmissions: { chains: number; firstTimeApproved: number; approvedAfterRetry: number; avgAttemptsToApprove: number | null };
+  forecasts: Forecast[];
 }
 
 export type ApprovalStatus = 'ok' | 'bad' | 'other' | 'wait';
@@ -215,6 +238,7 @@ export const api = {
   refreshChecklist: (id: string) => request<{ checklist: Checklist }>(`/api/applications/${enc(id)}/checklist`, { method: 'POST' }),
   createShareLink: (id: string, minutes: number | null, showDocuments = true) =>
     request<{ link: { url: string; expires_at: string | null } }>(`/api/applications/${enc(id)}/share-links`, { method: 'POST', body: JSON.stringify({ minutes, showDocuments }) }),
+  analytics: () => cachedRequest<Analytics>('analytics', '/api/analytics'),
   health: () => request<HealthInfo>('/api/health'),
   check: (id: string) => request<unknown>(`/api/applications/${enc(id)}/check?manual=true`, { method: 'POST' }),
   saveNotes: (id: string, notes: string) => request<Application>(`/api/applications/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),

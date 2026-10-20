@@ -1,6 +1,7 @@
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as IntentLauncher from 'expo-intent-launcher';
+import { router } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -188,6 +189,13 @@ export default function SettingsScreen() {
       </Section>
 
       {update && <UpdateCard release={update} onDismiss={() => setUpdate(null)} />}
+
+      <Section title="Аналитика">
+        <Pressable onPress={() => router.push('/analytics')}>
+          <InfoRow label="Сроки и аналитика" hint="Прогноз по заявлениям, сроки этапов, отказы, комиссии"
+            right={<Text style={[styles.small, { color: t.accent }]}>Открыть</Text>} />
+        </Pressable>
+      </Section>
 
       <Section title="Приложение">
         <InfoRow

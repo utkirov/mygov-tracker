@@ -36,6 +36,8 @@ export interface Application {
   result_documents?: number;
   /** Approvals progress for cards — sent by the list API. */
   checklist_summary?: ChecklistSummary | null;
+  /** Active applications: expected date and «дольше обычного» (lib/analytics.ts). */
+  forecast?: ApplicationForecast | null;
   sync_state: SyncState;
   last_checked_at: string | null;
   next_check_at: string | null;
@@ -235,6 +237,18 @@ export interface Checklist {
   chain: string[];
   correction: string;
 }
+export interface ApplicationForecast {
+  pace: 'on_track' | 'slow' | 'unknown';
+  reason: string;
+  elapsedDays: number;
+  typicalDays: number | null;
+  typicalBasis: 'service' | 'all' | null;
+  expectedAt: string | null;
+  stage: string;
+  stageDays: number | null;
+  stageTypicalDays: number | null;
+}
+
 export interface ChecklistSummary extends Record<ApprovalStatus, number> {
   total: number;
   result: 'rejected' | 'approved' | null;

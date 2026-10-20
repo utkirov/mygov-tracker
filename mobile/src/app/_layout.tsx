@@ -114,6 +114,7 @@ function Gate() {
         <Stack.Screen name="pair" options={{ title: 'Вход по QR' }} />
         <Stack.Screen name="application/[id]" options={{ title: 'Заявка' }} />
         <Stack.Screen name="add" options={{ title: 'Новое заявление' }} />
+        <Stack.Screen name="analytics" options={{ title: 'Сроки и аналитика' }} />
       </Stack>
       {locked && (
         <View style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.bg }]}>

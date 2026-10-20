@@ -19,7 +19,7 @@ import {
   type StatusHistoryEntry,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { CHANGE_FIELD_LABELS, formatAgo, formatDate, formatSize, formatUntil, statusInfo, statusType } from '@/lib/status';
+import { CHANGE_FIELD_LABELS, formatAgo, formatDate, formatDays, formatSize, formatUntil, statusInfo, statusType } from '@/lib/status';
 import { font, radius, useTheme } from '@/lib/theme';
 
 import { liveUpdate } from '../../../modules/live-update';
@@ -201,6 +201,16 @@ export default function ApplicationScreen() {
         <Card style={{ gap: 8 }}>
           <Text style={[styles.section, { color: t.text }]}>Ход рассмотрения</Text>
           <StageStepper checklist={checklist} />
+          {!!app?.forecast && app.forecast.pace !== 'unknown' && (
+            <Pressable onPress={() => router.push('/analytics')}>
+              <Text style={{ color: app.forecast.pace === 'slow' ? t.status.processing : t.textMuted, fontSize: 12 }}>
+                Идёт {formatDays(app.forecast.elapsedDays)} · обычно {formatDays(app.forecast.typicalDays)}
+                {app.forecast.expectedAt ? ` · ожидается к ${new Date(app.forecast.expectedAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}` : ''}
+                {app.forecast.pace === 'slow' ? `
+Дольше обычного: ${app.forecast.reason}` : ''}
+              </Text>
+            </Pressable>
+          )}
         </Card>
       )}
 

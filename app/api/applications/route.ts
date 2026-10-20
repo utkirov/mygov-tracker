@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { loadAnalytics } from '@/lib/analytics';
 import { readArtifacts, readChecklist } from '@/lib/application-artifacts';
 import { stageSummary } from '@/lib/checklist';
 import {
@@ -24,7 +25,8 @@ export async function GET(request: NextRequest) {
   const showArchived = request.nextUrl.searchParams.get('archived') === 'true';
   const applications = sortByUpdatedAtDesc(await listApplications({ archived: showArchived }));
 
-  // Cards show the approvals progress («7 из 10»); the archive table also counts result documents.
+  // Cards show the approvals progress («7 из 10») and the forecast; the archive table also counts result documents.
+  const forecasts = showArchived ? new Map() : new Map((await loadAnalytics()).forecasts.map(f => [f.applicationId, f]));
   const enriched = await Promise.all(applications.map(async (application) => {
     const checklist = await readChecklist(application.id);
     const summary = checklist
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest) {
     return {
       ...application,
       checklist_summary: summary,
+      ...(showArchived ? {} : { forecast: forecasts.get(application.id) ?? null }),
       ...(showArchived ? { result_documents: (await readArtifacts(application.id)).results.length } : {}),
     };
   }));

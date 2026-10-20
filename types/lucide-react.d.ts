@@ -19,6 +19,7 @@ declare module 'lucide-react' {
 
   // ── Icons used in this project ───────────────────────────────────────────
   export const Archive: LucideIcon;
+  export const BarChart3: LucideIcon;
   export const ArrowLeft: LucideIcon;
   export const ArrowRight: LucideIcon;
   export const Bell: LucideIcon;

@@ -13,6 +13,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, GitBranch } from 'lucide-react';
 
 import { StageStepper } from '@/components/StageStepper';
+import { ForecastNote } from '@/components/detail/ForecastNote';
 import { syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import { formatDate, getChangeHeadline } from '@/lib/format-utils';
 import { showToast } from '@/lib/toast';
@@ -586,6 +587,7 @@ export default function DetailPage() {
               <section className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)] md:p-5">
                 <h2 className="mb-3 text-sm font-bold text-[var(--text)]">Ход рассмотрения</h2>
                 <StageStepper checklist={checklist} />
+                <ForecastNote applicationId={id} />
               </section>
             ) : null}
             <ChecklistSection applicationId={id} checklist={checklist} onChange={setChecklist} />

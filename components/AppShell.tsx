@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Archive, Folder, Keyboard, LayoutDashboard, Moon, Plus, RefreshCw, Search, Settings, Sun, X } from 'lucide-react';
+import { Archive, BarChart3, Folder, Keyboard, LayoutDashboard, Moon, Plus, RefreshCw, Search, Settings, Sun, X } from 'lucide-react';
 
 import { useSyncEngineSnapshot, startSyncEngine, stopSyncEngine, requestImmediateSyncRun } from '@/lib/sync-engine';
 import { useTheme } from './ThemeProvider';
@@ -18,6 +18,7 @@ const NAV = [
   { href: '/dashboard',  icon: LayoutDashboard, label: 'Доска' },
   { href: '/archive',    icon: Archive,          label: 'Архив' },
   { href: '/projects',   icon: Folder,           label: 'Проекты' },
+  { href: '/analytics',  icon: BarChart3,        label: 'Аналитика' },
   { href: '/settings',   icon: Settings,         label: 'Настройки' },
 ];
 

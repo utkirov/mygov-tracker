@@ -86,6 +86,19 @@ function StatusDot({ status, size = 7 }: { status: string; size?: number }) {
 }
 
 /** «Согласования 7/10» bar, or the rejection, from the approvals checklist. */
+function ForecastLine({ forecast }: { forecast?: Application['forecast'] }) {
+  if (!forecast) return null;
+  if (forecast.pace === 'slow') {
+    return <p className="mt-2 line-clamp-2 text-[11px]" style={{ color: 'var(--warning)' }} title={forecast.reason}>Дольше обычного: {forecast.reason}</p>;
+  }
+  if (!forecast.expectedAt) return null;
+  return (
+    <p className="mt-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+      Ожидается к {new Date(forecast.expectedAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+    </p>
+  );
+}
+
 function ApprovalsLine({ summary }: { summary?: Application['checklist_summary'] }) {
   if (!summary) return null;
   const stage = summary.stage && summary.stageCount ? (
@@ -180,6 +193,7 @@ function KanbanCard({ application, index = 0 }: { application: Application; inde
       </div>
 
       <ApprovalsLine summary={application.checklist_summary} />
+      <ForecastLine forecast={application.forecast} />
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2.5" style={{ borderColor: 'var(--border)' }}>
         <span className="font-mono text-[11px]" style={{ color: 'var(--text-soft)' }}>

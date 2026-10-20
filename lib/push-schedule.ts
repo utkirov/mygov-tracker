@@ -7,6 +7,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { loadAnalytics } from './analytics';
 import { listApplications, type LocalDbApplication } from './local-db';
 import { resolveLocalProjectRoot } from './local-paths';
 import { sendPushToAll } from './push';
@@ -55,7 +56,7 @@ function lastMovement(app: LocalDbApplication): number {
   return Number.isNaN(time) ? Date.now() : time;
 }
 
-export interface DigestCounts { active: number; waiting: number; changed24h: number; errors24h: number; stalled: number }
+export interface DigestCounts { active: number; waiting: number; changed24h: number; errors24h: number; stalled: number; /** Longer than 80% of past applications (lib/analytics.ts). */ slow?: number }
 
 export function buildDigest(counts: DigestCounts): { title: string; body: string } {
   const parts = [
@@ -65,6 +66,7 @@ export function buildDigest(counts: DigestCounts): { title: string; body: string
   ];
   if (counts.errors24h > 0) parts.push(`ошибок проверки: ${counts.errors24h}`);
   if (counts.stalled > 0) parts.push(`без движения ${STALLED_DAYS}+ дней: ${counts.stalled}`);
+  if (counts.slow) parts.push(`дольше обычного: ${counts.slow}`);
   return { title: `Сводка · ${counts.active} ${plural(counts.active, 'активное заявление', 'активных заявления', 'активных заявлений')}`, body: parts.join(' · ') };
 }
 
@@ -85,6 +87,7 @@ async function sendDigest(rootPath?: string): Promise<void> {
     changed24h: log.find(r => r.result === 'changed')?.n ?? 0,
     errors24h: log.find(r => r.result === 'error')?.n ?? 0,
     stalled: apps.filter(a => Date.now() - lastMovement(a) >= STALLED_DAYS * DAY_MS).length,
+    slow: (await loadAnalytics(rootPath).catch(() => null))?.forecasts.filter(f => f.pace === 'slow').length ?? 0,
   });
   await sendPushToAll({ title, body, kind: 'digest' }, rootPath);
 }
