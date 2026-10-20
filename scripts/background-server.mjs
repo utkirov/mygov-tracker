@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, readFileSync } from 'node:fs';
+import { createWriteStream, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -23,6 +23,17 @@ const supervisorPath = join(projectDir, 'scripts', 'supervisor.mjs');
 const buildMarkerPath = join(projectDir, '.next', 'BUILD_ID');
 const buildStampPath = join(projectDir, 'data', 'build-stamp.txt');
 const pidFilePath = join(projectDir, 'data', 'server.pid');
+// supervisor.mjs keeps its own PID here and refuses to run twice.
+const supervisorLockPath = join(projectDir, 'data', 'supervisor.pid');
+// Only one launcher at a time: the logon task and the watchdog must never
+// run `next build` concurrently.
+const launcherLockPath = join(projectDir, 'data', 'launcher.pid');
+// --watchdog: the every-10-minutes task. Silent while the server is fine,
+// brings it back if the supervisor itself died, never opens a browser.
+const WATCHDOG = process.argv.includes('--watchdog');
+// A cold start after logon (Defender scan, Google Drive sync, rebuild) took
+// more than 90 s four times in October — give it room before giving up.
+const HEALTH_TIMEOUT_MS = 5 * 60 * 1000;
 const logPath = join(projectDir, 'autostart.log');
 const buildLogPath = join(projectDir, 'autostart-build.log');
 // Cloudflare Tunnel (tracker.turonproject.uz) points at this port.
@@ -36,6 +47,36 @@ function timestamp() {
 
 async function log(message) {
   await appendFile(logPath, `[${timestamp()}] ${message}\n`, 'utf8');
+}
+
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function livePidFrom(file) {
+  try {
+    const pid = Number(readFileSync(file, 'utf8').trim());
+    return Number.isInteger(pid) && pid > 0 && isPidAlive(pid) ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function acquireLauncherLock() {
+  const other = livePidFrom(launcherLockPath);
+  if (other && other !== process.pid) return false;
+  writeFileSync(launcherLockPath, String(process.pid));
+  process.once('exit', () => {
+    if (livePidFrom(launcherLockPath) === process.pid) {
+      try { unlinkSync(launcherLockPath); } catch { /* already gone */ }
+    }
+  });
+  return true;
 }
 
 async function sleep(ms) {
@@ -233,7 +274,7 @@ async function ensureBuildIsFresh() {
   await log('Build finished successfully.');
 }
 
-async function waitForHealthyServer(timeoutMs = 90_000) {
+async function waitForHealthyServer(timeoutMs = HEALTH_TIMEOUT_MS) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
@@ -265,7 +306,7 @@ function readAppToken() {
   }
 }
 
-async function notifyTelegram() {
+async function notifyTelegram(text) {
   try {
     const Database = require('better-sqlite3');
     const dbPath = join(projectDir, 'data', 'local-db.sqlite');
@@ -277,7 +318,7 @@ async function notifyTelegram() {
     await fetch(`https://api.telegram.org/bot${row.telegram_bot_token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: row.telegram_chat_id, text: `✅ Сервер запущен и работает — http://localhost:${port}`, parse_mode: 'HTML' }),
+      body: JSON.stringify({ chat_id: row.telegram_chat_id, text, parse_mode: 'HTML' }),
     });
   } catch (e) {
     await log(`Telegram notify failed: ${e.message}`);
@@ -289,20 +330,32 @@ async function main() {
     throw new Error(`Next.js binary not found at ${nextBinPath}`);
   }
 
-  await log('Autostart background launcher started.');
-
+  // The watchdog fires every 10 minutes — stay silent while all is well.
   if (await isServerHealthy()) {
-    await log('Server is already healthy; nothing to launch.');
+    if (!WATCHDOG) await log('Server is already healthy; nothing to launch.');
+    return;
+  }
+  if (!acquireLauncherLock()) {
+    if (!WATCHDOG) await log('Another launcher is already starting the server.');
     return;
   }
 
-  await ensureBuildIsFresh();
-  const pid = await startDetachedServer();
-  await log(`Detached Next.js server launched with PID ${pid}.`);
+  const supervisorPid = livePidFrom(supervisorLockPath);
+  if (supervisorPid) {
+    // The supervisor is alive and restarts the server on its own (crash
+    // backoff, health checks) — a rebuild now would pull .next out from under it.
+    if (WATCHDOG) return;
+    await log(`Supervisor (PID ${supervisorPid}) is running; waiting for the server.`);
+  } else {
+    await log(WATCHDOG ? 'Watchdog: server and supervisor are down, starting them.' : 'Autostart background launcher started.');
+    await ensureBuildIsFresh();
+    const pid = await startDetachedServer();
+    await log(`Detached Next.js server launched with PID ${pid}.`);
+  }
 
   const healthy = await waitForHealthyServer();
   if (!healthy) {
-    throw new Error('Server did not become healthy within 90 seconds.');
+    throw new Error(`Server did not become healthy within ${HEALTH_TIMEOUT_MS / 60_000} minutes.`);
   }
 
   const lanUrls = await resolveLanUrls();
@@ -313,9 +366,13 @@ async function main() {
     await log('LAN URLs were not detected.');
   }
 
+  if (WATCHDOG) {
+    await notifyTelegram('♻️ Сервер трекера был остановлен — сторож запустил его снова.');
+    return;
+  }
   const token = readAppToken();
   openBrowser(token ? `http://localhost:${port}?token=${token}` : `http://localhost:${port}`);
-  await notifyTelegram();
+  await notifyTelegram(`✅ Сервер запущен и работает — http://localhost:${port}`);
 }
 
 main().catch(async error => {

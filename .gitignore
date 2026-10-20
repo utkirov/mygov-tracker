@@ -82,3 +82,5 @@ start-server.vbs
 *.docx
 /data/firebase-*.json
 /data/google-services.json
+start-server-watchdog.vbs
+/data/launcher.pid

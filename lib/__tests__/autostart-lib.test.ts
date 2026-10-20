@@ -65,4 +65,18 @@ describe('autostart-lib', () => {
     expect(script).toContain('0, False');
     expect(script).not.toContain('npm start');
   });
+
+  it('passes --watchdog to the launcher and skips the trigger log line for the watchdog task', () => {
+    const script = buildStartServerVbs({
+      projectDir: 'D:\\project',
+      nodePath: 'C:\\Program Files\\nodejs\\node.exe',
+      launcherPath: 'D:\\project\\scripts\\background-server.mjs',
+      logPath: 'D:\\project\\autostart.log',
+      launcherArgs: '--watchdog',
+      logTrigger: false,
+    });
+
+    expect(script).toContain('""" --watchdog", 0, False');
+    expect(script).not.toContain('Autostart task triggered');
+  });
 });

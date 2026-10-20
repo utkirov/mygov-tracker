@@ -15,7 +15,7 @@ function escapeVbs(value) {
   return String(value).replace(/"/g, '""');
 }
 
-function buildStartServerVbs({ projectDir, nodePath, launcherPath, logPath }) {
+function buildStartServerVbs({ projectDir, nodePath, launcherPath, logPath, launcherArgs = '', logTrigger = true }) {
   const escapedProjectDir = escapeVbs(projectDir);
   const escapedNodePath = escapeVbs(nodePath);
   const escapedLauncherPath = escapeVbs(launcherPath);
@@ -29,11 +29,13 @@ function buildStartServerVbs({ projectDir, nodePath, launcherPath, logPath }) {
     `Dim launcherPath : launcherPath = "${escapedLauncherPath}"`,
     `Dim logPath : logPath = "${escapedLogPath}"`,
     '',
-    'Set logFile = fso.OpenTextFile(logPath, 8, True)',
-    'logFile.WriteLine "[" & Now & "] Autostart task triggered"',
-    'logFile.Close',
-    '',
-    'sh.Run """" & nodeCmd & """ """ & launcherPath & """", 0, False',
+    ...(logTrigger ? [
+      'Set logFile = fso.OpenTextFile(logPath, 8, True)',
+      'logFile.WriteLine "[" & Now & "] Autostart task triggered"',
+      'logFile.Close',
+      '',
+    ] : []),
+    `sh.Run """" & nodeCmd & """ """ & launcherPath & """${launcherArgs ? ` ${escapeVbs(launcherArgs)}` : ''}", 0, False`,
   ].join('\r\n') + '\r\n';
 }
 

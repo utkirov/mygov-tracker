@@ -20,6 +20,11 @@ const PROJECT_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const APP_NAME = 'mygov-tracker';
 const TASK_NAME = `${APP_NAME}-autostart`;
 const VBS_PATH = join(PROJECT_DIR, 'start-server.vbs');
+// Every 10 minutes: brings the server back if the supervisor itself died
+// (killed by hand, crashed, out of memory). Silent and no-op while it's up.
+const WATCHDOG_TASK_NAME = `${APP_NAME}-watchdog`;
+const WATCHDOG_VBS_PATH = join(PROJECT_DIR, 'start-server-watchdog.vbs');
+const WATCHDOG_EVERY_MINUTES = 10;
 const LOG_PATH = join(PROJECT_DIR, 'autostart.log');
 const LAUNCHER_PATH = join(PROJECT_DIR, 'scripts', 'background-server.mjs');
 const RUN_REGISTRY_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
@@ -70,6 +75,30 @@ function writeLauncherVbs() {
     }),
     'utf8'
   );
+  writeFileSync(
+    WATCHDOG_VBS_PATH,
+    buildStartServerVbs({
+      projectDir: PROJECT_DIR,
+      nodePath: process.execPath,
+      launcherPath: LAUNCHER_PATH,
+      logPath: LOG_PATH,
+      launcherArgs: '--watchdog',
+      logTrigger: false,
+    }),
+    'utf8'
+  );
+}
+
+function registerWatchdogTask() {
+  const taskCommand = `${quoteForCommand('wscript.exe')} ${quoteForCommand(WATCHDOG_VBS_PATH)}`;
+  const result = run('schtasks', [
+    '/Create', '/TN', WATCHDOG_TASK_NAME, '/SC', 'MINUTE', '/MO', String(WATCHDOG_EVERY_MINUTES), '/TR', taskCommand, '/F',
+  ]);
+  if (result.ok) {
+    console.log(`Сторож зарегистрирован: ${WATCHDOG_TASK_NAME} (каждые ${WATCHDOG_EVERY_MINUTES} мин поднимает сервер, если он упал).`);
+  } else {
+    console.error(`Сторож не зарегистрирован: ${result.err}`);
+  }
 }
 
 function removeLegacyRegistryEntry() {
@@ -112,6 +141,8 @@ function install() {
     createResult = registerUserLogonTask();
   }
 
+  registerWatchdogTask();
+
   if (createResult.ok) {
     console.log(`Автозапуск зарегистрирован: ${TASK_NAME}`);
     console.log('При входе в Windows сервер будет запускаться тихо в фоне.');
@@ -142,10 +173,11 @@ function install() {
 function remove() {
   stopRunningServer();
   run('schtasks', ['/Delete', '/TN', TASK_NAME, '/F']);
+  run('schtasks', ['/Delete', '/TN', WATCHDOG_TASK_NAME, '/F']);
   removeLegacyRegistryEntry();
 
-  if (existsSync(VBS_PATH)) {
-    unlinkSync(VBS_PATH);
+  for (const file of [VBS_PATH, WATCHDOG_VBS_PATH]) {
+    if (existsSync(file)) unlinkSync(file);
   }
 
   if (existsSync(PID_FILE_PATH)) {
