@@ -202,7 +202,8 @@ PDF, заметки, цепочка); добавление по PDF (drag-drop);
     proxy пропускает только GET `/s/<token>` и `/s/<token>/doc/result-N.pdf`.
     Сайт: блок «Ссылка для клиента» в карточке; приложение: «Поделиться с клиентом»
     (1 ч / 1 день / 7 дней — у Alert Android максимум 3 кнопки) → системное «Поделиться».
-    Базовый адрес — `PUBLIC_BASE_URL` или https://tracker.turonproject.uz.
+    Базовый адрес — `PUBLIC_BASE_URL` или https://tracker.turonproject.uz. Развёрнуто, проверено
+    через домен; приложение — EAS Update group 912f74d3 (runtime 1.3.0).
 - Чек-лист согласований (2026-10-20), перенесён из расширения `mygov-extension`
   (`D:\utkirov\work\2026\AI\mygov-extension\checklist.js`), но работает на сервере: страница
   проверки статуса oldmy.gov.uz (та же, что при каждой проверке) содержит всю хронологию —
