@@ -13,6 +13,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, GitBranch } from 'lucide-react';
 
 import { StageStepper } from '@/components/StageStepper';
+import { ClientPicker } from '@/components/detail/ClientPicker';
 import { ForecastNote } from '@/components/detail/ForecastNote';
 import { syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import { formatDate, getChangeHeadline } from '@/lib/format-utils';
@@ -600,7 +601,9 @@ export default function DetailPage() {
           </div>
 
           <div className="space-y-4">
-            <ShareSection applicationId={id} />
+            <ClientPicker applicationId={id} client={application.client}
+              onChange={client => setApplication(prev => (prev ? { ...prev, client } : prev))} />
+            <ShareSection applicationId={id} defaultLabel={application.client?.name ?? ''} />
             <OperationalDataSection
               application={application}
               sync={sync}

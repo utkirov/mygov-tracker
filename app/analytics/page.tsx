@@ -210,6 +210,27 @@ export default function AnalyticsPage() {
           </Card>
         </div>
 
+        {data.clients.length > 0 && (
+          <Card title="По клиентам" hint="Заявления клиента с повторными подачами; срок — по решённым.">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px]">
+                <thead><tr style={muted}><th className={th}>Клиент</th><th className={th}>Заявлений</th><th className={th}>В работе</th><th className={th}>Одобрено</th><th className={th}>Срок до решения</th></tr></thead>
+                <tbody>
+                  {data.clients.map(c => (
+                    <tr key={c.clientId} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                      <td className={td}><Link href={`/clients/${c.clientId}`} className="font-semibold hover:underline" style={text}>{c.name}</Link></td>
+                      <td className={`${td} tabular-nums`} style={muted}>{c.total}</td>
+                      <td className={`${td} tabular-nums`} style={c.slow ? { color: 'var(--warning)' } : text}>{c.active}{c.slow ? ` · ${c.slow} дольше обычного` : ''}</td>
+                      <td className={`${td} tabular-nums`} style={text}>{pct(c.approvalRate)} <span style={muted}>{c.approved}/{c.approved + c.rejected}</span></td>
+                      <td className={`${td} tabular-nums`} style={text}>{days(c.duration?.median)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
         <Card title="Комиссии и организации" hint="Ответы в «Заключении комиссии»: доля отказов и время ответа с момента принятия.">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px]">

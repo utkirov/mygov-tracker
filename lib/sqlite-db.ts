@@ -45,6 +45,10 @@ function applyMigrations(db: Database.Database): void {
   if (!settingsCols.includes('telegram_commands_chat_id')) {
     db.exec("ALTER TABLE settings ADD COLUMN telegram_commands_chat_id TEXT NOT NULL DEFAULT ''");
   }
+  // Share links: client-wide links (application_id = '') and an optional PIN.
+  const shareCols = (db.prepare("PRAGMA table_info(share_links)").all() as { name: string }[]).map(c => c.name);
+  if (shareCols.length > 0 && !shareCols.includes('client_id')) db.exec("ALTER TABLE share_links ADD COLUMN client_id TEXT");
+  if (shareCols.length > 0 && !shareCols.includes('pin_hash')) db.exec("ALTER TABLE share_links ADD COLUMN pin_hash TEXT");
   const pushCols = (db.prepare("PRAGMA table_info(push_devices)").all() as { name: string }[]).map(c => c.name);
   if (pushCols.length > 0 && !pushCols.includes('prefs')) {
     db.exec("ALTER TABLE push_devices ADD COLUMN prefs TEXT NOT NULL DEFAULT ''");
@@ -175,6 +179,38 @@ function applySchema(db: Database.Database): void {
       last_viewed_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_share_links_app ON share_links(application_id);
+
+    -- Clients (lib/clients.ts): who an application is for; one client — many applications.
+    CREATE TABLE IF NOT EXISTS clients (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS client_applications (
+      application_id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_applications_client ON client_applications(client_id);
+
+    -- Who opened a share link and when (device type only, no IP).
+    CREATE TABLE IF NOT EXISTS share_link_views (
+      token TEXT NOT NULL,
+      viewed_at TEXT NOT NULL,
+      device TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_share_link_views_token ON share_link_views(token, viewed_at);
+
+    -- Telegram chats that pressed «Подписаться» on a share page (/start s_<token>).
+    CREATE TABLE IF NOT EXISTS share_subscriptions (
+      token TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (token, chat_id)
+    );
 
     CREATE TABLE IF NOT EXISTS push_devices (
       token TEXT PRIMARY KEY,

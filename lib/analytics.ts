@@ -1,5 +1,6 @@
 import { readChecklist } from './application-artifacts';
 import type { Checklist } from './checklist';
+import { loadClientIndex } from './clients';
 import { listApplications, type LocalDbApplication } from './local-db';
 
 /**
@@ -64,6 +65,19 @@ export interface Forecast {
   reason: string;
 }
 
+export interface ClientStats {
+  clientId: string;
+  name: string;
+  total: number;
+  active: number;
+  approved: number;
+  rejected: number;
+  cancelled: number;
+  approvalRate: number | null;
+  duration: DurationStats | null;
+  slow: number;
+}
+
 export interface Analytics {
   generated_at: string;
   totals: {
@@ -80,6 +94,7 @@ export interface Analytics {
   resubmissions: { chains: number; firstTimeApproved: number; approvedAfterRetry: number; avgAttemptsToApprove: number | null };
   months: Array<{ month: string; submitted: number; approved: number; rejected: number; cancelled: number; active: number }>;
   forecasts: Forecast[];
+  clients: ClientStats[];
   coverage: { withTimeline: number; total: number };
 }
 
@@ -132,7 +147,7 @@ function acceptedAt(checklist: Checklist): number | null {
   return wallTime(accepted?.date ?? checklist.stages[0]?.date);
 }
 
-interface Row { app: LocalDbApplication; checklist: Checklist | null; outcome: Outcome }
+interface Row { app: LocalDbApplication; checklist: Checklist | null; outcome: Outcome; client?: { id: string; name: string } | null }
 
 export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
   const nowWall = now.getTime() + TASHKENT_OFFSET;
@@ -294,6 +309,23 @@ export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
     };
   }).sort((a, b) => (a.pace === 'slow' ? 0 : 1) - (b.pace === 'slow' ? 0 : 1) || b.elapsedDays - a.elapsedDays);
 
+  // Clients: the same numbers per client (lib/clients.ts assignments, resubmissions included).
+  const slowIds = new Set(forecasts.filter(f => f.pace === 'slow').map(f => f.applicationId));
+  const byClient = new Map<string, Row[]>();
+  for (const r of rows) if (r.client) byClient.set(r.client.id, [...(byClient.get(r.client.id) ?? []), r]);
+  const clients: ClientStats[] = [...byClient.values()].map(list => {
+    const c = (o: Outcome) => list.filter(r => r.outcome === o).length;
+    return {
+      clientId: list[0].client!.id,
+      name: list[0].client!.name,
+      total: list.length,
+      active: c('active'), approved: c('approved'), rejected: c('rejected'), cancelled: c('cancelled'),
+      approvalRate: rate(c('approved'), c('approved') + c('rejected')),
+      duration: stats(list.filter(r => r.outcome === 'approved' || r.outcome === 'rejected').map(durationOf)),
+      slow: list.filter(r => slowIds.has(r.app.id)).length,
+    };
+  }).sort((a, b) => b.total - a.total);
+
   const count = (o: Outcome) => rows.filter(r => r.outcome === o).length;
   return {
     generated_at: now.toISOString(),
@@ -322,6 +354,7 @@ export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
     },
     months: [...monthMap.values()].sort((a, b) => a.month.localeCompare(b.month)),
     forecasts,
+    clients,
     coverage: { withTimeline: rows.filter(r => (r.checklist?.stages.length ?? 0) > 1).length, total: rows.length },
   };
 }
@@ -339,8 +372,10 @@ let cache: { at: number; root: string | undefined; value: Analytics } | null = n
 export async function loadAnalytics(rootPath?: string, now = new Date()): Promise<Analytics> {
   if (cache && cache.root === rootPath && now.getTime() - cache.at < 60_000) return cache.value;
   const apps = await listApplications({}, rootPath);
+  const { byApplication } = await loadClientIndex(rootPath, apps);
   const rows: Row[] = await Promise.all(apps.map(async app => ({
     app,
+    client: byApplication.get(app.id) ?? null,
     checklist: await readChecklist(app.id, rootPath),
     outcome: app.archived ? (outcomeOf(app.status) === 'active' ? 'cancelled' : outcomeOf(app.status)) : outcomeOf(app.status),
   })));

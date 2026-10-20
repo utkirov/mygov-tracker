@@ -38,6 +38,8 @@ export interface Application {
   checklist_summary?: ChecklistSummary | null;
   /** Active applications: expected date and «дольше обычного» (lib/analytics.ts). */
   forecast?: ApplicationForecast | null;
+  /** Who the application is for (lib/clients.ts), inherited by resubmissions. */
+  client?: { id: string; name: string } | null;
   sync_state: SyncState;
   last_checked_at: string | null;
   next_check_at: string | null;

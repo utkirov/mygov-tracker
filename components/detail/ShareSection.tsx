@@ -15,6 +15,8 @@ interface ShareLink {
   views: number;
   last_viewed_at: string | null;
   active: boolean;
+  has_pin: boolean;
+  subscribers: number;
 }
 
 const DURATIONS: Array<{ minutes: number | null; label: string }> = [
@@ -31,45 +33,73 @@ function when(value: string | null): string {
   return new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-/** Client share links: a read-only status page that expires (lib/share-links.ts). */
-export default function ShareSection({ applicationId }: { applicationId: string }) {
+function Views({ token }: { token: string }) {
+  const [views, setViews] = useState<Array<{ viewed_at: string; device: string }> | null>(null);
+  useEffect(() => {
+    fetch(`/api/share-links/${token}/views`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : { views: [] }))
+      .then((d: { views: Array<{ viewed_at: string; device: string }> }) => startTransition(() => setViews(d.views)))
+      .catch(() => startTransition(() => setViews([])));
+  }, [token]);
+  if (!views) return <p className="mt-2 text-[11px] text-[var(--text-muted)]">Загрузка…</p>;
+  if (views.length === 0) return <p className="mt-2 text-[11px] text-[var(--text-muted)]">Ещё не открывали</p>;
+  return (
+    <ul className="mt-2 max-h-40 space-y-0.5 overflow-y-auto text-[11px] text-[var(--text-soft)]">
+      {views.map((v, i) => <li key={i} className="flex justify-between gap-3"><span>{v.device}</span><span className="font-mono text-[var(--text-muted)]">{when(v.viewed_at)}</span></li>)}
+    </ul>
+  );
+}
+
+/**
+ * Client share links: a read-only status page that expires (lib/share-links.ts).
+ * For one application (applicationId) or for all applications of a client (clientId).
+ */
+export default function ShareSection({ applicationId, clientId, defaultLabel = '' }: { applicationId?: string; clientId?: string; defaultLabel?: string }) {
+  const base = clientId ? `/api/clients/${clientId}/share-links` : `/api/applications/${applicationId}/share-links`;
   const [links, setLinks] = useState<ShareLink[]>([]);
-  const [minutes, setMinutes] = useState<number | null>(24 * 60);
-  const [label, setLabel] = useState('');
+  const [minutes, setMinutes] = useState<number | null>(clientId ? 30 * 24 * 60 : 24 * 60);
+  const [label, setLabel] = useState(defaultLabel);
+  const [pin, setPin] = useState('');
   const [showDocuments, setShowDocuments] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [openViews, setOpenViews] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const r = await fetch(`/api/applications/${applicationId}/share-links`, { cache: 'no-store' }).catch(() => null);
+    const r = await fetch(base, { cache: 'no-store' }).catch(() => null);
     if (!r?.ok) return;
     const { links: next } = (await r.json()) as { links: ShareLink[] };
     startTransition(() => setLinks(next));
-  }, [applicationId]);
+  }, [base]);
 
   useEffect(() => { void load(); }, [load]);
 
-  async function copy(url: string) {
+  async function copy(url: string, withPin?: string) {
+    const text = withPin ? `${url}\nPIN: ${withPin}` : url;
     try {
-      await navigator.clipboard.writeText(url);
-      showToast({ title: 'Ссылка скопирована', tone: 'success' });
+      await navigator.clipboard.writeText(text);
+      showToast({ title: withPin ? 'Ссылка и PIN скопированы' : 'Ссылка скопирована', tone: 'success' });
     } catch {
-      showToast({ title: 'Скопируйте вручную', description: url, tone: 'warning' });
+      showToast({ title: 'Скопируйте вручную', description: text, tone: 'warning' });
     }
   }
 
   async function create() {
+    if (pin && !/^\d{4,8}$/.test(pin)) {
+      showToast({ title: 'PIN — от 4 до 8 цифр', tone: 'warning' });
+      return;
+    }
     setBusy(true);
     try {
-      const r = await fetch(`/api/applications/${applicationId}/share-links`, {
+      const r = await fetch(base, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ minutes, label, showDocuments }),
+        body: JSON.stringify({ minutes, label, showDocuments, pin }),
       });
       const payload = await r.json().catch(() => ({})) as { link?: ShareLink; error?: string };
       if (!r.ok || !payload.link) throw new Error(payload.error ?? 'Не удалось создать ссылку');
-      setLabel('');
       await load();
-      await copy(payload.link.url);
+      await copy(payload.link.url, pin || undefined);
+      setPin('');
     } catch (error) {
       showToast({ title: 'Ссылка не создана', description: error instanceof Error ? error.message : '', tone: 'error' });
     } finally {
@@ -88,12 +118,13 @@ export default function ShareSection({ applicationId }: { applicationId: string 
 
   return (
     <section className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)] md:p-5">
-      <h2 className="text-sm font-bold text-[var(--text)]">Ссылка для клиента</h2>
+      <h2 className="text-sm font-bold text-[var(--text)]">{clientId ? 'Ссылка на все заявления клиента' : 'Ссылка для клиента'}</h2>
       <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">
-        Страница со статусом, этапами и согласованиями — без входа. Пароль, телефоны, заметки и скриншот не показываются.
+        Страница со статусом, этапами и согласованиями — без входа{clientId ? ', новые заявления клиента появляются в ней сами' : ''}.
+        Пароль, телефоны, заметки и скриншот не показываются. Клиент может подписаться на обновления в Telegram.
       </p>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <select value={minutes === null ? 'forever' : String(minutes)}
           onChange={e => setMinutes(e.target.value === 'forever' ? null : Number(e.target.value))}
           className="h-9 rounded-[8px] border px-2 text-[13px]" style={field}>
@@ -101,6 +132,8 @@ export default function ShareSection({ applicationId }: { applicationId: string 
         </select>
         <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Для кого (необязательно)"
           className="h-9 rounded-[8px] border px-3 text-[13px] outline-none" style={field} />
+        <input value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="PIN (необязательно)"
+          inputMode="numeric" className="h-9 rounded-[8px] border px-3 text-[13px] outline-none" style={field} />
       </div>
       <label className="mt-2 flex items-center gap-2 text-[12px] text-[var(--text-soft)]">
         <input type="checkbox" checked={showDocuments} onChange={e => setShowDocuments(e.target.checked)} />
@@ -117,7 +150,7 @@ export default function ShareSection({ applicationId }: { applicationId: string 
           {active.map(l => (
             <li key={l.token} className="rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
               <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-[12px] font-semibold text-[var(--text)]">{l.label || 'Ссылка'}</p>
+                <p className="truncate text-[12px] font-semibold text-[var(--text)]">{l.label || 'Ссылка'}{l.has_pin ? ' · с PIN' : ''}</p>
                 <div className="flex shrink-0 gap-3 text-[11px] font-medium">
                   <button type="button" onClick={() => void copy(l.url)} style={{ color: 'var(--accent)' }}>Копировать</button>
                   <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Открыть</a>
@@ -125,9 +158,16 @@ export default function ShareSection({ applicationId }: { applicationId: string 
                 </div>
               </div>
               <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                {l.expires_at ? `до ${when(l.expires_at)}` : 'бессрочно'} · просмотров: {l.views}
-                {l.last_viewed_at ? ` · последний ${when(l.last_viewed_at)}` : ''}{l.show_documents ? ' · с документами' : ''}
+                {l.expires_at ? `до ${when(l.expires_at)}` : 'бессрочно'}
+                {' · '}
+                <button type="button" onClick={() => setOpenViews(openViews === l.token ? null : l.token)} className="underline decoration-dotted">
+                  просмотров: {l.views}
+                </button>
+                {l.last_viewed_at ? ` · последний ${when(l.last_viewed_at)}` : ''}
+                {l.subscribers ? ` · в Telegram: ${l.subscribers}` : ''}
+                {l.show_documents ? ' · с документами' : ''}
               </p>
+              {openViews === l.token && <Views token={l.token} />}
             </li>
           ))}
         </ul>

@@ -174,6 +174,9 @@ function KanbanCard({ application, index = 0 }: { application: Application; inde
       {subtitle && (
         <p className="mt-0.5 text-[12px] leading-[1.5]" style={{ color: 'var(--text-soft)' }}>{subtitle}</p>
       )}
+      {application.client && (
+        <p className="mt-1 truncate text-[12px]" style={{ color: 'var(--text-soft)' }}>Клиент: {application.client.name}</p>
+      )}
       {application.organization && (
         <p className="mt-1.5 flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
           <Building2 size={12} className="shrink-0" />

@@ -8,6 +8,8 @@
 import path from 'node:path';
 
 import { readChecklist, saveArtifacts } from './application-artifacts';
+import { handleClientBotMessage } from './client-notify';
+import { isSubscriberChat } from './share-links';
 import type { Checklist } from './checklist';
 import type { CheckOutputs } from './check-outputs';
 import { readLocalDb, readSettings, type LocalDbApplication, type LocalDbStatusHistory } from './local-db';
@@ -472,6 +474,17 @@ async function pollOnce(): Promise<void> {
     // Rather than silently ignoring an untrusted chat (which looks like the
     // bot is broken), surface its id once so it can be pasted into
     // Настройки → Telegram → Chat ID для команд if the user wants to use it.
+    // Clients who pressed «Подписаться» on a share page: /start s_<token>, /stop.
+    const incomingText = update.message?.text?.trim() ?? '';
+    if (incomingText && (/^\/(start\s+s_|stop\b)/i.test(incomingText) || (!trustedChatIds.has(incomingChatId) && await isSubscriberChat(incomingChatId)))) {
+      try {
+        if (await handleClientBotMessage(botToken, incomingChatId, incomingText, await isSubscriberChat(incomingChatId))) continue;
+      } catch (err) {
+        console.error('[TelegramBot] Client message failed:', err);
+        continue;
+      }
+    }
+
     if (!trustedChatIds.has(incomingChatId)) {
       if (update.message) {
         await callTelegramApi(botToken, 'sendMessage', {

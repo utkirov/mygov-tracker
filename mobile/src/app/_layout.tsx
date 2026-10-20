@@ -115,6 +115,9 @@ function Gate() {
         <Stack.Screen name="application/[id]" options={{ title: 'Заявка' }} />
         <Stack.Screen name="add" options={{ title: 'Новое заявление' }} />
         <Stack.Screen name="analytics" options={{ title: 'Сроки и аналитика' }} />
+        <Stack.Screen name="share" options={{ title: 'Ссылка для клиента' }} />
+        <Stack.Screen name="clients/index" options={{ title: 'Клиенты' }} />
+        <Stack.Screen name="clients/[id]" options={{ title: 'Клиент' }} />
       </Stack>
       {locked && (
         <View style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.bg }]}>

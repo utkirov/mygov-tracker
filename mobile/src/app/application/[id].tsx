@@ -1,6 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChecklistCard } from '@/components/ChecklistCard';
 import { StageStepper } from '@/components/StageStepper';
@@ -75,7 +75,8 @@ export default function ApplicationScreen() {
     }
   }, [id, expire]);
 
-  useEffect(() => { void load(); }, [load]);
+  // Also on return from the client picker / share screen.
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   // «Скриншот» button on the push (design A10): show the screenshot right away.
   useEffect(() => {
@@ -98,24 +99,6 @@ export default function ApplicationScreen() {
       liveUpdate.end(LIVE_CHECK_ID);
       setChecking(false);
     }
-  }
-
-  /** Client share link (/s/<token>) with a chosen lifetime, sent through Android's share sheet. */
-  function share() {
-    const make = async (minutes: number | null) => {
-      try {
-        const { link } = await api.createShareLink(id, minutes);
-        const until = link.expires_at ? `Ссылка действует до ${new Date(link.expires_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
-        await Share.share({ message: [`Статус заявления «${app?.object_name || app?.service_name || app?.application_number}»:`, link.url, until].filter(Boolean).join('\n') });
-      } catch (e) {
-        Alert.alert('Ссылка не создана', e instanceof Error ? e.message : 'Повторите попытку');
-      }
-    };
-    Alert.alert('Ссылка для клиента', 'Сколько будет работать ссылка? Пароль, телефоны и заметки клиент не увидит.', [
-      { text: '1 час', onPress: () => void make(60) },
-      { text: '1 день', onPress: () => void make(24 * 60) },
-      { text: '7 дней', onPress: () => void make(7 * 24 * 60) },
-    ], { cancelable: true });
   }
 
   async function refreshChecklist() {
@@ -216,7 +199,20 @@ export default function ApplicationScreen() {
 
       <ChecklistCard checklist={checklist} onRefresh={() => void refreshChecklist()} busy={refreshingChecklist || !!offlineSince} />
 
-      <Button title="Поделиться с клиентом" variant="secondary" onPress={share} disabled={!!offlineSince} />
+      <Card style={{ gap: 6 }}>
+        <Pressable onPress={() => router.push({ pathname: '/clients', params: { pick: id } })} style={styles.clientRow}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: t.textMuted, fontSize: 12 }}>Клиент</Text>
+            <Text style={{ color: app?.client ? t.text : t.textMuted, fontSize: 15, fontFamily: font.medium }}>{app?.client?.name ?? 'Не выбран — нажмите, чтобы выбрать'}</Text>
+          </View>
+          {app?.client && (
+            <Pressable onPress={() => router.push(`/clients/${app.client!.id}`)}><Text style={{ color: t.accent, fontSize: 13 }}>Карточка</Text></Pressable>
+          )}
+        </Pressable>
+      </Card>
+
+      <Button title="Поделиться с клиентом" variant="secondary" disabled={!!offlineSince}
+        onPress={() => router.push({ pathname: '/share', params: { app: id, title: app?.object_name || app?.service_name || app?.application_number || '' } })} />
 
       <Card style={{ gap: 10 }}>
         <View style={styles.sectionHead}>
@@ -367,6 +363,7 @@ export default function ApplicationScreen() {
 }
 
 const styles = StyleSheet.create({
+  clientRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   wrap: { padding: 16, gap: 12 },
   number: { fontFamily: font.mono, fontSize: 12 },
   title: { fontFamily: font.semibold, fontSize: 20, lineHeight: 26 },

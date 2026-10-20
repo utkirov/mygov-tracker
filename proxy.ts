@@ -59,6 +59,10 @@ export function proxy(request: NextRequest) {
     if (/^\/s\/[A-Za-z0-9_-]{20,64}(\/doc\/result-\d{1,2}\.pdf)?$/.test(pathname) && request.method === 'GET') {
       return NextResponse.next();
     }
+    // The PIN form of a protected link (checked and rate-limited there).
+    if (/^\/s\/[A-Za-z0-9_-]{20,64}\/unlock$/.test(pathname) && request.method === 'POST') {
+      return NextResponse.next();
+    }
 
     const token = readSessionToken(request.cookies.get(SESSION_COOKIE)?.value, request.headers.get('authorization'));
     if (verifySession(token, process.env.SESSION_SECRET)) return NextResponse.next();

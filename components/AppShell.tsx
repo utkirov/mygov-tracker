@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Archive, BarChart3, Folder, Keyboard, LayoutDashboard, Moon, Plus, RefreshCw, Search, Settings, Sun, X } from 'lucide-react';
+import { Archive, BarChart3, Folder, Keyboard, LayoutDashboard, Moon, Plus, RefreshCw, Search, Settings, Sun, Users, X } from 'lucide-react';
 
 import { useSyncEngineSnapshot, startSyncEngine, stopSyncEngine, requestImmediateSyncRun } from '@/lib/sync-engine';
 import { useTheme } from './ThemeProvider';
@@ -17,7 +17,9 @@ const isSharePage = (pathname: string) => pathname.startsWith('/s/');
 const NAV = [
   { href: '/dashboard',  icon: LayoutDashboard, label: 'Доска' },
   { href: '/archive',    icon: Archive,          label: 'Архив' },
-  { href: '/projects',   icon: Folder,           label: 'Проекты' },
+  { href: '/clients',    icon: Users,            label: 'Клиенты' },
+  // Rarely used — kept off the phone bottom bar so seven items still fit at 375 px.
+  { href: '/projects',   icon: Folder,           label: 'Проекты', mobile: false },
   { href: '/analytics',  icon: BarChart3,        label: 'Аналитика' },
   { href: '/settings',   icon: Settings,         label: 'Настройки' },
 ];
@@ -292,7 +294,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch border-t md:hidden"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        {NAV.map(({ href, icon: Icon, label }) => {
+        {NAV.filter(item => !('mobile' in item) || item.mobile !== false).map(({ href, icon: Icon, label }) => {
           const active = isActive(href);
           return (
             <Link

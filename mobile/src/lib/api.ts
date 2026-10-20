@@ -38,7 +38,17 @@ export interface Application {
   result_documents?: number;
   checklist_summary?: ({ total: number; result: 'rejected' | 'approved' | null; failed: number; stage?: string; stageIndex?: number; stageCount?: number } & Record<ApprovalStatus, number>) | null;
   forecast?: Forecast | null;
+  client?: { id: string; name: string } | null;
 }
+
+export interface ClientSummary { id: string; name: string; phone: string; note: string; total: number; active: number; last_change_at: string | null }
+export interface ClientStats { clientId: string; name: string; total: number; active: number; approved: number; rejected: number; cancelled: number; approvalRate: number | null; duration: DurationStats | null; slow: number }
+export interface ShareLinkInfo {
+  token: string; url: string; label: string; show_documents: boolean; created_at: string; expires_at: string | null;
+  revoked_at: string | null; views: number; last_viewed_at: string | null; active: boolean; has_pin: boolean; subscribers: number;
+}
+export type ShareTarget = { app: string } | { client: string };
+const shareBase = (t: ShareTarget) => ('app' in t ? `/api/applications/${enc(t.app)}/share-links` : `/api/clients/${enc(t.client)}/share-links`);
 
 /** Server lib/analytics.ts — terms, stage waits, commissions, forecasts. */
 export interface DurationStats { n: number; median: number; p80: number; min: number; max: number }
@@ -236,6 +246,19 @@ export const api = {
   checkLog: (limit = 100) => cachedRequest<CheckLogEntry[]>('check-log', `/api/check-log?limit=${limit}`),
   checklist: (id: string) => cachedRequest<{ checklist: Checklist | null }>(`checklist:${id}`, `/api/applications/${enc(id)}/checklist`),
   refreshChecklist: (id: string) => request<{ checklist: Checklist }>(`/api/applications/${enc(id)}/checklist`, { method: 'POST' }),
+  shareLinks: (t: ShareTarget) => request<{ links: ShareLinkInfo[] }>(shareBase(t)),
+  createLink: (t: ShareTarget, opts: { minutes: number | null; showDocuments: boolean; pin: string; label: string }) =>
+    request<{ link: ShareLinkInfo }>(shareBase(t), { method: 'POST', body: JSON.stringify(opts) }),
+  revokeLink: (token: string) => request<{ ok: boolean }>(`/api/share-links/${enc(token)}`, { method: 'DELETE' }),
+  linkViews: (token: string) => request<{ views: Array<{ viewed_at: string; device: string }> }>(`/api/share-links/${enc(token)}/views`),
+  clients: () => cachedRequest<{ clients: ClientSummary[]; suggestions: Array<{ name: string; applicationIds: string[] }> }>('clients', '/api/clients'),
+  client: (id: string) => cachedRequest<{ client: ClientSummary; applications: Application[]; stats: ClientStats | null }>(`client:${id}`, `/api/clients/${enc(id)}`),
+  createClient: (input: { name: string; phone?: string; applicationIds?: string[] }) =>
+    request<{ client: ClientSummary }>('/api/clients', { method: 'POST', body: JSON.stringify(input) }),
+  updateClient: (id: string, patch: { name?: string; phone?: string; note?: string }) =>
+    request<{ client: ClientSummary }>(`/api/clients/${enc(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  setApplicationClient: (appId: string, clientId: string | null) =>
+    request<{ ok: boolean }>(`/api/applications/${enc(appId)}/client`, { method: 'PUT', body: JSON.stringify({ clientId }) }),
   createShareLink: (id: string, minutes: number | null, showDocuments = true) =>
     request<{ link: { url: string; expires_at: string | null } }>(`/api/applications/${enc(id)}/share-links`, { method: 'POST', body: JSON.stringify({ minutes, showDocuments }) }),
   analytics: () => cachedRequest<Analytics>('analytics', '/api/analytics'),

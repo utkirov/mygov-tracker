@@ -21,6 +21,7 @@ import {
 import { produceCheckOutputs, type CheckOutputs } from './check-outputs';
 import { describeVerdicts, refreshChecklist, rejectionSummary } from './checklist-updates';
 import { openDb } from './sqlite-db';
+import { notifyClientSubscribers } from './client-notify';
 import { sendPushToAll } from './push';
 import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, parseMyGovDate } from './status-checker';
 import {
@@ -300,6 +301,14 @@ export async function checkOne(
       })).catch(err => console.error('[Scheduler] Push error (documents):', err));
     }
   }
+
+  // Clients subscribed from a share page (Telegram) — status, stage, approvals, result.
+  notifyClientSubscribers(updatedEntry, checklistUpdate?.checklist ?? null, {
+    statusChanged: changedFields.includes('status'),
+    actionChanged: changedFields.includes('current_action'),
+    completed: completedNow,
+    newVerdicts: checklistUpdate?.newVerdicts.length ?? 0,
+  }).catch(err => console.error('[Scheduler] Client notify error:', err));
 
   if (options.awaitOutputs) return { result, session, outputs: await outputs };
   return { result, session };

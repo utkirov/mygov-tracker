@@ -190,7 +190,11 @@ export default function SettingsScreen() {
 
       {update && <UpdateCard release={update} onDismiss={() => setUpdate(null)} />}
 
-      <Section title="Аналитика">
+      <Section title="Клиенты и аналитика">
+        <Pressable onPress={() => router.push('/clients')}>
+          <InfoRow label="Клиенты" hint="Заявления по клиентам, одна ссылка на все заявления клиента"
+            right={<Text style={[styles.small, { color: t.accent }]}>Открыть</Text>} />
+        </Pressable>
         <Pressable onPress={() => router.push('/analytics')}>
           <InfoRow label="Сроки и аналитика" hint="Прогноз по заявлениям, сроки этапов, отказы, комиссии"
             right={<Text style={[styles.small, { color: t.accent }]}>Открыть</Text>} />

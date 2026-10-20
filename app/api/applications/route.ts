@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { loadAnalytics } from '@/lib/analytics';
-import { readArtifacts, readChecklist } from '@/lib/application-artifacts';
-import { stageSummary } from '@/lib/checklist';
+import { enrichApplications } from '@/lib/application-summary';
+import { setApplicationClient } from '@/lib/clients';
 import {
   insertApplication,
   insertStatusHistory,
@@ -25,20 +24,8 @@ export async function GET(request: NextRequest) {
   const showArchived = request.nextUrl.searchParams.get('archived') === 'true';
   const applications = sortByUpdatedAtDesc(await listApplications({ archived: showArchived }));
 
-  // Cards show the approvals progress («7 из 10») and the forecast; the archive table also counts result documents.
-  const forecasts = showArchived ? new Map() : new Map((await loadAnalytics()).forecasts.map(f => [f.applicationId, f]));
-  const enriched = await Promise.all(applications.map(async (application) => {
-    const checklist = await readChecklist(application.id);
-    const summary = checklist
-      ? { ...checklist.counts, result: checklist.result?.kind ?? null, failed: checklist.result?.criteria.filter(c => c.status === 'bad').length ?? 0, ...stageSummary(checklist) }
-      : null;
-    return {
-      ...application,
-      checklist_summary: summary,
-      ...(showArchived ? {} : { forecast: forecasts.get(application.id) ?? null }),
-      ...(showArchived ? { result_documents: (await readArtifacts(application.id)).results.length } : {}),
-    };
-  }));
+  // Cards show approvals, stage, forecast and client; the archive table also counts result documents.
+  const enriched = await enrichApplications(applications, { resultDocuments: showArchived });
   return NextResponse.json(enriched);
 }
 
@@ -112,6 +99,8 @@ export async function POST(request: NextRequest) {
   };
 
   await insertApplication(application);
+  // «Новое заявление» for a client (client card) or a resubmission keeps the client.
+  if (typeof body.client_id === 'string' && body.client_id) await setApplicationClient(application.id, body.client_id).catch(() => {});
   await insertStatusHistory({
     id: randomUUID(),
     application_id: application.id,

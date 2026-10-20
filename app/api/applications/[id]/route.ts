@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { deleteArtifacts } from '@/lib/application-artifacts';
+import { enrichApplications } from '@/lib/application-summary';
 import { deletePdfFile } from '@/lib/local-storage';
 import {
   deleteApplicationRow,
@@ -46,7 +47,9 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  return NextResponse.json({ application, history: await getStatusHistory(id) });
+  // Same extras as the list (forecast, client, stage) so the card can show them.
+  const [enriched] = await enrichApplications([application]);
+  return NextResponse.json({ application: enriched, history: await getStatusHistory(id) });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

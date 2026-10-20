@@ -166,6 +166,7 @@ function ApplicationCard({ app, theme: t, archived }: { app: Application; theme:
         <Text style={[styles.title, { color: t.text }]} numberOfLines={2}>{app.object_name || app.service_name}</Text>
         {!!app.object_name && <Text style={[styles.service, { color: t.textSoft }]} numberOfLines={2}>{app.service_name}</Text>}
         <StatusDot color={s.color} label={s.label} />
+        {!!app.client && <Text style={[styles.meta, { color: t.textSoft }]} numberOfLines={1}>Клиент: {app.client.name}</Text>}
         {needsAction && !archived && <Text style={[styles.action, { color: t.danger }]}>Нужно ваше действие</Text>}
         {!!app.checklist_summary?.stage && !archived && (
           <Text style={[styles.meta, { color: t.textMuted }]} numberOfLines={1}>
