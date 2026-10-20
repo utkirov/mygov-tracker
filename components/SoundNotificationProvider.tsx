@@ -10,6 +10,7 @@ export function SoundNotificationProvider() {
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
+    if (window.location.pathname.startsWith('/s/')) return; // public share page
     fetch('/api/settings', { cache: 'no-store' })
       .then(r => r.json())
       .then((data: { sound_enabled?: boolean }) => {

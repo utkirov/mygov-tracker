@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { readArtifacts, readChecklist } from '@/lib/application-artifacts';
+import { stageSummary } from '@/lib/checklist';
 import {
   insertApplication,
   insertStatusHistory,
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
   const enriched = await Promise.all(applications.map(async (application) => {
     const checklist = await readChecklist(application.id);
     const summary = checklist
-      ? { ...checklist.counts, result: checklist.result?.kind ?? null, failed: checklist.result?.criteria.filter(c => c.status === 'bad').length ?? 0 }
+      ? { ...checklist.counts, result: checklist.result?.kind ?? null, failed: checklist.result?.criteria.filter(c => c.status === 'bad').length ?? 0, ...stageSummary(checklist) }
       : null;
     return {
       ...application,

@@ -36,13 +36,16 @@ export interface Application {
   sms_phone: string;
   pdf_filename: string;
   result_documents?: number;
-  checklist_summary?: ({ total: number; result: 'rejected' | 'approved' | null; failed: number } & Record<ApprovalStatus, number>) | null;
+  checklist_summary?: ({ total: number; result: 'rejected' | 'approved' | null; failed: number; stage?: string; stageIndex?: number; stageCount?: number } & Record<ApprovalStatus, number>) | null;
 }
 
 export type ApprovalStatus = 'ok' | 'bad' | 'other' | 'wait';
+export interface ProgressStep { title: string; state: 'done' | 'current' | 'pending' | 'skipped'; date: string }
 export interface Checklist {
   parsed_at: string;
   stages: Array<{ title: string; date: string; actor: string }>;
+  progress: ProgressStep[];
+  outcome: 'approved' | 'rejected' | 'in_progress' | null;
   orgs: Array<{ name: string; status: ApprovalStatus; verdict: string; comment: string; date: string; num: number | null }>;
   counts: Record<ApprovalStatus, number> & { total: number };
   result: {
@@ -210,6 +213,8 @@ export const api = {
   checkLog: (limit = 100) => cachedRequest<CheckLogEntry[]>('check-log', `/api/check-log?limit=${limit}`),
   checklist: (id: string) => cachedRequest<{ checklist: Checklist | null }>(`checklist:${id}`, `/api/applications/${enc(id)}/checklist`),
   refreshChecklist: (id: string) => request<{ checklist: Checklist }>(`/api/applications/${enc(id)}/checklist`, { method: 'POST' }),
+  createShareLink: (id: string, minutes: number | null, showDocuments = true) =>
+    request<{ link: { url: string; expires_at: string | null } }>(`/api/applications/${enc(id)}/share-links`, { method: 'POST', body: JSON.stringify({ minutes, showDocuments }) }),
   health: () => request<HealthInfo>('/api/health'),
   check: (id: string) => request<unknown>(`/api/applications/${enc(id)}/check?manual=true`, { method: 'POST' }),
   saveNotes: (id: string, notes: string) => request<Application>(`/api/applications/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),

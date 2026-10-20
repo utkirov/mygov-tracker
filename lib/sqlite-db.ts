@@ -163,6 +163,19 @@ function applySchema(db: Database.Database): void {
       revoked_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS share_links (
+      token TEXT PRIMARY KEY,
+      application_id TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      show_documents INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      expires_at TEXT,
+      revoked_at TEXT,
+      views INTEGER NOT NULL DEFAULT 0,
+      last_viewed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_share_links_app ON share_links(application_id);
+
     CREATE TABLE IF NOT EXISTS push_devices (
       token TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,

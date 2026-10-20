@@ -167,6 +167,11 @@ function ApplicationCard({ app, theme: t, archived }: { app: Application; theme:
         {!!app.object_name && <Text style={[styles.service, { color: t.textSoft }]} numberOfLines={2}>{app.service_name}</Text>}
         <StatusDot color={s.color} label={s.label} />
         {needsAction && !archived && <Text style={[styles.action, { color: t.danger }]}>Нужно ваше действие</Text>}
+        {!!app.checklist_summary?.stage && !archived && (
+          <Text style={[styles.meta, { color: t.textMuted }]} numberOfLines={1}>
+            Этап {app.checklist_summary.stageIndex} из {app.checklist_summary.stageCount}: {app.checklist_summary.stage}
+          </Text>
+        )}
         {app.checklist_summary?.result === 'rejected' ? (
           <Text style={[styles.action, { color: t.danger }]}>✕ Отказ{app.checklist_summary.failed ? ` · не выполнено критериев: ${app.checklist_summary.failed}` : ''}</Text>
         ) : app.checklist_summary && app.checklist_summary.total > 0 ? (

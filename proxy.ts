@@ -54,6 +54,11 @@ export function proxy(request: NextRequest) {
       return NextResponse.json({ error: 'Cross-site request blocked' }, { status: 403 });
     }
     if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
+    // Client share links: the page and its result documents check the token
+    // themselves (lib/share-links.ts). Only GET — nothing there changes data.
+    if (/^\/s\/[A-Za-z0-9_-]{20,64}(\/doc\/result-\d{1,2}\.pdf)?$/.test(pathname) && request.method === 'GET') {
+      return NextResponse.next();
+    }
 
     const token = readSessionToken(request.cookies.get(SESSION_COOKIE)?.value, request.headers.get('authorization'));
     if (verifySession(token, process.env.SESSION_SECRET)) return NextResponse.next();

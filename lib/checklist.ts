@@ -41,9 +41,20 @@ export interface ChecklistResult {
 
 export interface ChecklistStage { title: string; date: string; actor: string }
 
+/**
+ * One step of «На какой стадии находится заявка?» (the portal's stepper).
+ * The portal lists every possible step, alternative branches included, and
+ * marks them all "done" once the application is finished — only the ones with
+ * a timestamp were actually passed; the rest are reported as "skipped".
+ */
+export interface ProgressStep { title: string; state: 'done' | 'current' | 'pending' | 'skipped'; date: string }
+
 export interface Checklist {
   parsed_at: string;
   stages: ChecklistStage[];
+  progress: ProgressStep[];
+  /** Overall portal state: green / yellow / red badge. */
+  outcome: 'approved' | 'rejected' | 'in_progress' | null;
   orgs: ChecklistOrg[];
   counts: Record<ApprovalStatus, number> & { total: number };
   result: ChecklistResult | null;
@@ -209,15 +220,48 @@ export function parseChecklist(html: string, now = new Date()): Checklist | null
     break;
   }
 
+  // ── stepper «На какой стадии находится заявка?» ──
+  const statusClass = $('.taskStatus').first().attr('class') ?? '';
+  const outcome: Checklist['outcome'] = /task_status_green/.test(statusClass) ? 'approved'
+    : /task_status_red/.test(statusClass) ? 'rejected'
+      : /task_status_(yellow|blue|orange)/.test(statusClass) ? 'in_progress' : null;
+  const progress: ProgressStep[] = $('.wrappCodeItem').toArray().map(el => {
+    const cls = $(el).attr('class') ?? '';
+    const title = textOf($, $(el).find('.codTitle').first()[0] ?? el);
+    const date = textOf($, $(el).find('.codeLog').first()[0] ?? el).match(STAGE_DATE)?.[1] ?? '';
+    const state: ProgressStep['state'] = /\bcurrent\b/.test(cls) ? 'current'
+      : /\bnot_done\b/.test(cls) ? 'pending'
+        : date ? 'done' : 'skipped';
+    return { title, state, date };
+  }).filter(s => s.title)
+    // The stepper often leaves the last step of a finished application without a
+    // timestamp; the timeline block of the same name has it.
+    .map(s => {
+      if (s.state !== 'skipped') return s;
+      const stage = stages.find(st => norm(st.title) === norm(s.title));
+      return stage ? { ...s, state: 'done' as const, date: stage.date } : s;
+    });
+
   return {
     parsed_at: now.toISOString(),
     stages,
+    progress,
+    outcome,
     orgs,
     counts,
     result,
     chain: chainIds.length > 1 ? chainIds : [],
     correction: fact(/информация об исправлени|tuzatish/i),
   };
+}
+
+/** «Этап 3 из 4: Заключение комиссии» for cards — the real path only (skipped branches dropped). */
+export function stageSummary(checklist: Pick<Checklist, 'progress'>): { stage: string; stageIndex: number; stageCount: number } {
+  const path = (checklist.progress ?? []).filter(s => s.state !== 'skipped');
+  const currentIdx = path.findIndex(s => s.state === 'current');
+  const doneIdx = path.map(s => s.state).lastIndexOf('done');
+  const idx = currentIdx >= 0 ? currentIdx : doneIdx;
+  return { stage: idx >= 0 ? path[idx].title : '', stageIndex: idx + 1, stageCount: path.length };
 }
 
 /** What changed since the previous parse — drives the «согласовал / отказ» pushes. */

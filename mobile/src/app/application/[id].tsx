@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChecklistCard } from '@/components/ChecklistCard';
+import { StageStepper } from '@/components/StageStepper';
 import { Icon } from '@/components/Icon';
 import { Button, Card, Empty, OfflineBanner, StatusDot, Tag } from '@/components/ui';
 import {
@@ -99,6 +100,24 @@ export default function ApplicationScreen() {
     }
   }
 
+  /** Client share link (/s/<token>) with a chosen lifetime, sent through Android's share sheet. */
+  function share() {
+    const make = async (minutes: number | null) => {
+      try {
+        const { link } = await api.createShareLink(id, minutes);
+        const until = link.expires_at ? `Ссылка действует до ${new Date(link.expires_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
+        await Share.share({ message: [`Статус заявления «${app?.object_name || app?.service_name || app?.application_number}»:`, link.url, until].filter(Boolean).join('\n') });
+      } catch (e) {
+        Alert.alert('Ссылка не создана', e instanceof Error ? e.message : 'Повторите попытку');
+      }
+    };
+    Alert.alert('Ссылка для клиента', 'Сколько будет работать ссылка? Пароль, телефоны и заметки клиент не увидит.', [
+      { text: '1 час', onPress: () => void make(60) },
+      { text: '1 день', onPress: () => void make(24 * 60) },
+      { text: '7 дней', onPress: () => void make(7 * 24 * 60) },
+    ], { cancelable: true });
+  }
+
   async function refreshChecklist() {
     setRefreshingChecklist(true);
     try {
@@ -178,7 +197,16 @@ export default function ApplicationScreen() {
         {!completed && <Button title="Проверить сейчас" onPress={check} busy={checking} disabled={!!offlineSince} />}
       </Card>
 
+      {!!checklist?.progress?.length && (
+        <Card style={{ gap: 8 }}>
+          <Text style={[styles.section, { color: t.text }]}>Ход рассмотрения</Text>
+          <StageStepper checklist={checklist} />
+        </Card>
+      )}
+
       <ChecklistCard checklist={checklist} onRefresh={() => void refreshChecklist()} busy={refreshingChecklist || !!offlineSince} />
+
+      <Button title="Поделиться с клиентом" variant="secondary" onPress={share} disabled={!!offlineSince} />
 
       <Card style={{ gap: 10 }}>
         <View style={styles.sectionHead}>

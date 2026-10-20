@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, GitBranch } from 'lucide-react';
 
+import { StageStepper } from '@/components/StageStepper';
 import { syncEngineEvents, useSyncEngineSnapshot } from '@/lib/sync-engine';
 import { formatDate, getChangeHeadline } from '@/lib/format-utils';
 import { showToast } from '@/lib/toast';
@@ -89,6 +90,8 @@ const ChecklistSection = dynamic(
     ssr: false,
   }
 );
+
+const ShareSection = dynamic(() => import('@/components/detail/ShareSection'), { ssr: false });
 
 const EMPTY_ARTIFACTS: ApplicationArtifacts = { screenshot: null, status_pdf: null, results: [] };
 
@@ -579,6 +582,12 @@ export default function DetailPage() {
               )}
             </div>
 
+            {checklist?.progress?.length ? (
+              <section className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)] md:p-5">
+                <h2 className="mb-3 text-sm font-bold text-[var(--text)]">Ход рассмотрения</h2>
+                <StageStepper checklist={checklist} />
+              </section>
+            ) : null}
             <ChecklistSection applicationId={id} checklist={checklist} onChange={setChecklist} />
             <ScreenshotSection
               applicationId={id}
@@ -589,6 +598,7 @@ export default function DetailPage() {
           </div>
 
           <div className="space-y-4">
+            <ShareSection applicationId={id} />
             <OperationalDataSection
               application={application}
               sync={sync}

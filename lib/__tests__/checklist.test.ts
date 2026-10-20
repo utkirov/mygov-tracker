@@ -11,6 +11,13 @@ const table = (rows: Array<[string, string]>) =>
   `<table>${rows.map(([th, td]) => `<tr><th>${th}</th><td>${td}</td></tr>`).join('')}</table>`;
 
 const PAGE = `<html><body>
+  <div class="taskStatus task_status_red">Отклонено</div>
+  <div class="timeLineViewBox"><div class="timeLineViewBoxTitleBox"><p>На какой стадии находится заявка?</p></div><div class="collapse">
+    <div class="done wrappCodeItem new"><span class="codTitle">Оплата</span><span class="codeLog">2026-10-01 10:00:00</span></div>
+    <div class="done wrappCodeItem"><span class="codTitle">Оплата для банка</span><span class="codeLog"></span></div>
+    <div class="done wrappCodeItem process"><span class="codTitle">Заключение комисси</span><span class="codeLog">2026-10-20 09:41:06</span></div>
+    <div class="done wrappCodeItem"><span class="codTitle">Рассмотрение заявления</span><span class="codeLog"></span></div>
+  </div></div>
   <div class="timeLineViewBox"><div class="timeLineViewBoxTitleBox"><p>Информация о заявке</p></div>
     ${table([['Номер заявки', '100200300'], ['Последовательность повторных заявок', '100200100 100200300']])}</div>
   ${box('Принять на рассмотрение', '', `<p class="title">Принятие на рассмотрение</p>${table([
@@ -57,6 +64,17 @@ describe('approvals checklist', () => {
     const c = parseChecklist(PAGE)!;
     expect(c.stages.map(s => s.title)).toEqual(['Заключение комисси', 'Рассмотрение заявления']);
     expect(c.chain).toEqual(['100200100', '100200300']);
+  });
+
+  it('reads the stepper: passed with dates, alternative branches skipped, last step dated from the timeline', () => {
+    const c = parseChecklist(PAGE)!;
+    expect(c.outcome).toBe('rejected');
+    expect(c.progress.map(s => [s.title, s.state, s.date])).toEqual([
+      ['Оплата', 'done', '2026-10-01 10:00:00'],
+      ['Оплата для банка', 'skipped', ''],
+      ['Заключение комисси', 'done', '2026-10-20 09:41:06'],
+      ['Рассмотрение заявления', 'done', '2026-10-21 12:00:00'],
+    ]);
   });
 
   it('returns null for a page without a timeline', () => {

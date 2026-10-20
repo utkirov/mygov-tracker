@@ -212,11 +212,14 @@ export interface ApplicationArtifacts {
 
 /** Approvals checklist (lib/checklist.ts) — mirrored for the client. */
 export type ApprovalStatus = 'ok' | 'bad' | 'other' | 'wait';
+export interface ProgressStep { title: string; state: 'done' | 'current' | 'pending' | 'skipped'; date: string }
 export interface ChecklistOrg { name: string; status: ApprovalStatus; verdict: string; comment: string; date: string; num: number | null }
 export interface ChecklistCriterion { label: string; value: string; status: ApprovalStatus }
 export interface Checklist {
   parsed_at: string;
   stages: Array<{ title: string; date: string; actor: string }>;
+  progress: ProgressStep[];
+  outcome: 'approved' | 'rejected' | 'in_progress' | null;
   orgs: ChecklistOrg[];
   counts: Record<ApprovalStatus, number> & { total: number };
   result: {
@@ -232,4 +235,12 @@ export interface Checklist {
   chain: string[];
   correction: string;
 }
-export interface ChecklistSummary extends Record<ApprovalStatus, number> { total: number; result: 'rejected' | 'approved' | null; failed: number }
+export interface ChecklistSummary extends Record<ApprovalStatus, number> {
+  total: number;
+  result: 'rejected' | 'approved' | null;
+  failed: number;
+  /** Current (or last passed) step of the portal stepper. */
+  stage?: string;
+  stageIndex?: number;
+  stageCount?: number;
+}

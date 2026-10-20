@@ -87,7 +87,17 @@ function StatusDot({ status, size = 7 }: { status: string; size?: number }) {
 
 /** «Согласования 7/10» bar, or the rejection, from the approvals checklist. */
 function ApprovalsLine({ summary }: { summary?: Application['checklist_summary'] }) {
-  if (!summary || (summary.total === 0 && !summary.result)) return null;
+  if (!summary) return null;
+  const stage = summary.stage && summary.stageCount ? (
+    <p className="mt-2 truncate text-[11px]" style={{ color: 'var(--text-muted)' }} title={summary.stage}>
+      Этап {summary.stageIndex} из {summary.stageCount}: <span style={{ color: 'var(--text-soft)' }}>{summary.stage}</span>
+    </p>
+  ) : null;
+  if (summary.total === 0 && !summary.result) return stage;
+  return <>{stage}<ApprovalsBarLine summary={summary} /></>;
+}
+
+function ApprovalsBarLine({ summary }: { summary: NonNullable<Application['checklist_summary']> }) {
   if (summary.result === 'rejected') {
     return (
       <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--danger)' }}>

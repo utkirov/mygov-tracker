@@ -11,6 +11,8 @@ import { CommandPalette } from './CommandPalette';
 import { NotificationsPanel } from './NotificationsPanel';
 
 const NO_SHELL = ['/', '/login'];
+/** Client share links (/s/<token>) — public pages, no tracker chrome or background polling. */
+const isSharePage = (pathname: string) => pathname.startsWith('/s/');
 
 const NAV = [
   { href: '/dashboard',  icon: LayoutDashboard, label: 'Доска' },
@@ -122,6 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [shortcutsOpen,  setShortcutsOpen]  = useState(false);
 
   useEffect(() => {
+    if (isSharePage(window.location.pathname)) return;
     startSyncEngine();
     return () => { stopSyncEngine(); };
   }, []);
@@ -175,7 +178,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, [paletteOpen, shortcutsOpen, router]);
 
-  if (NO_SHELL.includes(pathname)) {
+  if (NO_SHELL.includes(pathname) || isSharePage(pathname)) {
     return <>{children}</>;
   }
 
