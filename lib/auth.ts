@@ -6,6 +6,7 @@ import { readSettings } from './local-db';
 import { resolveLocalProjectRoot } from './local-paths';
 import { getAuthState, signSession, verifySession, type SessionPayload } from './session-token';
 import { openDb } from './sqlite-db';
+import { sendPushToAll } from './push';
 import { isTelegramConfigured, sendTelegramMessage } from './telegram';
 
 export const MIN_PASSWORD_LENGTH = 10;
@@ -190,6 +191,10 @@ export function describeUserAgent(ua: string): string {
 }
 
 export async function notifySecurity(text: string): Promise<void> {
+  // First line is the event, the rest (IP) goes to the body.
+  const [first, ...rest] = text.split('\n');
+  sendPushToAll({ title: first.replace(/^\S+\s/, '').slice(0, 120), body: rest.join(' · ') || first, kind: 'security' })
+    .catch(err => console.error('[Auth] Push notify failed:', err));
   try {
     const settings = await readSettings();
     if (isTelegramConfigured(settings)) await sendTelegramMessage(settings, esc(text));

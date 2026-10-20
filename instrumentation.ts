@@ -15,6 +15,9 @@ export async function register() {
   const { startServerScheduler } = await import('./lib/server-scheduler');
   startServerScheduler();
 
+  const { startPushSchedule } = await import('./lib/push-schedule');
+  startPushSchedule();
+
   const { startTelegramBotPolling } = await import('./lib/telegram-bot');
   startTelegramBotPolling();
 

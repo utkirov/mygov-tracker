@@ -2,7 +2,7 @@
   "expo": {
     "name": "my.gov tracker",
     "slug": "mygov-tracker",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "uz.turonproject.tracker",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "REQUEST_INSTALL_PACKAGES",
         "android.permission.POST_PROMOTED_NOTIFICATIONS"
@@ -90,6 +90,16 @@
               "updatePeriodMillis": 1800000
             }
           ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "buildArchs": [
+              "arm64-v8a"
+            ]
+          }
         }
       ]
     ],

@@ -60,6 +60,7 @@ next-env.d.ts
 /data/pdfs/
 /data/artifacts/
 /data/app-release/
+/data/push-schedule.json
 /data/backups/
 /data/backup-status.json
 /data/restore-*/

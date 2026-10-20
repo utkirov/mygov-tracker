@@ -17,7 +17,19 @@ import { openDb } from './sqlite-db';
 interface ServiceAccount { project_id: string; client_email: string; private_key: string }
 
 /** What a push is about — each phone chooses which kinds it wants (app Settings, design A7). */
-export type PushKind = 'status-change' | 'completed' | 'error' | 'cycle';
+export type PushKind =
+  | 'status-change'
+  | 'completed'
+  | 'error'
+  | 'cycle'
+  /** Daily: applications still waiting for the applicant. */
+  | 'reminder'
+  /** Daily morning summary. */
+  | 'digest'
+  /** Logins, phone pairing, lockouts, password changes. */
+  | 'security'
+  /** Backup failures and other server problems. */
+  | 'system';
 
 export interface PushMessage {
   title: string;
@@ -33,6 +45,10 @@ export interface PushPrefs {
   errors: boolean;
   completed: boolean;
   cycle: boolean;
+  reminders: boolean;
+  digest: boolean;
+  security: boolean;
+  system: boolean;
   quiet: { enabled: boolean; from: string; to: string };
 }
 
@@ -41,6 +57,10 @@ export const DEFAULT_PUSH_PREFS: PushPrefs = {
   errors: true,
   completed: true,
   cycle: false,
+  reminders: true,
+  digest: true,
+  security: true,
+  system: true,
   quiet: { enabled: false, from: '23:00', to: '08:00' },
 };
 
@@ -55,6 +75,10 @@ export function normalizePushPrefs(input: unknown): PushPrefs {
     errors: bool(raw.errors, DEFAULT_PUSH_PREFS.errors),
     completed: bool(raw.completed, DEFAULT_PUSH_PREFS.completed),
     cycle: bool(raw.cycle, DEFAULT_PUSH_PREFS.cycle),
+    reminders: bool(raw.reminders, DEFAULT_PUSH_PREFS.reminders),
+    digest: bool(raw.digest, DEFAULT_PUSH_PREFS.digest),
+    security: bool(raw.security, DEFAULT_PUSH_PREFS.security),
+    system: bool(raw.system, DEFAULT_PUSH_PREFS.system),
     quiet: {
       enabled: bool(quiet.enabled, DEFAULT_PUSH_PREFS.quiet.enabled),
       from: typeof quiet.from === 'string' && TIME_RE.test(quiet.from) ? quiet.from : DEFAULT_PUSH_PREFS.quiet.from,
@@ -68,20 +92,32 @@ function minutesOf(hhmm: string): number {
   return h * 60 + m;
 }
 
-/** Android channel (= vibration pattern): long triple buzz when urgent, short double otherwise, silent for cycle summaries. */
+/**
+ * Android channel (= vibration pattern), created by the app:
+ * long triple buzz for urgent things, short double otherwise, silent for cycle summaries.
+ */
 export function pushChannel(kind: PushKind, urgent: boolean): string {
   if (kind === 'cycle') return 'cycle-summary';
+  if (kind === 'security' || kind === 'reminder') return 'status-urgent';
   return urgent ? 'status-urgent' : 'status-alerts';
 }
 
+const PREF_OF: Record<PushKind, keyof Omit<PushPrefs, 'quiet'>> = {
+  'status-change': 'status',
+  completed: 'completed',
+  error: 'errors',
+  cycle: 'cycle',
+  reminder: 'reminders',
+  digest: 'digest',
+  security: 'security',
+  system: 'system',
+};
+
 /** Whether a phone with these preferences should get this push right now (server local time). */
 export function shouldDeliver(prefs: PushPrefs, kind: PushKind, urgent: boolean, now = new Date()): boolean {
-  const wanted = kind === 'status-change' ? prefs.status
-    : kind === 'completed' ? prefs.completed
-      : kind === 'error' ? prefs.errors
-        : prefs.cycle;
-  if (!wanted) return false;
-  if (!prefs.quiet.enabled || urgent) return true;
+  if (!prefs[PREF_OF[kind]]) return false;
+  // Security alerts can't wait for the morning.
+  if (!prefs.quiet.enabled || urgent || kind === 'security') return true;
   const current = now.getHours() * 60 + now.getMinutes();
   const from = minutesOf(prefs.quiet.from);
   const to = minutesOf(prefs.quiet.to);
@@ -207,6 +243,7 @@ export async function sendPushToAll(message: PushMessage, rootPath?: string): Pr
   const account = readServiceAccount(rootPath);
   if (!account) return 0;
   const kind = message.kind ?? 'status-change';
+  const channel = pushChannel(kind, message.urgent === true);
   const now = new Date();
   const tokens = (await listActivePushTargets(rootPath))
     .filter(t => shouldDeliver(t.prefs, kind, message.urgent === true, now))
@@ -221,21 +258,34 @@ export async function sendPushToAll(message: PushMessage, rootPath?: string): Pr
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        // Data-only: the app's expo-notifications builds the notification itself,
-        // which is what lets it add the «Открыть / Скриншот / Прочитано» buttons
-        // (categoryId) — FCM-rendered notifications can't carry them.
+        // A real `notification` block: Android itself shows it even when the app
+        // is asleep or swiped away (Nothing OS freezes background apps, and
+        // data-only pushes then waited until the app was opened). The data block
+        // still carries the application id for the tap, and lets the app add
+        // the «Открыть / Скриншот / Прочитано» buttons when it is in the foreground.
         message: {
           token,
+          notification: { title: message.title, body: message.body },
           data: {
+            ...(message.data ?? {}),
+            kind,
             title: message.title,
             message: message.body,
             body: JSON.stringify({ ...(message.data ?? {}), kind }),
-            categoryId: kind === 'cycle' ? '' : 'application',
-            // Channels created by the app, each with its own vibration pattern
-            // (mobile/src/lib/push.ts). Unknown on an older app → Android's default channel.
-            channelId: pushChannel(kind, message.urgent === true),
+            categoryId: kind === 'cycle' || kind === 'digest' ? '' : 'application',
+            channelId: channel,
           },
-          android: { priority: 'high' },
+          android: {
+            priority: 'high',
+            notification: {
+              // Channels created by the app, each with its own vibration pattern
+              // (mobile/src/lib/push.ts). Unknown on an older app → default channel.
+              channel_id: channel,
+              notification_priority: message.urgent || kind === 'security' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+              visibility: kind === 'security' ? 'PRIVATE' : 'PUBLIC',
+              default_sound: kind !== 'cycle',
+            },
+          },
         },
       }),
     });

@@ -1,5 +1,6 @@
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
+import * as IntentLauncher from 'expo-intent-launcher';
 import * as Updates from 'expo-updates';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -19,6 +20,7 @@ import {
   type ThemeChoice,
 } from '@/lib/preferences';
 import { currentPushToken, registerForPush } from '@/lib/push';
+import { isWaitingReminderOn, setWaitingReminder } from '@/lib/waiting-reminder';
 import { formatDate, formatUntil } from '@/lib/status';
 import { font, radius, useTheme } from '@/lib/theme';
 import { fetchAvailableUpdate, type AppRelease } from '@/lib/updates';
@@ -41,6 +43,7 @@ export default function SettingsScreen() {
   const [biometric, setBiometric] = useState(false);
   const [biometricOk, setBiometricOk] = useState(false);
   const [sync, setSync] = useState(false);
+  const [waitingReminder, setWaitingReminderState] = useState(true);
   const [update, setUpdate] = useState<AppRelease | null>(null);
   const [checkedUpdate, setCheckedUpdate] = useState(false);
 
@@ -60,6 +63,7 @@ export default function SettingsScreen() {
     setBiometric(await isBiometricLockOn());
     setBiometricOk(await biometricAvailable());
     setSync(await isBackgroundSyncOn());
+    setWaitingReminderState(await isWaitingReminderOn());
     setUpdate(await fetchAvailableUpdate());
     setCheckedUpdate(true);
   }, []);
@@ -85,6 +89,18 @@ export default function SettingsScreen() {
       setPrefs(previous);
       Alert.alert('Не сохранено', e instanceof Error ? e.message : 'Нет связи с сервером');
     }
+  }
+
+  async function toggleWaitingReminder(on: boolean) {
+    setWaitingReminderState(on);
+    const apps = await api.applications(false).then(r => r.data).catch(() => undefined);
+    await setWaitingReminder(on, apps);
+  }
+
+  /** Nothing OS / Android freeze background apps — this page has «Батарея → Без ограничений». */
+  function openAppSystemSettings() {
+    void IntentLauncher.startActivityAsync('android.settings.APPLICATION_DETAILS_SETTINGS', { data: `package:${Application.applicationId ?? 'uz.turonproject.tracker'}` })
+      .catch(() => Alert.alert('Не удалось открыть', 'Откройте Настройки → Приложения → my.gov tracker вручную.'));
   }
 
   async function toggleBiometric(on: boolean) {
@@ -139,6 +155,10 @@ export default function SettingsScreen() {
             <Toggle label="Ошибки проверки" hint="Если my.gov.uz не отвечает" value={prefs.errors} onChange={v => void changePrefs({ ...prefs, errors: v })} />
             <Toggle label="Завершение заявления" hint="С документами результата" value={prefs.completed} onChange={v => void changePrefs({ ...prefs, completed: v })} />
             <Toggle label="Итог каждого цикла" hint="Даже без изменений" value={prefs.cycle} onChange={v => void changePrefs({ ...prefs, cycle: v })} />
+            <Toggle label="Напоминания" hint="Каждый день в 10:00, пока заявление ждёт вашего действия" value={prefs.reminders} onChange={v => void changePrefs({ ...prefs, reminders: v })} />
+            <Toggle label="Утренняя сводка" hint="В 09:00: сколько ждёт, изменения и ошибки за сутки" value={prefs.digest} onChange={v => void changePrefs({ ...prefs, digest: v })} />
+            <Toggle label="Безопасность" hint="Входы, привязка телефона, блокировки — даже в тихие часы" value={prefs.security} onChange={v => void changePrefs({ ...prefs, security: v })} />
+            <Toggle label="Сбои сервера" hint="Не удалась резервная копия и т.п." value={prefs.system} onChange={v => void changePrefs({ ...prefs, system: v })} />
             <Toggle
               label="Тихие часы"
               hint={`${prefs.quiet.from}–${prefs.quiet.to}, только срочное`}
@@ -157,6 +177,14 @@ export default function SettingsScreen() {
             : health ? 'Выключена на компьютере' : 'Сервер недоступен'}
         />
         <Toggle label="Синхронизация в фоне" hint="Обновлять список, пока приложение закрыто" value={sync} onChange={v => void toggleSync(v)} />
+        <Toggle label="Постоянное напоминание" hint="«N ждут вашего действия» в шторке и на Glyph, пока есть такие заявления" value={waitingReminder} onChange={v => void toggleWaitingReminder(v)} />
+        <Pressable onPress={openAppSystemSettings} style={[styles.item, { borderTopColor: t.border }]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={[styles.label, { color: t.text }]}>Работа в фоне</Text>
+            <Text style={[styles.small, { color: t.textMuted }]}>Батарея → «Без ограничений», чтобы Nothing OS не усыпляла приложение</Text>
+          </View>
+          <Text style={[styles.small, { color: t.accent }]}>Открыть</Text>
+        </Pressable>
       </Section>
 
       {update && <UpdateCard release={update} onDismiss={() => setUpdate(null)} />}

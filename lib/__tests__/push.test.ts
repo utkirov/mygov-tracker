@@ -106,3 +106,19 @@ describe('pushChannel', () => {
     expect(pushChannel('cycle', true)).toBe('cycle-summary');
   });
 });
+
+describe('new push kinds', () => {
+  it('respects the reminder / digest / security / system switches', () => {
+    const at = new Date(2026, 9, 20, 12);
+    expect(shouldDeliver(DEFAULT_PUSH_PREFS, 'reminder', true, at)).toBe(true);
+    expect(shouldDeliver(normalizePushPrefs({ digest: false }), 'digest', false, at)).toBe(false);
+    expect(shouldDeliver(normalizePushPrefs({ system: false }), 'system', false, at)).toBe(false);
+  });
+
+  it('delivers security alerts even during quiet hours', () => {
+    const quiet = normalizePushPrefs({ quiet: { enabled: true, from: '23:00', to: '08:00' } });
+    expect(shouldDeliver(quiet, 'security', false, new Date(2026, 9, 20, 3))).toBe(true);
+    expect(shouldDeliver(quiet, 'digest', false, new Date(2026, 9, 20, 3))).toBe(false);
+    expect(pushChannel('security', false)).toBe('status-urgent');
+  });
+});

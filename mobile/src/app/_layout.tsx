@@ -29,7 +29,12 @@ function handleNotificationResponse(response: Notifications.NotificationResponse
     void Notifications.dismissNotificationAsync(request.identifier);
     return;
   }
-  const id = request.content.data?.applicationId;
+  // System-shown pushes carry the id as a plain data key; app-built ones inside the JSON "body".
+  const data = (request.content.data ?? {}) as Record<string, unknown>;
+  let id = data.applicationId;
+  if (typeof id !== 'string' && typeof data.body === 'string') {
+    try { id = (JSON.parse(data.body) as Record<string, unknown>).applicationId; } catch { id = undefined; }
+  }
   if (typeof id !== 'string' || !id) return;
   router.push({
     pathname: '/application/[id]',

@@ -65,6 +65,12 @@ export async function loadWidgetData(): Promise<WidgetData> {
   }
 }
 
+/** The app's last saved board — instant, no network (drawn first, then replaced by fresh data). */
+export async function cachedWidgetData(): Promise<WidgetData | null> {
+  const cached = await readCache<Application[]>('apps:false');
+  return cached ? toData(cached.data, cached.savedAt, false) : null;
+}
+
 /** Re-renders every placed widget — called after the app or the background task refreshed data. */
 export async function refreshWidgets(data?: WidgetData): Promise<void> {
   try {

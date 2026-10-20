@@ -268,6 +268,17 @@ export async function checkOne(
       // The applicant has to act, or the final result is in — worth waking up for.
       urgent: completedNow || getStatusType(updatedEntry.acting_party, updatedEntry.status) === 'action_required',
     }).catch(err => console.error('[Scheduler] Push error (change):', err));
+
+    // The official decision / conclusion PDFs arrive a little later than the status.
+    if (completedNow) {
+      outputs.then(({ repositoryFiles }) => repositoryFiles.length === 0 ? 0 : sendPushToAll({
+        title: `№ ${updatedEntry.application_number} — документы результата получены`,
+        body: [updatedEntry.object_name || updatedEntry.service_name, repositoryFiles.map(f => f.ref.title || 'Документ').join(', ')].filter(Boolean).join(' · '),
+        data: { applicationId: updatedEntry.id },
+        kind: 'completed',
+        urgent: true,
+      })).catch(err => console.error('[Scheduler] Push error (documents):', err));
+    }
   }
 
   return { result, session };

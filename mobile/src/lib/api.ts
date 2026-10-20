@@ -59,6 +59,10 @@ export interface PushPrefs {
   errors: boolean;
   completed: boolean;
   cycle: boolean;
+  reminders: boolean;
+  digest: boolean;
+  security: boolean;
+  system: boolean;
   quiet: { enabled: boolean; from: string; to: string };
 }
 

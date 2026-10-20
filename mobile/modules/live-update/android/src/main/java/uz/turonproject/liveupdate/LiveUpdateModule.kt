@@ -45,6 +45,56 @@ class LiveUpdateModule : Module() {
     Function("end") { id: Int ->
       manager.cancel(id)
     }
+
+    // Ongoing reminder ("2 заявления ждут вашего действия") — promoted as a Live
+    // Update; on Android 17 the text gets a semantic colour (danger/caution/info/safe).
+    Function("showStatus") { id: Int, title: String, text: String, semantic: String ->
+      showStatus(id, title, text, semantic)
+    }
+  }
+
+  /**
+   * Android 17 (API 37) Notification.createSemanticStyleAnnotation(SEMANTIC_STYLE_*).
+   * Looked up by reflection: the app is compiled against an SDK where it may not
+   * exist yet, and older phones simply get plain text.
+   */
+  private fun semanticText(text: String, semantic: String): CharSequence {
+    if (Build.VERSION.SDK_INT < 37) return text
+    return try {
+      val constant = when (semantic) {
+        "danger" -> "SEMANTIC_STYLE_DANGER"
+        "caution" -> "SEMANTIC_STYLE_CAUTION"
+        "safe" -> "SEMANTIC_STYLE_SAFE"
+        else -> "SEMANTIC_STYLE_INFO"
+      }
+      val style = Notification::class.java.getField(constant).getInt(null)
+      val span = Notification::class.java.getMethod("createSemanticStyleAnnotation", Integer.TYPE).invoke(null, style)
+      android.text.SpannableStringBuilder().append(text, span, 0)
+    } catch (e: Exception) {
+      text
+    }
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun showStatus(id: Int, title: String, text: String, semantic: String) {
+    ensureChannel()
+    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+    val contentIntent = launch?.let {
+      PendingIntent.getActivity(context, id, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+    val body = semanticText(text, semantic)
+    val builder = Notification.Builder(context, CHANNEL_ID)
+      .setSmallIcon(smallIcon())
+      .setContentTitle(title)
+      .setContentText(body)
+      .setStyle(Notification.BigTextStyle().bigText(body))
+      .setOngoing(true)
+      .setOnlyAlertOnce(true)
+      .setShowWhen(false)
+      .setCategory(Notification.CATEGORY_REMINDER)
+    contentIntent?.let { builder.setContentIntent(it) }
+    if (Build.VERSION.SDK_INT >= 36) builder.extras.putBoolean(EXTRA_REQUEST_PROMOTED_ONGOING, true)
+    manager.notify(id, builder.build())
   }
 
   private fun ensureChannel() {

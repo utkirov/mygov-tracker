@@ -5,6 +5,7 @@
  */
 import { createBackup, readBackupStatus } from './backup';
 import { readSettings } from './local-db';
+import { sendPushToAll } from './push';
 import { isTelegramConfigured, sendTelegramMessage } from './telegram';
 
 const BACKUP_HOUR = 3;
@@ -24,6 +25,9 @@ export function msUntilNextRun(now: Date, hour = BACKUP_HOUR): number {
 }
 
 async function notify(text: string): Promise<void> {
+  // Backup problems also go to the phone (kind "system").
+  sendPushToAll({ title: 'Резервная копия', body: text.replace(/^⚠️\s*/, ''), kind: 'system' })
+    .catch(err => console.error('[Backup] Push notify failed:', err));
   try {
     const settings = await readSettings();
     if (isTelegramConfigured(settings)) await sendTelegramMessage(settings, text);

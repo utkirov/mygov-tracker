@@ -5,6 +5,7 @@ import { Appearance } from 'react-native';
 
 import { api } from '@/lib/api';
 import { readValue, writeValue } from '@/lib/cache';
+import { syncWaitingReminder } from '@/lib/waiting-reminder';
 import { refreshWidgets } from '@/widget/widget-data';
 
 /** App-only settings from design A7 (stored on the phone, not on the server). */
@@ -64,8 +65,9 @@ const SYNC_TASK = 'mg-background-sync';
 TaskManager.defineTask(SYNC_TASK, async () => {
   try {
     // Refreshing the lists also refreshes the offline copy (lib/api.ts cachedRequest).
-    await Promise.all([api.applications(false), api.applications(true), api.checkLog(100)]);
+    const [active] = await Promise.all([api.applications(false), api.applications(true), api.checkLog(100)]);
     await refreshWidgets();
+    if (!active.offlineSince) await syncWaitingReminder(active.data);
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch {
     return BackgroundTask.BackgroundTaskResult.Failed;
