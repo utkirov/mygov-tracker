@@ -133,6 +133,63 @@ function stageOf($: cheerio.CheerioAPI, box: AnyNode): ChecklistStage {
   return { title, date, actor };
 }
 
+/**
+ * «Заключение согласующего органа (ГАСН)»: the inspection asks five
+ * departments, each answering in its own «Заключение отдела …» section. A
+ * department that hasn't answered has no section at all — it is known only
+ * from this list.
+ */
+const GASN_DEPARTMENTS: Array<{ name: string; rx: RegExp }> = [
+  { name: 'Общество инвалидов', rx: /обществ/i },
+  { name: 'СЭС', rx: /сэс|санитар/i },
+  { name: 'Экология', rx: /эколог/i },
+  { name: 'Ассоциация инвалидов', rx: /ассоциац/i },
+  { name: 'МЧС', rx: /мчс|пожар|чрезвычайн/i },
+];
+const GASN_STAGE = /согласующего органа.*гасн/i;
+const GASN_SECTION = /^заключение отдела\s+(?!\(гасн\))/i;
+
+function gasnDepartments($: cheerio.CheerioAPI, boxes: AnyNode[]): ChecklistOrg[] {
+  const found = new Map<string, ChecklistOrg>();
+  for (const box of boxes) {
+    if (!GASN_STAGE.test(stageOf($, box).title)) continue;
+    let current: ChecklistOrg | null = null;
+    let head = '';
+    let branch = '';
+    let conclusion = '';
+    const flush = () => {
+      if (current?.verdict) {
+        current.comment = [conclusion, [head, branch].filter(Boolean).join(', ')].filter(Boolean).join('\n');
+        found.set(norm(current.name), current);   // a later box (re-submission) wins
+      }
+    };
+    $(box).find('p.title, table tr').each((_, el) => {
+      if ($(el).is('p')) {
+        flush();
+        const title = textOf($, el);
+        current = null;
+        head = branch = conclusion = '';
+        if (!GASN_SECTION.test(title)) return;
+        const raw = title.replace(GASN_SECTION, '').replace(/[()]/g, '').trim();
+        const name = GASN_DEPARTMENTS.find(d => d.rx.test(raw))?.name ?? raw;
+        current = { name, status: 'wait', verdict: '', comment: '', date: '', num: null };
+        return;
+      }
+      if (!current) return;
+      const label = textOf($, $(el).children('th').first()[0] ?? el);
+      const value = htmlLines($(el).children('td').first().html() ?? '').join('\n');
+      if (/соответствует ли/i.test(label)) { current.verdict = value; current.status = classify(value); }
+      else if (/заключени[ея] к акту/i.test(label)) conclusion = value;
+      else if (/дата/i.test(label)) current.date = value;
+      else if (/ф\.?\s?и\.?\s?о|руководител/i.test(label)) head = value;
+      else if (/филиал/i.test(label)) branch = value;
+    });
+    flush();
+  }
+  const rank = (o: ChecklistOrg) => { const i = GASN_DEPARTMENTS.findIndex(d => d.name === o.name); return i < 0 ? GASN_DEPARTMENTS.length : i; };
+  return [...found.values()].sort((a, b) => rank(a) - rank(b));
+}
+
 export function parseChecklist(html: string, now = new Date()): Checklist | null {
   if (!html.includes('timeLineViewBox')) return null;
   const $ = cheerio.load(html);
@@ -192,8 +249,6 @@ export function parseChecklist(html: string, now = new Date()): Checklist | null
     if (used.has(num) || (!c.org && !c.verdict)) continue;
     orgs.push({ name: c.org || `Комиссия ${num}`, status: classify(c.verdict), verdict: c.verdict, comment: c.comment, date: c.date, num });
   }
-  const counts = { ok: 0, bad: 0, other: 0, wait: 0, total: orgs.length };
-  orgs.forEach(o => counts[o.status]++);
 
   // ── final result: the latest stage with a rejection or an issued conclusion ──
   let result: ChecklistResult | null = null;
@@ -241,6 +296,14 @@ export function parseChecklist(html: string, now = new Date()): Checklist | null
       const stage = stages.find(st => norm(st.title) === norm(s.title));
       return stage ? { ...s, state: 'done' as const, date: stage.date } : s;
     });
+
+  // ── ГАСН departments: answered ones, and — while that step is current — the rest as pending ──
+  const answered = gasnDepartments($, boxes);
+  const gasnCurrent = progress.some(s => s.state === 'current' && GASN_STAGE.test(s.title));
+  const pending = gasnCurrent ? GASN_DEPARTMENTS.filter(d => !answered.some(o => o.name === d.name)) : [];
+  orgs.push(...answered, ...pending.map(d => ({ name: d.name, status: 'wait' as const, verdict: '', comment: '', date: '', num: null })));
+  const counts = { ok: 0, bad: 0, other: 0, wait: 0, total: orgs.length };
+  orgs.forEach(o => counts[o.status]++);
 
   return {
     parsed_at: now.toISOString(),

@@ -77,6 +77,48 @@ describe('approvals checklist', () => {
     ]);
   });
 
+  // «Заключение согласующего органа (ГАСН)»: five departments, one section each; МЧС hasn't answered yet.
+  const gasnPage = (gasnState: string) => `<html><body>
+    <div class="timeLineViewBox"><div class="timeLineViewBoxTitleBox"><p>На какой стадии находится заявка?</p></div><div class="collapse">
+      <div class="done wrappCodeItem"><span class="codTitle">Направление заявление по типу объекта (ГАСН)</span><span class="codeLog">2026-09-20 10:00:00</span></div>
+      <div class="${gasnState} wrappCodeItem"><span class="codTitle">Заключение согласующего органа (ГАСН)</span><span class="codeLog"></span></div>
+    </div></div>
+    ${box('Заключение согласующего органа (ГАСН)', '2026-10-12 09:52:27 O`zbekiston', `
+      <p class='title'>Заключение отдела (Общество инвалидов)</p><p>${table([
+        ['Соответствует ли требованиям и нормам?', 'Соответствует'],
+        ['Название филиала (регион)', 'Toshkent viloyati'],
+        ['Ф.И.О руководителя филиала', 'MAMARAXIM USMANOV'],
+        ['Заключение к акту', 'Nogironlar to‘siqsiz harakatlanishlari uchun sharoit mavjud'],
+        ['Дата и время выдачи заключения', '2026-10-10 10:12:16'],
+      ])}</p>
+      <p class='title'>Заключение отдела СЭС</p><p>${table([['Соответствует ли требованиям и нормам?', 'Соответствует'], ['Дата и время выдачи заключения', '2026-09-25 15:16:35']])}</p>
+      <p class='title'>Направить на шаг - Заключение отдела (ГАСН)</p><p>${table([['Комментарий', 'Arizani qayta ko‘rib chiqish']])}</p>
+      <p class='title'>Заключение отдела Экологии</p><p>${table([['Соответствует ли требованиям и нормам Экологии', 'Не соответствует'], ['Дата и время выдачи заключения экологии', '2026-09-24 22:19:28']])}</p>
+      <p class='title'>Заключение отдела ассоциации инвалидов</p><p>${table([['Соответствует ли требованиям и нормам Ассоциации инвалидов', 'Соответствует']])}</p>
+    `)}
+  </body></html>`;
+
+  it('lists the ГАСН departments, the unanswered one as pending while that step is current', () => {
+    const c = parseChecklist(gasnPage('done process current'))!;
+    expect(c.orgs.map(o => [o.name, o.status])).toEqual([
+      ['Общество инвалидов', 'ok'],
+      ['СЭС', 'ok'],
+      ['Экология', 'bad'],
+      ['Ассоциация инвалидов', 'ok'],
+      ['МЧС', 'wait'],
+    ]);
+    expect(c.counts).toEqual({ ok: 3, bad: 1, other: 0, wait: 1, total: 5 });
+    expect(c.orgs[0]).toMatchObject({
+      date: '2026-10-10 10:12:16',
+      comment: 'Nogironlar to‘siqsiz harakatlanishlari uchun sharoit mavjud\nMAMARAXIM USMANOV, Toshkent viloyati',
+    });
+  });
+
+  it('keeps only the answered ГАСН departments once that step is passed', () => {
+    const c = parseChecklist(gasnPage('done'))!;
+    expect(c.orgs.map(o => o.name)).toEqual(['Общество инвалидов', 'СЭС', 'Экология', 'Ассоциация инвалидов']);
+  });
+
   it('returns null for a page without a timeline', () => {
     expect(parseChecklist('<html><body>Заявка не найдена</body></html>')).toBeNull();
   });
