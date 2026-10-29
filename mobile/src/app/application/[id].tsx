@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChecklistCard } from '@/components/ChecklistCard';
 import { StageStepper } from '@/components/StageStepper';
@@ -49,6 +49,8 @@ export default function ApplicationScreen() {
   const [savingNotes, setSavingNotes] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [busyFile, setBusyFile] = useState<string | null>(null);
+  const [shotOpen, setShotOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +124,33 @@ export default function ApplicationScreen() {
     } finally {
       setSavingNotes(false);
     }
+  }
+
+  function toggleArchive() {
+    if (!app) return;
+    const toArchive = !app.archived;
+    Alert.alert(
+      toArchive ? 'Перенести в архив?' : 'Вернуть на доску?',
+      toArchive ? 'Автопроверка этого заявления остановится.' : 'Заявление снова будет проверяться автоматически.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: toArchive ? 'В архив' : 'Вернуть',
+          style: toArchive ? 'destructive' : 'default',
+          onPress: async () => {
+            setArchiving(true);
+            try {
+              await api.setArchived(app.id, toArchive);
+              router.back();
+            } catch (e) {
+              Alert.alert('Не получилось', e instanceof Error ? e.message : 'Повторите попытку');
+            } finally {
+              setArchiving(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   async function open(key: string, url: string, name: string, mime: string) {
@@ -220,13 +249,28 @@ export default function ApplicationScreen() {
           {shot && <Text style={[styles.mono, { color: t.textMuted }]}>{formatDate(shot.saved_at)}</Text>}
         </View>
         {shot && !offlineSince ? (
-          <Pressable onPress={() => void open('shot', artifactUrl(id, 'screenshot.png', shot.saved_at), `screenshot-${n}.png`, 'image/png')}>
-            <Image
-              source={{ uri: artifactUrl(id, 'screenshot.png', shot.saved_at), headers }}
-              style={[styles.shot, { borderColor: t.border }]}
-              resizeMode="cover"
-            />
-          </Pressable>
+          <>
+            <Pressable onPress={() => setShotOpen(true)}>
+              <Image
+                source={{ uri: artifactUrl(id, 'screenshot.png', shot.saved_at), headers }}
+                style={[styles.shot, { borderColor: t.border }]}
+                resizeMode="cover"
+              />
+            </Pressable>
+            <View style={styles.buttons}>
+              <View style={{ flex: 1 }}><Button title="Открыть" variant="secondary" onPress={() => setShotOpen(true)} /></View>
+              <View style={{ flex: 1 }}>
+                <Button title="Поделиться" variant="secondary" busy={busyFile === 'shot'}
+                  onPress={() => void open('shot', artifactUrl(id, 'screenshot.png', shot.saved_at), `screenshot-${n}.png`, 'image/png')} />
+              </View>
+            </View>
+            <Modal visible={shotOpen} transparent animationType="fade" onRequestClose={() => setShotOpen(false)}>
+              <Pressable style={styles.viewer} onPress={() => setShotOpen(false)}>
+                <Image source={{ uri: artifactUrl(id, 'screenshot.png', shot.saved_at), headers }} style={styles.viewerImage} resizeMode="contain" />
+                <Text style={styles.viewerHint}>Нажмите, чтобы закрыть</Text>
+              </Pressable>
+            </Modal>
+          </>
         ) : (
           <Text style={[styles.text, { color: t.textMuted }]}>
             {shot ? 'Скриншот откроется, когда сервер снова будет доступен.' : 'Появится после следующей проверки.'}
@@ -333,6 +377,9 @@ export default function ApplicationScreen() {
       {app.last_change_fields.length > 0 && (
         <View style={styles.tags}>{app.last_change_fields.map(f => <Tag key={f}>{CHANGE_FIELD_LABELS[f] ?? f}</Tag>)}</View>
       )}
+
+      <Button title={app.archived ? 'Вернуть на доску' : 'Перенести в архив'} variant="secondary"
+        onPress={toggleArchive} busy={archiving} disabled={!!offlineSince} />
     </ScrollView>
   );
 
@@ -381,5 +428,9 @@ const styles = StyleSheet.create({
   historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, borderTopWidth: 1, paddingTop: 8 },
   docRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: radius.inner, padding: 12 },
   chainRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: radius.inner, borderWidth: 1, padding: 10 },
+  buttons: { flexDirection: 'row', gap: 8 },
+  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center', padding: 12 },
+  viewerImage: { width: '100%', height: '85%' },
+  viewerHint: { color: '#fff', opacity: 0.7, marginTop: 12, fontFamily: font.regular, fontSize: 12 },
   notes: { minHeight: 90, borderWidth: 1, borderRadius: radius.inner, padding: 12, fontFamily: font.regular, fontSize: 14, textAlignVertical: 'top' },
 });

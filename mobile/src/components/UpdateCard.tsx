@@ -66,7 +66,7 @@ export function UpdateCard({ release, onDismiss }: { release: AppRelease; onDism
           </Text>
         </View>
       ) : (
-        <Button title="Обновить" onPress={() => void start()} />
+        <Button title="Установить обновление" onPress={() => void start()} />
       )}
       {error && <Text style={[styles.text, { color: t.danger }]}>{error}</Text>}
       <Text style={[styles.small, { color: t.textMuted }]}>

@@ -41,6 +41,7 @@ export interface Application {
   client?: { id: string; name: string } | null;
 }
 
+export interface Project { id: string; name: string; color: string }
 export interface ClientSummary { id: string; name: string; phone: string; note: string; total: number; active: number; last_change_at: string | null }
 export interface ClientStats { clientId: string; name: string; total: number; active: number; approved: number; rejected: number; cancelled: number; approvalRate: number | null; duration: DurationStats | null; slow: number }
 export interface ShareLinkInfo {
@@ -105,6 +106,9 @@ export interface CheckLogEntry {
   error_message: string | null;
   changed_fields: string;
 }
+
+/** Server lib/backup.ts readBackupStatus(). */
+export interface BackupStatus { dir: string; lastAttemptAt: string | null; lastSuccessAt: string | null; lastFile: string | null; lastSize: number | null; lastError: string | null }
 
 export interface PushPrefs {
   status: boolean;
@@ -261,9 +265,12 @@ export const api = {
     request<{ ok: boolean }>(`/api/applications/${enc(appId)}/client`, { method: 'PUT', body: JSON.stringify({ clientId }) }),
   createShareLink: (id: string, minutes: number | null, showDocuments = true) =>
     request<{ link: { url: string; expires_at: string | null } }>(`/api/applications/${enc(id)}/share-links`, { method: 'POST', body: JSON.stringify({ minutes, showDocuments }) }),
+  projects: () => request<Project[]>('/api/projects'),
+  backupStatus: () => cachedRequest<BackupStatus>('backup-status', '/api/backup'),
   analytics: () => cachedRequest<Analytics>('analytics', '/api/analytics'),
   health: () => request<HealthInfo>('/api/health'),
   check: (id: string) => request<unknown>(`/api/applications/${enc(id)}/check?manual=true`, { method: 'POST' }),
+  setArchived: (id: string, archived: boolean) => request<Application>(`/api/applications/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ archived }) }),
   saveNotes: (id: string, notes: string) => request<Application>(`/api/applications/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),
   fetchResultDocuments: (id: string) => request<ApplicationArtifacts>(`/api/applications/${enc(id)}/artifacts`, { method: 'POST' }),
   pushPrefs: (token: string) => request<{ prefs: PushPrefs; registered: boolean }>(`/api/push/prefs?token=${enc(token)}`),

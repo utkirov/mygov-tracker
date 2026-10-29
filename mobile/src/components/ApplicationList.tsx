@@ -12,14 +12,20 @@ import { font, radius, useTheme, type Theme } from '@/lib/theme';
 import { syncWaitingReminder } from '@/lib/waiting-reminder';
 import { refreshWidgets, widgetFromApplications } from '@/widget/widget-data';
 
-const BOARD_FILTERS: Array<{ key: 'all' | StatusType; label: string }> = [
+const BOARD_FILTERS: Array<{ key: 'all' | 'new' | StatusType; label: string }> = [
   { key: 'all', label: 'Все' },
+  { key: 'new', label: 'Новое' },
   { key: 'action_required', label: 'Ждёт' },
   { key: 'in_progress', label: 'В обработке' },
 ];
 const ARCHIVE_FILTERS = ['Все', 'Обработано', 'Отклонено', 'Аннулировано'] as const;
 
 type Row = { kind: 'month'; key: string; label: string } | { kind: 'app'; key: string; app: Application };
+
+/** Board chip match: «Новое» is a status of its own, the rest are status types. */
+function boardKey(app: Application, key: string, t: Theme): boolean {
+  return key === 'new' ? statusInfo(app.status, t).label === 'Новое' : statusType(app) === key;
+}
 
 function finishedAt(app: Application): string {
   return app.last_changed_date ?? app.updated_at;
@@ -65,6 +71,7 @@ export function ApplicationList({ archived, header }: { archived: boolean; heade
     for (const a of items ?? []) {
       const key = archived ? statusInfo(a.status, t).label : statusType(a);
       c[key] = (c[key] ?? 0) + 1;
+      if (!archived && boardKey(a, 'new', t)) c.new = (c.new ?? 0) + 1;
     }
     return c;
   }, [items, archived, t]);
@@ -73,7 +80,7 @@ export function ApplicationList({ archived, header }: { archived: boolean; heade
     const list = (items ?? []).filter(a => {
       if (!matchesQuery(a)) return false;
       if (filter === 'all') return true;
-      return archived ? statusInfo(a.status, t).label === filter : statusType(a) === filter;
+      return archived ? statusInfo(a.status, t).label === filter : boardKey(a, filter, t);
     });
     if (!archived) return list.map(app => ({ kind: 'app', key: app.id, app }));
 
@@ -94,6 +101,11 @@ export function ApplicationList({ archived, header }: { archived: boolean; heade
   }, [items, filter, archived, matchesQuery, t]);
 
   const waiting = archived ? 0 : (counts.action_required ?? 0);
+  // «12 активных · проверено 00:26» / «107 завершённых» under the screen title (design A2, A5).
+  const lastChecked = (items ?? []).reduce<string | null>((max, a) => (a.last_checked_at && (!max || a.last_checked_at > max) ? a.last_checked_at : max), null);
+  const summary = items === null ? '' : archived
+    ? `${counts.all} ${plural(counts.all, 'завершённое', 'завершённых', 'завершённых')}`
+    : `${counts.all} ${plural(counts.all, 'активное', 'активных', 'активных')}${lastChecked ? ` · проверено ${new Date(lastChecked).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
   const chips = archived
     ? ARCHIVE_FILTERS.map(label => ({ key: label === 'Все' ? 'all' : label, label: `${label} ${label === 'Все' ? counts.all : counts[label] ?? 0}` }))
     : BOARD_FILTERS.map(f => ({ key: f.key, label: `${f.label} ${counts[f.key] ?? 0}` }));
@@ -108,6 +120,7 @@ export function ApplicationList({ archived, header }: { archived: boolean; heade
       ListHeaderComponent={
         <View style={{ gap: 10 }}>
           {header}
+          {!!summary && <Text style={[styles.summary, { color: t.textMuted }]}>{summary}</Text>}
           {offlineSince && <OfflineBanner since={offlineSince} onRetry={() => void load()} />}
           <View style={[styles.search, { backgroundColor: t.surface, borderColor: t.border }]}>
             <Icon name="search" size={16} color={t.textMuted} />
@@ -130,6 +143,9 @@ export function ApplicationList({ archived, header }: { archived: boolean; heade
           )}
         </View>
       }
+      ListFooterComponent={offlineSince && !archived ? (
+        <Text style={[styles.footer, { color: t.textMuted }]}>Проверка и уведомления возобновятся, когда сервер снова будет онлайн</Text>
+      ) : undefined}
       ListEmptyComponent={
         error ? <Empty text={error} /> : items === null ? <Empty text="Загрузка…" /> : <Empty text={query || filter !== 'all' ? 'Ничего не найдено' : archived ? 'Архив пуст' : 'Заявлений нет'} />
       }
@@ -159,6 +175,7 @@ function ApplicationCard({ app, theme: t, archived }: { app: Application; theme:
           </Text>
           <View style={styles.tags}>
             {app.sync_state === 'error' && <Tag tone="danger">Ошибка</Tag>}
+            {!archived && app.sync_state !== 'error' && app.sync_state !== 'checking' && (app.last_change_fields?.length ?? 0) > 0 && <Tag>Изменение</Tag>}
             {app.parent_id && <Tag>Цепочка</Tag>}
             {archived && (app.result_documents ?? 0) > 0 && <Tag>{app.result_documents} PDF</Tag>}
           </View>
@@ -190,7 +207,7 @@ function ApplicationCard({ app, theme: t, archived }: { app: Application; theme:
               Согласования {app.checklist_summary.ok}/{app.checklist_summary.total}{app.checklist_summary.wait ? ` · ждём ${app.checklist_summary.wait}` : ''}
             </Text>
           </View>
-        ) : null}
+        ) : undefined}
         {!archived && app.last_change_fields.length > 0 && (
           <View style={styles.tags}>
             {app.last_change_fields.map(f => <Tag key={f}>{CHANGE_FIELD_LABELS[f] ?? f}</Tag>)}
@@ -212,6 +229,8 @@ const styles = StyleSheet.create({
   chips: { gap: 8 },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: radius.inner, paddingHorizontal: 12, height: 42 },
   searchInput: { flex: 1, fontFamily: font.regular, fontSize: 14, paddingVertical: 0 },
+  footer: { fontFamily: font.regular, fontSize: 12, textAlign: 'center', marginTop: 8 },
+  summary: { fontFamily: font.regular, fontSize: 13 },
   month: { fontFamily: font.semibold, fontSize: 12, marginTop: 6 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   number: { fontFamily: font.mono, fontSize: 12 },
