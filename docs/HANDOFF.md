@@ -175,7 +175,8 @@ PDF, заметки, цепочка); добавление по PDF (drag-drop);
       События — карточка «Резервная копия» из `GET /api/backup` (ошибка копии считается
       ошибкой); A8 кнопка «Установить обновление»; A9 строка «Проверка и уведомления
       возобновятся…». Не сделано: «Поделиться» из Telegram (SEND-интент, нужен нативный модуль).
-      Проверено tsc + `expo export`; на телефоне не смотрели, OTA не выпускался.
+      Проверено tsc + `expo export`. OTA выпущен 2026-10-29 (group 06b4b28b, runtime 1.3.2);
+      на телефоне ещё не смотрели.
 
 ### Предложенный порядок (пользователь может менять)
 1. ~~Сайт: карточка (скриншот, PDF статуса, документы, следующая проверка).~~ готово.
@@ -209,7 +210,8 @@ PDF, заметки, цепочка); добавление по PDF (drag-drop);
   artifacts.buildUrl → на сайте Настройки → «Приложение Android» → «Загрузить APK» с теми же
   версией и кодом. Телефоны покажут «Доступна версия…» при следующем запуске.
 - **Только JS/интерфейс (без нативных изменений):** из `mobile/` в терминальной вкладке:
-  `$env:EAS_NO_VCS = '1'; npx.cmd eas-cli@latest update --channel production --message "…"`.
+  `$env:EAS_NO_VCS = '1'; npx.cmd --yes eas-cli@latest update --channel production --environment production --platform android --non-interactive --message "…"`
+  (eas-cli 27+: без `--environment` спрашивает окружение, без `--platform android` падает на web).
   Доходит до телефонов той же `expo.version` при следующем запуске (runtimeVersion = appVersion).
 - APK хранится в `data/app-release/`, копия — в `<папка бэкапов>/apk/`.
 - В `next.config.ts` поднят `experimental.proxyClientMaxBodySize` до 200 МБ: по умолчанию Next
