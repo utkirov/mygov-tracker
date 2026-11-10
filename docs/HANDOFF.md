@@ -284,14 +284,14 @@ PDF, заметки, цепочка); добавление по PDF (drag-drop);
   отказа — в push о завершении. Показ: сайт (ChecklistSection, полоска на доске), приложение
   (ChecklistCard, полоска в списке), карточка в боте. Попутно исправлено: при ручной проверке
   push не отправлялись (ранний return в `checkOne`).
-- Заголовки и ссылки (2026-11-10): шаблон  в , у каждого
-  раздела свой  с title (клиентские макеты clients/projects переименованы в
-  / и обёрнуты серверным layout), у заявления/клиента/проекта —
-  generateMetadata («№ 352219390 · объект»). Везде noindex +  (Disallow: /),
-  , , , theme-color; эти пути добавлены в PUBLIC_PATHS
-  proxy. : generateMetadata с og/twitter-превью — номер, статус, услуга и
+- Заголовки и ссылки (2026-11-10): шаблон `%s · my.gov tracker` в `app/layout.tsx`, у каждого
+  раздела свой `layout.tsx` с title (клиентские макеты clients/projects переименованы в
+  `ClientsShell`/`ProjectsShell` и обёрнуты серверным layout), у заявления/клиента/проекта —
+  generateMetadata («№ 352219390 · объект»). Везде noindex + `app/robots.ts` (Disallow: /),
+  `manifest.ts`, `icon.svg`, `apple-icon.tsx`, theme-color; эти пути добавлены в PUBLIC_PATHS
+  proxy. `/s/<token>`: generateMetadata с og/twitter-превью — номер, статус, услуга и
   организация (без объекта и имени клиента; PIN-ссылка — общий текст), referrer no-referrer.
-  Боты превью мессенджеров (: TelegramBot, WhatsApp…) больше не считаются
+  Боты превью мессенджеров (`isLinkPreviewBot`: TelegramBot, WhatsApp…) больше не считаются
   просмотрами — раньше TelegramBot записывался как «Telegram» и накручивал счётчик.
 - Файлы заявления (2026-11-10): ссылки «Скачать» в строках th/td страницы статуса
   (`/ru/get-service-file/<номер>/<id>` на `oldmy.gov.uz:4433` — отдаются **без сессии**,
