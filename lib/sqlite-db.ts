@@ -47,7 +47,7 @@ function applyMigrations(db: Database.Database): void {
   }
   // Look of the public share page (lib/share-design.ts).
   if (!settingsCols.includes('share_design')) {
-    db.exec("ALTER TABLE settings ADD COLUMN share_design TEXT NOT NULL DEFAULT 'summary'");
+    db.exec("ALTER TABLE settings ADD COLUMN share_design TEXT NOT NULL DEFAULT 'timeline-auto'");
   }
   // Share links: client-wide links (application_id = '') and an optional PIN.
   const shareCols = (db.prepare("PRAGMA table_info(share_links)").all() as { name: string }[]).map(c => c.name);

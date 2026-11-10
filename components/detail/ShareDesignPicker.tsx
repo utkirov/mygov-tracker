@@ -12,6 +12,8 @@ const SWATCH: Record<string, [string, string, string]> = {
   summary: ['#F3F1EC', '#7C4DFF', '#0C0C0E'],
   'summary-dark': ['#0C0C0E', '#7C4DFF', '#F3F1EC'],
   timeline: ['#FFFFFF', '#A688FF', '#7C4DFF'],
+  'timeline-dark': ['#0C0C0E', '#151518', '#A688FF'],
+  'timeline-auto': ['#F3F1EC', '#0C0C0E', '#7C4DFF'],
   brand: ['#7C4DFF', '#2B1466', '#F3F1EC'],
 };
 

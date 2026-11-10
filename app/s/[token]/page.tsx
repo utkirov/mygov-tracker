@@ -8,7 +8,7 @@ import { ContactBar, ContactCard, DesignSwitcher, SummaryHero, TimelineCard } fr
 import { BRAND } from '@/lib/brand';
 import { telegramSubscribeUrl } from '@/lib/client-notify';
 import { SESSION_COOKIE, verifySession } from '@/lib/session-token';
-import { getShareDesign, isSummaryLook, parseShareDesign, type ShareDesign } from '@/lib/share-design';
+import { getShareDesign, isSummaryLook, isTimelineLook, parseShareDesign, type ShareDesign } from '@/lib/share-design';
 import {
   buildClientShareView,
   buildShareView,
@@ -187,9 +187,9 @@ export default async function SharePage({ params, searchParams }: { params: Prom
       </p>
     </>
   );
-  // Looks C–F: a summary (or timeline) card first, the full blocks folded under «Подробнее».
-  const cardLook = isSummaryLook(look.design) || look.design === 'timeline';
-  const hero = (app: ShareView) => (look.design === 'timeline'
+  // Card looks (summary / timeline): the card first, the full blocks folded under «Подробнее».
+  const cardLook = isSummaryLook(look.design) || isTimelineLook(look.design);
+  const hero = (app: ShareView) => (isTimelineLook(look.design)
     ? <TimelineCard view={app} />
     : <SummaryHero view={app} brand={look.design === 'brand'} />);
 
