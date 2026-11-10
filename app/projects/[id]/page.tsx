@@ -8,6 +8,8 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import { ApplicationCard } from '@/components/ApplicationCard';
 import { PROJECTS_CHANGED_EVENT } from '@/lib/project-events';
 import { showToast } from '@/lib/toast';
+import { ProjectPipeline } from '@/components/ProjectPipeline';
+import { projectPipeline } from '@/lib/project-pipeline';
 import type { Application, Project } from '@/types';
 import { getMyGovStatus, PROJECT_COLORS } from '@/types';
 
@@ -276,6 +278,18 @@ export default function ProjectPage() {
             )}
           </div>
         </div>
+
+        {/* ── Chain of services ── */}
+        {apps.length > 0 && (
+          <div className="rounded-[12px] border p-4 md:p-5"
+            style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
+            <h2 className="mb-1 text-[13px] font-semibold tracking-tight" style={{ color: 'var(--text)' }}>Путь объекта</h2>
+            <p className="mb-3 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+              От АПЗ до кадастра: что уже одобрено, что в работе и где после отказа нужна новая подача. Нажмите на шаг — откроется последнее заявление.
+            </p>
+            <ProjectPipeline steps={projectPipeline(apps)} />
+          </div>
+        )}
 
         {/* ── Timeline ── */}
         <div className="rounded-[12px] border p-4 md:p-5"

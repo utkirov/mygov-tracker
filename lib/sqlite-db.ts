@@ -45,6 +45,9 @@ function applyMigrations(db: Database.Database): void {
   if (!settingsCols.includes('telegram_commands_chat_id')) {
     db.exec("ALTER TABLE settings ADD COLUMN telegram_commands_chat_id TEXT NOT NULL DEFAULT ''");
   }
+  // Clients: Telegram username next to the phone (lib/client-contact.ts).
+  const clientCols = (db.prepare("PRAGMA table_info(clients)").all() as { name: string }[]).map(c => c.name);
+  if (clientCols.length > 0 && !clientCols.includes('telegram')) db.exec("ALTER TABLE clients ADD COLUMN telegram TEXT NOT NULL DEFAULT ''");
   // Share links: client-wide links (application_id = '') and an optional PIN.
   const shareCols = (db.prepare("PRAGMA table_info(share_links)").all() as { name: string }[]).map(c => c.name);
   if (shareCols.length > 0 && !shareCols.includes('client_id')) db.exec("ALTER TABLE share_links ADD COLUMN client_id TEXT");

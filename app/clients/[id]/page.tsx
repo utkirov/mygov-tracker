@@ -6,14 +6,22 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 
 import type { ClientStats } from '@/lib/analytics';
+import { phoneHref, telegramHref } from '@/lib/client-contact';
 import { CLIENTS_CHANGED_EVENT } from '@/lib/client-events';
 import { showToast } from '@/lib/toast';
 import { getMyGovStatus, type Application } from '@/types';
 
 const ShareSection = dynamic(() => import('@/components/detail/ShareSection'), { ssr: false });
 
+interface LinkRow {
+  token: string; label: string; created_at: string; revoked_at: string | null; active: boolean; views: number; last_viewed_at: string | null;
+  target: { kind: 'application' | 'client'; id: string; title: string; number: string };
+}
+
+const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—');
+
 interface ClientCard {
-  client: { id: string; name: string; phone: string; note: string };
+  client: { id: string; name: string; phone: string; note: string; telegram?: string };
   applications: Application[];
   stats: ClientStats | null;
 }
@@ -30,7 +38,8 @@ export default function ClientPage() {
   const router = useRouter();
   const [data, setData] = useState<ClientCard | null>(null);
   const [missing, setMissing] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', note: '' });
+  const [form, setForm] = useState({ name: '', phone: '', note: '', telegram: '' });
+  const [links, setLinks] = useState<LinkRow[]>([]);
   const [all, setAll] = useState<Application[]>([]);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -39,9 +48,11 @@ export default function ClientPage() {
     const r = await fetch(`/api/clients/${id}`, { cache: 'no-store' }).catch(() => null);
     if (!r?.ok) { startTransition(() => setMissing(true)); return; }
     const card = await r.json() as ClientCard;
+    const all = await fetch('/api/share-links', { cache: 'no-store' }).then(x => (x.ok ? x.json() : null)).catch(() => null) as { links?: LinkRow[] } | null;
     startTransition(() => {
       setData(card);
-      setForm({ name: card.client.name, phone: card.client.phone, note: card.client.note });
+      setLinks(all?.links ?? []);
+      setForm({ name: card.client.name, phone: card.client.phone, note: card.client.note, telegram: card.client.telegram ?? '' });
     });
   }, [id]);
 
@@ -99,6 +110,9 @@ export default function ClientPage() {
   const active = data.applications.filter(a => !a.archived);
   const done = data.applications.filter(a => a.archived);
   const field = { background: 'var(--panel)', borderColor: 'var(--border)', color: 'var(--text)' };
+  // Links sent to this client: the client-wide ones and those of the client's applications.
+  const appIds = new Set(data.applications.map(a => a.id));
+  const mine = links.filter(l => (l.target.kind === 'client' ? l.target.id === id : appIds.has(l.target.id)));
   const card = 'rounded-[14px] border p-4 md:p-5';
   const cardStyle = { background: 'var(--surface)', borderColor: 'var(--border)' };
 
@@ -126,10 +140,12 @@ export default function ClientPage() {
   return (
     <div className="space-y-4">
       <section className={card} style={cardStyle}>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-3">
           <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Имя"
             className="h-10 rounded-[8px] border px-3 text-[15px] font-semibold outline-none" style={field} />
           <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Телефон" inputMode="tel"
+            className="h-10 rounded-[8px] border px-3 text-[13px] outline-none" style={field} />
+          <input value={form.telegram} onChange={e => setForm({ ...form, telegram: e.target.value })} placeholder="Telegram: @username"
             className="h-10 rounded-[8px] border px-3 text-[13px] outline-none" style={field} />
         </div>
         <textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="Заметка (видна только вам)" rows={2}
@@ -137,7 +153,10 @@ export default function ClientPage() {
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <button type="button" onClick={() => void save()} className="rounded-[8px] px-3 py-1.5 text-[12px] font-semibold"
             style={{ background: 'var(--text)', color: 'var(--surface)' }}>Сохранить</button>
-          {data.client.phone && <a href={`tel:${data.client.phone.replace(/[^\d+]/g, '')}`} className="text-[12px] font-medium" style={{ color: 'var(--accent)' }}>Позвонить</a>}
+          {phoneHref(data.client.phone) && <a href={phoneHref(data.client.phone)!} className="rounded-[8px] px-3 py-1.5 text-[12px] font-semibold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>Позвонить</a>}
+          {telegramHref(data.client.telegram, data.client.phone) && (
+            <a href={telegramHref(data.client.telegram, data.client.phone)!} target="_blank" rel="noopener noreferrer" className="rounded-[8px] px-3 py-1.5 text-[12px] font-semibold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>Написать в Telegram</a>
+          )}
           <button type="button" onClick={() => void remove()} className="ml-auto text-[12px]" style={{ color: 'var(--danger)' }}>Удалить клиента</button>
         </div>
       </section>
@@ -166,6 +185,32 @@ export default function ClientPage() {
       </section>
 
       <ShareSection clientId={id} defaultLabel={data.client.name} />
+
+      {mine.length > 0 && (
+        <section className={card} style={cardStyle}>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-bold" style={{ color: 'var(--text)' }}>История ссылок · {mine.length}</h2>
+            <Link href="/links" className="text-[12px] font-medium" style={{ color: 'var(--accent)' }}>все ссылки</Link>
+          </div>
+          <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+            Что отправляли клиенту — на все заявления и на отдельные — и открывал ли он это.
+          </p>
+          <ul className="mt-2">
+            {mine.map(l => (
+              <li key={l.token} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-t py-2 text-[12px] first:border-t-0" style={{ borderColor: 'var(--border)' }}>
+                <span className="min-w-0 truncate" style={{ color: 'var(--text)' }}>
+                  {l.target.kind === 'client' ? 'Все заявления' : `№ ${l.target.number} · ${l.target.title}`}
+                  {l.label ? <span style={{ color: 'var(--text-muted)' }}> · для: {l.label}</span> : null}
+                </span>
+                <span style={{ color: l.revoked_at ? 'var(--danger)' : l.active ? 'var(--text-muted)' : 'var(--warning)' }}>
+                  {l.revoked_at ? 'отозвана' : l.active ? 'активна' : 'истекла'}
+                  <span style={{ color: 'var(--text-muted)' }}> · создана {day(l.created_at)} · {l.views ? `открытий: ${l.views}, последнее ${day(l.last_viewed_at)}` : 'не открывали'}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className={card} style={cardStyle}>
         <div className="flex items-center justify-between gap-2">

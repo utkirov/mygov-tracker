@@ -50,12 +50,7 @@ export default function ProjectsLayout({ children }: { children: React.ReactNode
     return map;
   }, [apps]);
 
-  // /projects on its own opens the first project.
-  useEffect(() => {
-    if (loaded && pathname === '/projects' && projects.length > 0) {
-      router.replace(`/projects/${projects[0].id}`);
-    }
-  }, [loaded, pathname, projects, router]);
+  // /projects on its own is the overview of every project (app/projects/page.tsx).
 
   async function handleCreate() {
     const name = newName.trim();
@@ -86,7 +81,7 @@ export default function ProjectsLayout({ children }: { children: React.ReactNode
         <aside className="shrink-0 rounded-[14px] border p-4 md:sticky md:top-0 md:w-[300px]"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[17px] font-bold" style={{ color: 'var(--text)' }}>Проекты</h2>
+            <Link href="/projects" className="text-[17px] font-bold hover:underline" style={{ color: 'var(--text)' }}>Проекты</Link>
             <button type="button" aria-label="Новый проект" onClick={() => setCreating(v => !v)}
               className="flex h-8 w-8 items-center justify-center rounded-[8px] transition active:scale-95"
               style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>

@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const applicationId = searchParams.get('application_id');
-    const parsedLimit = Math.min(parseInt(searchParams.get('limit') ?? String(DEFAULT_LIMIT), 10), 200);
+    const parsedLimit = Math.min(parseInt(searchParams.get('limit') ?? String(DEFAULT_LIMIT), 10), 500);
     const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : DEFAULT_LIMIT;
 
     const db = await openDb();

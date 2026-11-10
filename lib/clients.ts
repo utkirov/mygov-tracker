@@ -13,6 +13,8 @@ export interface Client {
   id: string;
   name: string;
   phone: string;
+  /** Telegram username without @ (optional). */
+  telegram: string;
   note: string;
   created_at: string;
   updated_at: string;
@@ -24,18 +26,23 @@ export interface ClientSummary extends Client {
   last_change_at: string | null;
 }
 
+/** «@user», «t.me/user», «https://t.me/user» → «user». */
+function cleanTelegram(value: unknown): string {
+  return clean(value, 80).replace(/^https?:\/\//i, '').replace(/^t\.me\//i, '').replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 32);
+}
+
 function clean(value: unknown, max: number): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
-export async function createClient(input: { name: string; phone?: string; note?: string }, rootPath?: string): Promise<Client> {
+export async function createClient(input: { name: string; phone?: string; note?: string; telegram?: string }, rootPath?: string): Promise<Client> {
   const name = clean(input.name, 120);
   if (!name) throw new Error('Укажите имя клиента');
   const now = new Date().toISOString();
-  const client: Client = { id: randomUUID(), name, phone: clean(input.phone, 40), note: clean(input.note, 1000), created_at: now, updated_at: now };
+  const client: Client = { id: randomUUID(), name, phone: clean(input.phone, 40), telegram: cleanTelegram(input.telegram), note: clean(input.note, 1000), created_at: now, updated_at: now };
   const db = await openDb(rootPath);
-  db.prepare('INSERT INTO clients (id, name, phone, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(client.id, client.name, client.phone, client.note, client.created_at, client.updated_at);
+  db.prepare('INSERT INTO clients (id, name, phone, telegram, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(client.id, client.name, client.phone, client.telegram, client.note, client.created_at, client.updated_at);
   clearAnalyticsCache();
   return client;
 }
@@ -45,18 +52,19 @@ export async function getClient(id: string, rootPath?: string): Promise<Client |
   return (db.prepare('SELECT * FROM clients WHERE id = ?').get(id) as Client | undefined) ?? null;
 }
 
-export async function updateClient(id: string, patch: { name?: string; phone?: string; note?: string }, rootPath?: string): Promise<Client | null> {
+export async function updateClient(id: string, patch: { name?: string; phone?: string; note?: string; telegram?: string }, rootPath?: string): Promise<Client | null> {
   const current = await getClient(id, rootPath);
   if (!current) return null;
   const next: Client = {
     ...current,
     name: patch.name !== undefined ? clean(patch.name, 120) || current.name : current.name,
     phone: patch.phone !== undefined ? clean(patch.phone, 40) : current.phone,
+    telegram: patch.telegram !== undefined ? cleanTelegram(patch.telegram) : current.telegram ?? '',
     note: patch.note !== undefined ? clean(patch.note, 1000) : current.note,
     updated_at: new Date().toISOString(),
   };
   const db = await openDb(rootPath);
-  db.prepare('UPDATE clients SET name = ?, phone = ?, note = ?, updated_at = ? WHERE id = ?').run(next.name, next.phone, next.note, next.updated_at, id);
+  db.prepare('UPDATE clients SET name = ?, phone = ?, telegram = ?, note = ?, updated_at = ? WHERE id = ?').run(next.name, next.phone, next.telegram, next.note, next.updated_at, id);
   clearAnalyticsCache();
   return next;
 }

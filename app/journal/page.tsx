@@ -23,11 +23,13 @@ export default function JournalPage() {
   const [entries, setEntries] = useState<CheckLogEntry[] | null>(null);
   const [apps, setApps] = useState<Map<string, Application>>(new Map());
   const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const [period, setPeriod] = useState<'all' | 'today' | 'week'>('all');
   const [downtimes, setDowntimes] = useState<Array<{ from: string; to: string; minutes: number }>>([]);
 
   const load = useCallback(async () => {
     const [log, active, archived] = await Promise.all([
-      fetch('/api/check-log?limit=200', { cache: 'no-store' }).then(r => r.json()).catch(() => []) as Promise<CheckLogEntry[]>,
+      fetch('/api/check-log?limit=500', { cache: 'no-store' }).then(r => r.json()).catch(() => []) as Promise<CheckLogEntry[]>,
       fetch('/api/applications', { cache: 'no-store' }).then(r => r.json()).catch(() => []) as Promise<Application[]>,
       fetch('/api/applications?archived=true', { cache: 'no-store' }).then(r => r.json()).catch(() => []) as Promise<Application[]>,
     ]);
@@ -43,14 +45,26 @@ export default function JournalPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const shown = useMemo(() => (entries ?? []).filter(e => filter === 'all' || e.result === filter), [entries, filter]);
+  // Period and search narrow the list first; the result chips count what is left.
+  const scoped = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    // eslint-disable-next-line react-hooks/purity -- the period is relative to now by definition
+    const from = period === 'today' ? new Date().setHours(0, 0, 0, 0) : period === 'week' ? Date.now() - 7 * 86_400_000 : 0;
+    return (entries ?? []).filter(e => {
+      if (from && Date.parse(e.checked_at) < from) return false;
+      if (!q) return true;
+      const app = apps.get(e.application_id);
+      return [e.application_number, app?.object_name ?? '', app?.service_name ?? ''].join(' ').toLowerCase().includes(q);
+    });
+  }, [entries, apps, query, period]);
+  const shown = useMemo(() => scoped.filter(e => filter === 'all' || e.result === filter), [scoped, filter]);
 
   return (
     <div className="h-[calc(100svh-56px)] overflow-y-auto">
       <div className="mx-auto w-full max-w-4xl px-4 py-5 md:px-6 md:py-8">
         <h1 className="text-[22px] font-bold tracking-tight" style={{ color: 'var(--text)' }}>Журнал проверок</h1>
         <p className="mt-1 text-[13px]" style={{ color: 'var(--text-muted)' }}>
-          Последние 200 проверок. Проверки без изменений хранятся 30 дней, изменения и ошибки — 180.
+          Последние 500 проверок. Проверки без изменений хранятся 30 дней, изменения и ошибки — 180.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -60,9 +74,18 @@ export default function JournalPage() {
               style={filter === f.id
                 ? { background: 'var(--text)', color: 'var(--surface)', borderColor: 'var(--text)' }
                 : { background: 'var(--surface)', color: 'var(--text-soft)', borderColor: 'var(--border)' }}>
-              {f.label} · {(entries ?? []).filter(e => f.id === 'all' || e.result === f.id).length}
+              {f.label} · {scoped.filter(e => f.id === 'all' || e.result === f.id).length}
             </button>
           ))}
+          <select value={period} onChange={e => setPeriod(e.target.value as typeof period)} aria-label="Период"
+            className="rounded-[7px] border px-2 py-1 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--text-soft)', borderColor: 'var(--border)' }}>
+            <option value="all">За всё время</option>
+            <option value="today">Сегодня</option>
+            <option value="week">7 дней</option>
+          </select>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Номер или объект"
+            className="ml-auto h-[28px] w-full rounded-[7px] border px-2.5 text-[12px] outline-none sm:w-56"
+            style={{ background: 'var(--surface)', color: 'var(--text)', borderColor: 'var(--border)' }} />
         </div>
 
         {downtimes.length > 0 && (

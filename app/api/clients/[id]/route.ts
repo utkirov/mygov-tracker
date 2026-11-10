@@ -30,7 +30,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
   const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
-  const client = await updateClient(id, { name: str(body.name), phone: str(body.phone), note: str(body.note) });
+  const client = await updateClient(id, { name: str(body.name), phone: str(body.phone), note: str(body.note), telegram: str(body.telegram) });
   return client ? NextResponse.json({ client }) : NextResponse.json({ error: 'Клиент не найден' }, { status: 404 });
 }
 
