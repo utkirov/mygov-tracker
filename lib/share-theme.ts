@@ -11,3 +11,8 @@ export const SHARE_THEME_COOKIE = 'share_theme';
 export function parseShareTheme(value: unknown): ShareTheme {
   return value === 'light' || value === 'dark' ? value : 'auto';
 }
+
+/** Browser only: keeps a visitor's choice (theme, language) for a year on /s pages. */
+export function rememberShareChoice(name: string, value: string): void {
+  document.cookie = `${name}=${value}; path=/s; max-age=31536000; samesite=lax`;
+}

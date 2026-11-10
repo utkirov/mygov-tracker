@@ -2,7 +2,7 @@
 
 import { Moon, Sun } from 'lucide-react';
 
-import { SHARE_THEME_COOKIE } from '@/lib/share-theme';
+import { rememberShareChoice, SHARE_THEME_COOKIE } from '@/lib/share-theme';
 
 /**
  * Sun / moon in the top bar of a share page: flips light ↔ dark and remembers
@@ -18,7 +18,7 @@ export function ThemeToggle() {
     const next = dark ? 'light' : 'dark';
     root.classList.remove('share-theme-light', 'share-theme-dark', 'share-theme-auto');
     root.classList.add(`share-theme-${next}`);
-    document.cookie = `${SHARE_THEME_COOKIE}=${next}; path=/s; max-age=31536000; samesite=lax`;
+    rememberShareChoice(SHARE_THEME_COOKIE, next);
   }
 
   return (
