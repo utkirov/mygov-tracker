@@ -11,6 +11,7 @@ import { getServiceCategory, type ServiceCategory } from '@/lib/service-categori
 import type { Application } from '@/types';
 import { getMyGovStatus, getStatusType, isCompletedStatus } from '@/types';
 import { LiveActivityWidget } from '@/components/LiveActivityWidget';
+import { showToast } from '@/lib/toast';
 
 // ─── Kanban columns ────────────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ function ApprovalsBarLine({ summary }: { summary: NonNullable<Application['check
   );
 }
 
-function KanbanCard({ application, index = 0 }: { application: Application; index?: number }) {
+function KanbanCard({ application, index = 0, select }: { application: Application; index?: number; select?: { on: boolean; picked: boolean; toggle: (id: string) => void } }) {
   const statusInfo = getMyGovStatus(application.status);
   const isUrgent   = getStatusType(application.acting_party, application.status) === 'action_required';
   const hasError   = Boolean(application.last_error);
@@ -149,16 +150,25 @@ function KanbanCard({ application, index = 0 }: { application: Application; inde
   return (
     <Link
       href={`/applications/${application.id}`}
+      onClick={select?.on ? e => { e.preventDefault(); select.toggle(application.id); } : undefined}
+      aria-pressed={select?.on ? select.picked : undefined}
       className="kanban-card block shrink-0 rounded-[12px] border p-4 animate-slide-up"
       style={{
         background: 'var(--surface)',
-        borderColor: 'var(--border)',
+        borderColor: select?.picked ? 'var(--accent)' : 'var(--border)',
+        boxShadow: select?.picked ? 'var(--accent-glow)' : undefined,
         // Capped so long columns don't leave a tail of cards mid-fade.
         animationDelay: `${Math.min(index, 8) * 30}ms`,
       }}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        <span className="flex items-center gap-2 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          {select?.on && (
+            <span className="flex h-4 w-4 items-center justify-center rounded-[4px] border text-[10px] font-bold text-white"
+              style={{ background: select.picked ? 'var(--accent)' : 'transparent', borderColor: select.picked ? 'var(--accent)' : 'var(--border-strong)' }}>
+              {select.picked ? '✓' : ''}
+            </span>
+          )}
           № {application.application_number}
         </span>
         <div className="flex items-center gap-1">
@@ -223,6 +233,22 @@ function formatClock(value: string): string {
   return today ? `сегодня в ${time}` : `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} в ${time}`;
 }
 
+type GroupBy = 'status' | 'client' | 'project';
+const GROUPS: Array<{ id: GroupBy; label: string }> = [
+  { id: 'status', label: 'По статусу' },
+  { id: 'client', label: 'По клиенту' },
+  { id: 'project', label: 'По проекту' },
+];
+
+function isToday(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const d = new Date(value.includes('T') ? value : value.replace(' ', 'T'));
+  return !Number.isNaN(d.getTime()) && d.toDateString() === new Date().toDateString();
+}
+
+/** The tracker noticed a change today, or the portal dates the last change today. */
+const changedToday = (a: Application) => isToday(a.last_detected_change_at) || isToday(a.last_changed_date);
+
 export default function DashboardPage() {
   const sync = useSyncEngineSnapshot();
   const [applications, setApplications] = useState<Application[]>([]);
@@ -232,12 +258,20 @@ export default function DashboardPage() {
   const [categoryFilter,  setCategoryFilter]  = useState<ServiceCategory | null>(null);
   const [dataLoaded,      setDataLoaded]      = useState(false);
   const [unauthorized,    setUnauthorized]    = useState(false);
+  const [groupBy,         setGroupBy]         = useState<GroupBy>('status');
+  const [todayOnly,       setTodayOnly]       = useState(false);
+  const [projects,        setProjects]        = useState<Map<string, string>>(new Map());
+  const [selectMode,      setSelectMode]      = useState(false);
+  const [picked,          setPicked]          = useState<Set<string>>(new Set());
+  const [bulkBusy,        setBulkBusy]        = useState(false);
 
   const loadData = useCallback(async () => {
-    const [res, archivedRes] = await Promise.all([
+    const [res, archivedRes, projectsRes] = await Promise.all([
       fetch('/api/applications', { cache: 'no-store' }),
       fetch('/api/applications?archived=true', { cache: 'no-store' }),
+      fetch('/api/projects', { cache: 'no-store' }).catch(() => null),
     ]);
+    const projectList: unknown = projectsRes?.ok ? await projectsRes.json().catch(() => null) : null;
     const data: unknown = res.ok ? await res.json() : null;
     const archived: unknown = archivedRes.ok ? await archivedRes.json() : null;
     // Completed applications are auto-archived, so the "Завершено" column is
@@ -249,6 +283,7 @@ export default function DashboardPage() {
       setUnauthorized(res.status === 401);
       setApplications(Array.isArray(data) ? data as Application[] : []);
       setRecentDone(done);
+      if (Array.isArray(projectList)) setProjects(new Map((projectList as Array<{ id: string; name: string }>).map(pr => [pr.id, pr.name])));
       setDataLoaded(true);
     });
   }, []);
@@ -285,8 +320,65 @@ export default function DashboardPage() {
     if (categoryFilter) {
       result = result.filter(a => getServiceCategory(a.service_name) === categoryFilter);
     }
+    if (todayOnly) result = result.filter(changedToday);
     return result;
-  }, [active, recentDone, search, categoryFilter]);
+  }, [active, recentDone, search, categoryFilter, todayOnly]);
+
+  // «Сегодня»: what moved since midnight.
+  const today = useMemo(() => ({
+    changed: [...active, ...recentDone].filter(changedToday).length,
+    finished: recentDone.filter(a => isToday(a.last_changed_date ?? a.updated_at)).length,
+  }), [active, recentDone]);
+
+  // Desktop board: by status (kanban), or one column per client / project.
+  const boardColumns = useMemo(() => {
+    if (groupBy === 'status') return null;
+    const groups = new Map<string, { id: string; label: string; apps: Application[] }>();
+    for (const a of filtered) {
+      const key = groupBy === 'client' ? a.client?.id ?? '' : a.project_id ?? '';
+      const label = groupBy === 'client' ? a.client?.name ?? 'Без клиента' : projects.get(a.project_id ?? '') ?? 'Без проекта';
+      const g = groups.get(key) ?? { id: key || 'none', label, apps: [] };
+      g.apps.push(a);
+      groups.set(key, g);
+    }
+    return [...groups.values()].sort((a, b) => Number(a.id === 'none') - Number(b.id === 'none') || b.apps.length - a.apps.length);
+  }, [filtered, groupBy, projects]);
+
+  const select = useMemo(() => ({
+    on: selectMode,
+    toggle: (id: string) => setPicked(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    }),
+  }), [selectMode]);
+
+  function stopSelecting() {
+    setSelectMode(false);
+    setPicked(new Set());
+  }
+
+  /** Bulk: check now / move to the archive — one request per application, in turn. */
+  async function bulk(action: 'check' | 'archive') {
+    const ids = [...picked];
+    if (ids.length === 0) return;
+    if (action === 'archive' && !window.confirm(`Перенести в архив заявлений: ${ids.length}? Проверка по ним остановится.`)) return;
+    setBulkBusy(true);
+    let ok = 0;
+    for (const id of ids) {
+      const r = action === 'check'
+        ? await fetch(`/api/applications/${id}/check?manual=true`, { method: 'POST' }).catch(() => null)
+        : await fetch(`/api/applications/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: true }) }).catch(() => null);
+      if (r?.ok) ok += 1;
+    }
+    setBulkBusy(false);
+    showToast({
+      title: action === 'check' ? `Проверено: ${ok} из ${ids.length}` : `В архив перенесено: ${ok} из ${ids.length}`,
+      tone: ok === ids.length ? 'success' : 'warning',
+    });
+    stopSelecting();
+    await loadData();
+  }
 
   const columns = useMemo(() =>
     COLUMNS.map(col => ({
@@ -363,7 +455,44 @@ export default function DashboardPage() {
           <span className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium" style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>
             {completedCount} завершено за 7 дней
           </span>
+          <button type="button" onClick={() => setTodayOnly(v => !v)} title="Показать только то, что изменилось сегодня"
+            className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-medium"
+            style={todayOnly ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+            Сегодня: изменений {today.changed}{today.finished ? ` · завершено ${today.finished}` : ''}
+          </button>
+          <span className="ml-auto hidden shrink-0 items-center gap-1 md:flex">
+            {GROUPS.map(g => (
+              <button key={g.id} type="button" onClick={() => setGroupBy(g.id)}
+                className="rounded-[6px] px-2 py-1 text-[12px] font-medium"
+                style={groupBy === g.id ? { background: 'var(--text)', color: 'var(--surface)' } : { background: 'var(--panel)', color: 'var(--text-soft)' }}>
+                {g.label}
+              </button>
+            ))}
+            <button type="button" onClick={() => (selectMode ? stopSelecting() : setSelectMode(true))}
+              className="ml-2 rounded-[6px] border px-2 py-1 text-[12px] font-medium"
+              style={{ borderColor: 'var(--border-strong)', color: selectMode ? 'var(--accent)' : 'var(--text-soft)' }}>
+              {selectMode ? 'Отменить выбор' : 'Выбрать'}
+            </button>
+          </span>
         </div>
+
+        {selectMode && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[10px] px-3 py-2 text-[12px]" style={{ background: 'var(--panel)' }}>
+            <span style={{ color: 'var(--text-soft)' }}>Выбрано: <b style={{ color: 'var(--text)' }}>{picked.size}</b> — нажимайте на карточки</span>
+            <button type="button" disabled={bulkBusy || picked.size === 0} onClick={() => void bulk('check')}
+              className="rounded-[7px] px-3 py-1.5 font-semibold disabled:opacity-50" style={{ background: 'var(--text)', color: 'var(--surface)' }}>
+              {bulkBusy ? 'Выполняю…' : 'Проверить сейчас'}
+            </button>
+            <button type="button" disabled={bulkBusy || picked.size === 0} onClick={() => void bulk('archive')}
+              className="rounded-[7px] border px-3 py-1.5 font-semibold disabled:opacity-50" style={{ borderColor: 'var(--border-strong)', color: 'var(--text)' }}>
+              В архив
+            </button>
+            <button type="button" disabled={bulkBusy} onClick={() => setPicked(new Set(filtered.filter(a => !a.archived).map(a => a.id)))}
+              className="font-medium" style={{ color: 'var(--accent)' }}>
+              Выбрать все активные
+            </button>
+          </div>
+        )}
 
         <AttentionStrip />
 
@@ -499,13 +628,13 @@ export default function DashboardPage() {
               + Добавить заявление
             </Link>
           </div>
-        ) : columns.map((col, colIdx) => (
+        ) : (boardColumns ?? columns).map((col, colIdx) => (
           <div key={col.id} className="flex min-h-0 w-[288px] min-w-[288px] flex-col animate-slide-up" style={{ animationDelay: `${colIdx * 60}ms` }}>
             {/* Column header */}
             <div className="mb-2.5 flex items-center gap-2 px-1 py-1">
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: col.color }} />
-              <span className="flex-1 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
-                {col.id === 'done' ? 'Завершено · 7 дней' : col.label}
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: boardColumns ? 'var(--accent)' : COLUMNS.find(c => c.id === col.id)?.color }} />
+              <span className="flex-1 truncate text-[13px] font-medium" style={{ color: 'var(--text)' }} title={col.label}>
+                {!boardColumns && col.id === 'done' ? 'Завершено · 7 дней' : col.label}
               </span>
               <span className="tabular text-[12px]" style={{ color: 'var(--text-muted)' }}>{col.apps.length}</span>
             </div>
@@ -534,6 +663,7 @@ export default function DashboardPage() {
                       key={app.id}
                       index={idx}
                       application={app}
+                      select={{ ...select, picked: picked.has(app.id) }}
                     />
                   ))}
                   {col.apps.length === 0 && (

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, startTransition } from 'reac
 import Link from 'next/link';
 import { ArrowLeft, Download, FileText, Search } from 'lucide-react';
 
+import { canonicalService } from '@/lib/service-names';
 import { showToast } from '@/lib/toast';
 import type { Application } from '@/types';
 import { getMyGovStatus } from '@/types';
@@ -32,11 +33,16 @@ function formatDay(value: string): string {
 
 function toCsv(rows: Application[]): string {
   const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
-  const header = ['Номер', 'Объект', 'Услуга', 'Организация', 'Статус', 'Завершено', 'Документов'];
-  const lines = rows.map(a => [
-    a.application_number, a.object_name, a.service_name, a.organization,
-    getMyGovStatus(a.status).label, formatDay(finishedAt(a)), String(a.result_documents ?? 0),
-  ].map(v => escape(v ?? '')).join(';'));
+  const header = ['Номер', 'Объект', 'Клиент', 'Услуга', 'Организация', 'Статус', 'Подано', 'Завершено', 'Дней', 'Документов'];
+  const lines = rows.map(a => {
+    const from = a.submission_date ? Date.parse(a.submission_date) : NaN;
+    const to = Date.parse(finishedAt(a));
+    const days = Number.isNaN(from) || Number.isNaN(to) ? '' : String(Math.max(0, Math.round((to - from) / 86_400_000)));
+    return [
+      a.application_number, a.object_name, a.client?.name ?? '', canonicalService(a.service_name).label, a.organization,
+      getMyGovStatus(a.status).label, a.submission_date ? formatDay(a.submission_date) : '', formatDay(finishedAt(a)), days, String(a.result_documents ?? 0),
+    ].map(v => escape(v ?? '')).join(';');
+  });
   // BOM + ";" so Excel opens Cyrillic columns correctly.
   return '﻿' + [header.map(escape).join(';'), ...lines].join('\r\n');
 }
@@ -58,6 +64,8 @@ export default function ArchivePage() {
   const [search,       setSearch]       = useState('');
   const [status,       setStatus]       = useState<StatusFilter>('all');
   const [last30,       setLast30]       = useState(false);
+  const [service,      setService]      = useState('');
+  const [client,       setClient]       = useState('');
   const [page,         setPage]         = useState(1);
   const [dataLoaded,   setDataLoaded]   = useState(false);
   const [loadError,    setLoadError]    = useState(false);
@@ -101,11 +109,27 @@ export default function ArchivePage() {
     return sorted.filter(a => {
       if (status !== 'all' && outcomeOf(a) !== status) return false;
       if (last30 && new Date(finishedAt(a)).getTime() < cutoff) return false;
+      if (service && canonicalService(a.service_name).key !== service) return false;
+      if (client && (a.client?.id ?? 'none') !== client) return false;
       if (!q) return true;
       return [a.application_number, a.object_name, a.service_name, a.organization]
         .join(' ').toLowerCase().includes(q);
     });
-  }, [sorted, search, status, last30]);
+  }, [sorted, search, status, last30, service, client]);
+
+  // Options of the two selects: services (RU / UZ names merged) and clients, most frequent first.
+  const options = useMemo(() => {
+    const services = new Map<string, { label: string; n: number }>();
+    const clients = new Map<string, { label: string; n: number }>();
+    for (const a of sorted) {
+      const svc = canonicalService(a.service_name);
+      services.set(svc.key, { label: svc.label, n: (services.get(svc.key)?.n ?? 0) + 1 });
+      const id = a.client?.id ?? 'none';
+      clients.set(id, { label: a.client?.name ?? 'Без клиента', n: (clients.get(id)?.n ?? 0) + 1 });
+    }
+    const list = (m: Map<string, { label: string; n: number }>) => [...m.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.n - a.n);
+    return { services: list(services), clients: list(clients) };
+  }, [sorted]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -185,7 +209,7 @@ export default function ArchivePage() {
               style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
             >
               <Download size={15} />
-              <span className="hidden sm:inline">Экспорт CSV</span>
+              <span className="hidden sm:inline">В Excel</span>
             </button>
           </div>
         </div>
@@ -206,6 +230,17 @@ export default function ArchivePage() {
             style={chipStyle(last30)}>
             За 30 дней
           </button>
+          <select value={service} onChange={e => changeFilter(() => setService(e.target.value))} aria-label="Услуга"
+            className="h-[28px] max-w-[260px] rounded-[7px] border px-2 text-[12px]" style={chipStyle(Boolean(service))}>
+            <option value="">Все услуги</option>
+            {options.services.map(o => <option key={o.id} value={o.id}>{o.label} · {o.n}</option>)}
+          </select>
+          <select value={client} onChange={e => changeFilter(() => setClient(e.target.value))} aria-label="Клиент"
+            className="h-[28px] max-w-[200px] rounded-[7px] border px-2 text-[12px]" style={chipStyle(Boolean(client))}>
+            <option value="">Все клиенты</option>
+            {options.clients.map(o => <option key={o.id} value={o.id}>{o.label} · {o.n}</option>)}
+          </select>
+          <span className="self-center text-[12px]" style={{ color: 'var(--text-muted)' }}>найдено: {filtered.length}</span>
         </div>
 
         {/* ── Table ── */}
