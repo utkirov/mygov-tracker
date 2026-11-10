@@ -71,6 +71,9 @@ describe('client share links', () => {
     await recordShareView(link.token, ua, root, new Date('2026-10-20T10:00:00Z'));
     await recordShareView(link.token, ua, root, new Date('2026-10-20T10:05:00Z'));
     await recordShareView(link.token, 'Mozilla/5.0 (Windows NT 10.0)', root, new Date('2026-10-20T10:06:00Z'));
+    // Pasting the link into a chat: the messenger's preview bot fetches it — not a view.
+    await recordShareView(link.token, 'TelegramBot (like TwitterBot)', root, new Date('2026-10-20T10:07:00Z'));
+    await recordShareView(link.token, 'WhatsApp/2.24', root, new Date('2026-10-20T10:07:00Z'));
     expect((await findShareLink(link.token, root))!.views).toBe(2);
     expect((await listShareViews(link.token, 10, root)).map(v => v.device)).toEqual(['Windows', 'Android · Telegram']);
     expect(await revokeShareLink(link.token, root)).toBe(true);
@@ -78,6 +81,7 @@ describe('client share links', () => {
     expect((await listShareLinks('app-1', root)).map(l => l.label)).toEqual(['Заказчик']);
     expect(await findShareLink('not-a-token', root)).toBeNull();
     expect(deviceFromUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)')).toBe('iPhone');
+    expect(deviceFromUserAgent('TelegramBot (like TwitterBot)')).toBe('предпросмотр');
   });
 
   it('never exposes the check password, phones, notes or the PDF', async () => {

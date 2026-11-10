@@ -15,10 +15,46 @@ import {
   unlockCookieName,
 } from '@/lib/share-links';
 
-export const metadata: Metadata = {
-  title: 'Статус заявления',
-  robots: { index: false, follow: false },
-};
+const SHARE_ROBOTS: Metadata['robots'] = { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } };
+
+/**
+ * Tab title and the preview card a messenger builds when the link is pasted
+ * (Telegram, WhatsApp): number, status and service — never the object name,
+ * the client's name or anything behind a PIN. The token never leaves in a
+ * Referer header (no-referrer).
+ */
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const base: Metadata = {
+    robots: SHARE_ROBOTS,
+    referrer: 'no-referrer',
+    openGraph: { type: 'website', siteName: 'my.gov tracker', locale: 'ru_RU' },
+  };
+  const card = (title: string, description: string): Metadata => ({
+    ...base,
+    title: { absolute: title },
+    description,
+    openGraph: { ...base.openGraph, title, description },
+    twitter: { card: 'summary', title, description },
+  });
+
+  const link = await findShareLink(token);
+  if (!link || !isShareLinkActive(link)) return card('Ссылка недоступна', 'Срок действия ссылки истёк или она отозвана.');
+  if (link.has_pin) return card('Статус заявления · my.gov.uz', 'Ссылка защищена PIN-кодом — его сообщил отправитель.');
+
+  if (link.client_id) {
+    const view = await buildClientShareView(link);
+    const active = view?.applications.filter(a => !a.completed).length ?? 0;
+    const total = view?.applications.length ?? 0;
+    return card('Ваши заявления · my.gov.uz', `В работе: ${active} из ${total}. Статусы и этапы обновляются автоматически.`);
+  }
+  const view = await buildShareView(link);
+  if (!view) return card('Ссылка недоступна', 'Попросите отправителя прислать новую ссылку.');
+  return card(
+    `Заявление № ${view.application_number} — ${view.status}`,
+    [view.service_name, view.organization, 'Статус обновляется автоматически.'].filter(Boolean).join(' · '),
+  );
+}
 
 function Shell({ children, refresh = true }: { children: React.ReactNode; refresh?: boolean }) {
   return (

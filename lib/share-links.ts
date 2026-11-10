@@ -124,8 +124,17 @@ export async function findShareLink(token: string, rootPath?: string): Promise<S
   return row ? toLink(row) : null;
 }
 
+/**
+ * Messengers fetch a link the moment it's pasted into a chat to build the
+ * preview card (TelegramBot, WhatsApp, VK…). That is not the client opening it.
+ */
+export function isLinkPreviewBot(ua: string): boolean {
+  return /TelegramBot|WhatsApp|facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|vkShare|SkypeUriPreview|LinkedInBot|bot|crawler|spider|preview/i.test(ua);
+}
+
 /** «Android», «iPhone», «Windows»… — enough to tell the client's phone from a forwarded copy. */
 export function deviceFromUserAgent(ua: string): string {
+  if (isLinkPreviewBot(ua)) return 'предпросмотр';
   const parts: string[] = [];
   if (/iPhone/i.test(ua)) parts.push('iPhone');
   else if (/iPad/i.test(ua)) parts.push('iPad');
@@ -134,15 +143,16 @@ export function deviceFromUserAgent(ua: string): string {
   else if (/Mac OS X|Macintosh/i.test(ua)) parts.push('Mac');
   else if (/Linux/i.test(ua)) parts.push('Linux');
   if (/Telegram/i.test(ua)) parts.push('Telegram');
-  else if (/bot|crawler|spider|preview/i.test(ua)) parts.push('предпросмотр');
   return parts.join(' · ') || 'неизвестно';
 }
 
 /**
  * Counts an opening of an active link and logs it (last 300 per link are kept).
  * The same device within 15 minutes is one view — the page refreshes itself every 5.
+ * Messenger preview bots are not views.
  */
 export async function recordShareView(token: string, userAgent: string, rootPath?: string, now = new Date()): Promise<void> {
+  if (isLinkPreviewBot(userAgent)) return;
   const db = await openDb(rootPath);
   const at = now.toISOString();
   const device = deviceFromUserAgent(userAgent);
