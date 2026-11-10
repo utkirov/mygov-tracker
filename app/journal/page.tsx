@@ -15,11 +15,15 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: 'unchanged', label: 'Без изменений' },
 ];
 
+const when = (iso: string) => new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const duration = (m: number) => (m < 60 ? `${m} мин` : m < 1440 ? `${Math.floor(m / 60)} ч ${m % 60} мин` : `${Math.floor(m / 1440)} дн ${Math.floor((m % 1440) / 60)} ч`);
+
 /** «Открыть журнал проверок» from the notifications panel: every recent check, not only changes. */
 export default function JournalPage() {
   const [entries, setEntries] = useState<CheckLogEntry[] | null>(null);
   const [apps, setApps] = useState<Map<string, Application>>(new Map());
   const [filter, setFilter] = useState<Filter>('all');
+  const [downtimes, setDowntimes] = useState<Array<{ from: string; to: string; minutes: number }>>([]);
 
   const load = useCallback(async () => {
     const [log, active, archived] = await Promise.all([
@@ -29,7 +33,9 @@ export default function JournalPage() {
     ]);
     const map = new Map<string, Application>();
     for (const a of [...(Array.isArray(active) ? active : []), ...(Array.isArray(archived) ? archived : [])]) map.set(a.id, a);
+    const down = await fetch('/api/downtime', { cache: 'no-store' }).then(r => r.json()).catch(() => null) as { downtimes?: Array<{ from: string; to: string; minutes: number }> } | null;
     startTransition(() => {
+      setDowntimes(down?.downtimes ?? []);
       setEntries(Array.isArray(log) ? log : []);
       setApps(map);
     });
@@ -58,6 +64,24 @@ export default function JournalPage() {
             </button>
           ))}
         </div>
+
+        {downtimes.length > 0 && (
+          <details className="mt-4 rounded-[14px] border px-4 py-3" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+            <summary className="cursor-pointer text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
+              Простои сервера · {downtimes.length}
+              <span className="ml-2 font-normal" style={{ color: 'var(--text-muted)' }}>последний {when(downtimes[0].from)} — {duration(downtimes[0].minutes)}</span>
+            </summary>
+            <p className="mt-2 text-[12px]" style={{ color: 'var(--text-muted)' }}>Компьютер с трекером был выключен или спал: проверки не шли, ссылки клиентов не открывались.</p>
+            <ul className="mt-2 space-y-1 text-[12px]">
+              {downtimes.slice(0, 20).map(d => (
+                <li key={d.from} className="flex justify-between gap-3">
+                  <span style={{ color: 'var(--text-soft)' }}>{when(d.from)} — {when(d.to)}</span>
+                  <span className="font-mono" style={{ color: d.minutes >= 120 ? 'var(--danger)' : 'var(--text-muted)' }}>{duration(d.minutes)}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
 
         <div className="mt-4 overflow-hidden rounded-[14px] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
           {entries === null ? (

@@ -14,6 +14,7 @@ export interface Application {
   id: string;
   application_number: string;
   object_name: string;
+  project_id?: string | null;
   service_name: string;
   organization: string;
   status: string;
@@ -50,6 +51,14 @@ export interface ShareLinkInfo {
 }
 export type ShareTarget = { app: string } | { client: string };
 const shareBase = (t: ShareTarget) => ('app' in t ? `/api/applications/${enc(t.app)}/share-links` : `/api/clients/${enc(t.client)}/share-links`);
+
+/** Server /api/attention — what to open today. */
+export interface AttentionItem { applicationId: string; application_number: string; title: string; elapsedDays: number; overdueDays: number | null; stage: string }
+export interface Attention {
+  slow: AttentionItem[];
+  stale: AttentionItem[];
+  awaiting: Array<{ applicationId: string; application_number: string; title: string; attempts: number; daysSinceRejection: number | null }>;
+}
 
 /** Server lib/analytics.ts — terms, stage waits, commissions, forecasts. */
 export interface DurationStats { n: number; median: number; p80: number; min: number; max: number }
@@ -275,6 +284,7 @@ export const api = {
   projects: () => request<Project[]>('/api/projects'),
   backupStatus: () => cachedRequest<BackupStatus>('backup-status', '/api/backup'),
   analytics: () => cachedRequest<Analytics>('analytics', '/api/analytics'),
+  attention: () => cachedRequest<Attention>('attention', '/api/attention'),
   health: () => request<HealthInfo>('/api/health'),
   check: (id: string) => request<unknown>(`/api/applications/${enc(id)}/check?manual=true`, { method: 'POST' }),
   setArchived: (id: string, archived: boolean) => request<Application>(`/api/applications/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ archived }) }),

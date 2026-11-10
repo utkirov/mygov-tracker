@@ -20,7 +20,7 @@ const RECOGNISED: Array<keyof ParsedPdf> = [
 /** Design A4 «Новое заявление»: PDF from the phone → check the data → add and check. */
 export default function AddScreen() {
   const t = useTheme();
-  const params = useLocalSearchParams<{ file?: string }>();
+  const params = useLocalSearchParams<{ file?: string; parent?: string }>();
   const [busy, setBusy] = useState<'upload' | 'save' | null>(null);
   const [parsed, setParsed] = useState<ParsedPdf | null>(null);
   const [filename, setFilename] = useState('');
@@ -37,9 +37,19 @@ export default function AddScreen() {
   useEffect(() => {
     void api.projects().then(setProjects).catch(() => setProjects([]));
     void Promise.all([api.applications(false), api.applications(true)])
-      .then(([active, archived]) => setCandidates([...active.data, ...archived.data]))
+      .then(([active, archived]) => {
+        const all = [...active.data, ...archived.data];
+        setCandidates(all);
+        // «Подать повторно»: continue the parent's chain with its object and project.
+        const parent = params.parent ? all.find(a => a.id === params.parent) : undefined;
+        if (parent) {
+          setParentId(parent.id);
+          setProjectId(parent.project_id ?? null);
+          setObjectName(prev => prev || parent.object_name || '');
+        }
+      })
       .catch(() => setCandidates([]));
-  }, []);
+  }, [params.parent]);
 
   const upload = useCallback(async (file: { uri: string; name: string }) => {
     setBusy('upload');

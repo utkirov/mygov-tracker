@@ -423,6 +423,9 @@ export default function ApplicationScreen() {
         <View style={styles.tags}>{app.last_change_fields.map(f => <Tag key={f}>{CHANGE_FIELD_LABELS[f] ?? f}</Tag>)}</View>
       )}
 
+      {/отклон|отказ|rad etil/i.test(app.status) && (
+        <Button title="Подать повторно" onPress={() => router.push({ pathname: '/add', params: { parent: app.id } })} disabled={!!offlineSince} />
+      )}
       <Button title={app.archived ? 'Вернуть на доску' : 'Перенести в архив'} variant="secondary"
         onPress={toggleArchive} busy={archiving} disabled={!!offlineSince} />
     </ScrollView>

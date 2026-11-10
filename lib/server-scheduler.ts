@@ -23,6 +23,7 @@ import { produceCheckOutputs, type CheckOutputs } from './check-outputs';
 import { describeVerdicts, refreshChecklist, rejectionSummary } from './checklist-updates';
 import { openDb } from './sqlite-db';
 import { notifyClientSubscribers } from './client-notify';
+import { downtimeMessage, startDowntimeWatch } from './downtime';
 import { sendPushToAll } from './push';
 import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, MYGOV_ORIGIN, parseMyGovDate } from './status-checker';
 import {
@@ -483,6 +484,13 @@ export function startServerScheduler(): void {
   console.log('[Scheduler] Server-side auto-check started');
   _startedAt = new Date().toISOString();
   void persistSchedulerStatus();
+  // Was the server off for a while? Say so (Telegram + push), then keep the heartbeat.
+  void startDowntimeWatch(async downtime => {
+    const text = downtimeMessage(downtime);
+    await sendPushToAll({ title: 'Сервер был недоступен', body: text, kind: 'system', urgent: true }).catch(() => 0);
+    const settings = await readSettings();
+    if (isTelegramConfigured(settings)) await sendTelegramMessage(settings, `⚠️ ${text}`);
+  });
   archiveCompletedApplications().catch(() => {});
   void runMaintenance();
   setInterval(() => void runMaintenance(), 24 * 60 * 60 * 1000);

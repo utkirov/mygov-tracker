@@ -1,6 +1,7 @@
 'use client';
 
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
+import { AttentionStrip } from '@/components/AttentionStrip';
 import Link from 'next/link';
 import { Building2 } from 'lucide-react';
 
@@ -363,6 +364,8 @@ export default function DashboardPage() {
             {completedCount} завершено за 7 дней
           </span>
         </div>
+
+        <AttentionStrip />
 
         {/* Category filter chips */}
         {presentCategories.length > 0 && (

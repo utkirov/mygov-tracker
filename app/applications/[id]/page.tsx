@@ -457,7 +457,7 @@ export default function DetailPage() {
                 className="shrink-0 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-white transition active:scale-95 hover:brightness-110"
                 style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
               >
-                Продолжить заявку
+                {/отклон|отказ|rad etil/i.test(application.status) ? 'Подать повторно' : 'Продолжить заявку'}
               </Link>
             )}
           </div>

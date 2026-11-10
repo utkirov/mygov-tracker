@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { enrichApplications } from '@/lib/application-summary';
-import { setApplicationClient } from '@/lib/clients';
+import { clientOfApplication, setApplicationClient } from '@/lib/clients';
 import {
   insertApplication,
   insertStatusHistory,
@@ -101,6 +101,11 @@ export async function POST(request: NextRequest) {
   await insertApplication(application);
   // «Новое заявление» for a client (client card) or a resubmission keeps the client.
   if (typeof body.client_id === 'string' && body.client_id) await setApplicationClient(application.id, body.client_id).catch(() => {});
+  else if (application.parent_id) {
+    // A resubmission without an explicit client inherits the parent's one.
+    const inherited = await clientOfApplication(application.parent_id).catch(() => null);
+    if (inherited) await setApplicationClient(application.id, inherited.id).catch(() => {});
+  }
   await insertStatusHistory({
     id: randomUUID(),
     application_id: application.id,
