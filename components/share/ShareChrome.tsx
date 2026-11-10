@@ -147,7 +147,7 @@ export function SummaryHero({ view, brand = false }: { view: ShareView; brand?: 
       <div className="mt-4 grid grid-cols-3 gap-2">
         {kpis.map(k => (
           <div key={k.label} className="min-w-0 rounded-[12px] p-2.5 sm:p-3" style={{ background: brand ? 'rgba(255,255,255,0.12)' : 'var(--panel)' }}>
-            <p className="truncate text-[10px] font-semibold uppercase" style={{ color: brand ? 'rgba(255,255,255,0.72)' : 'var(--text-muted)' }}>{k.label}</p>
+            <p className="truncate text-[9px] font-semibold uppercase sm:text-[10px]" style={{ color: brand ? 'rgba(255,255,255,0.72)' : 'var(--text-muted)' }}>{k.label}</p>
             <p className="mt-1 text-[24px] font-bold leading-none md:text-[28px]" style={{ color: brand ? '#fff' : 'var(--text)' }}>{k.value}</p>
             <p className="mt-1 text-[11px]" style={{ color: brand ? 'rgba(255,255,255,0.72)' : 'var(--text-muted)' }}>{k.unit}</p>
           </div>
