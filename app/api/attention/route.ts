@@ -1,6 +1,7 @@
 import { connection, NextResponse } from 'next/server';
 
 import { loadAnalytics } from '@/lib/analytics';
+import { dueReminders } from '@/lib/app-notes';
 
 /**
  * «Требует внимания» for the board and the app's home screen — the short lists
@@ -18,5 +19,6 @@ export async function GET() {
     slow: a.forecasts.filter(f => f.pace === 'slow' && !f.stale).map(item),
     stale: a.forecasts.filter(f => f.stale).map(item),
     awaiting: a.awaiting,
+    reminders: (await dueReminders()).map(r => ({ id: r.id, applicationId: r.application_id, application_number: r.application_number, title: r.title, text: r.text, remind_on: r.remind_on })),
   });
 }

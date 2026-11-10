@@ -8,6 +8,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { loadAnalytics } from './analytics';
+import { dueReminders } from './app-notes';
 import { listApplications, type LocalDbApplication } from './local-db';
 import { resolveLocalProjectRoot } from './local-paths';
 import { sendPushToAll } from './push';
@@ -92,6 +93,19 @@ async function sendDigest(rootPath?: string): Promise<void> {
   await sendPushToAll({ title, body, kind: 'digest' }, rootPath);
 }
 
+/** Reminders the owner set on notes (lib/app-notes.ts): due today or overdue and not done. */
+async function sendNoteReminders(rootPath?: string): Promise<void> {
+  for (const r of await dueReminders(undefined, rootPath)) {
+    await sendPushToAll({
+      title: `Напоминание · № ${r.application_number}`,
+      body: `${r.text} — ${r.title}`,
+      data: { applicationId: r.application_id },
+      kind: 'reminder',
+      urgent: true,
+    }, rootPath);
+  }
+}
+
 async function sendReminders(rootPath?: string): Promise<void> {
   const waiting = (await listApplications({ archived: false }, rootPath))
     .filter(a => getStatusType(a.acting_party, a.status) === 'action_required' && waitingDays(a) >= 1);
@@ -120,6 +134,7 @@ export async function runPushSchedule(now = new Date(), rootPath?: string): Prom
     state.reminderDay = today;
     await writeState(state, rootPath);
     await sendReminders(rootPath).catch(err => console.error('[PushSchedule] Reminders failed:', err));
+    await sendNoteReminders(rootPath).catch(err => console.error('[PushSchedule] Note reminders failed:', err));
   }
   return state;
 }

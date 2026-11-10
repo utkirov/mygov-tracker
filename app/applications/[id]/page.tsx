@@ -97,6 +97,15 @@ const ChecklistSection = dynamic(
 );
 
 const ShareSection = dynamic(() => import('@/components/detail/ShareSection'), { ssr: false });
+const NotesJournal = dynamic(() => import('@/components/detail/NotesJournal'), { ssr: false });
+
+type Tab = 'progress' | 'docs' | 'client' | 'notes';
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'progress', label: 'Ход' },
+  { id: 'docs', label: 'Документы' },
+  { id: 'client', label: 'Клиент и ссылки' },
+  { id: 'notes', label: 'Заметки' },
+];
 
 const EMPTY_ARTIFACTS: ApplicationArtifacts = { screenshot: null, status_pdf: null, results: [] };
 
@@ -122,6 +131,13 @@ export default function DetailPage() {
   const [application, setApplication] = useState<Application | null>(null);
   const [history, setHistory] = useState<TStatusHistory[]>([]);
   const [notes, setNotes] = useState('');
+  const [tab, setTab] = useState<Tab>('progress');
+
+  // ?tab=notes opens a tab directly (links from «Требует внимания»).
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('tab');
+    if (wanted && TABS.some(t => t.id === wanted)) startTransition(() => setTab(wanted as Tab));
+  }, []);
   const [checking, setChecking] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [togglingArchive, setTogglingArchive] = useState(false);
@@ -522,7 +538,18 @@ export default function DetailPage() {
           </div>
         )}
 
-        {/* Main content */}
+        {/* Tabs */}
+        <div className="flex gap-1 overflow-x-auto border-b scrollbar-none" style={{ borderColor: 'var(--border)' }} role="tablist">
+          {TABS.map(t => (
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
+              className="-mb-px shrink-0 border-b-2 px-3.5 py-2.5 text-[13px] font-semibold transition"
+              style={tab === t.id ? { borderColor: 'var(--accent)', color: 'var(--text)' } : { borderColor: 'transparent', color: 'var(--text-muted)' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'progress' && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
           <div className="space-y-4">
             {/* Last change */}
@@ -595,42 +622,72 @@ export default function DetailPage() {
               </section>
             ) : null}
             <ChecklistSection applicationId={id} checklist={checklist} onChange={setChecklist} />
-            <ScreenshotSection
-              applicationId={id}
-              screenshot={artifacts.screenshot}
-              checkable={checkable}
-            />
             <HistorySection timelineItems={timelineItems} />
           </div>
 
           <div className="space-y-4">
-            <ClientPicker applicationId={id} client={application.client}
-              onChange={client => setApplication(prev => (prev ? { ...prev, client } : prev))} />
-            <ShareSection applicationId={id} defaultLabel={application.client?.name ?? ''} />
-            <CardsSection applicationId={id} />
             <OperationalDataSection
               application={application}
               sync={sync}
               checkable={checkable}
             />
+            <ScreenshotSection
+              applicationId={id}
+              screenshot={artifacts.screenshot}
+              checkable={checkable}
+            />
+          </div>
+        </div>
+        )}
+
+        {tab === 'docs' && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="space-y-4">
+              <section className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
+                <div>
+                  <h2 className="text-sm font-bold text-[var(--text)]">Все документы одним архивом</h2>
+                  <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">Заявление, статус, результат и уже скачанные вложения — один ZIP.</p>
+                </div>
+                <a href={`/api/applications/${id}/bundle`} className="rounded-[8px] px-3 py-2 text-[12px] font-semibold" style={{ background: 'var(--text)', color: 'var(--surface)' }}>
+                  Скачать ZIP
+                </a>
+              </section>
+              <PdfSection
+                applicationId={id}
+                pdfFilename={application.pdf_filename}
+                pdfUploading={pdfUploading}
+                onPdfReupload={handlePdfReupload}
+                artifacts={artifacts}
+                completed={isCompletedStatus(application.status)}
+                onArtifactsChange={setArtifacts}
+              />
+            </div>
+            <AttachmentsSection applicationId={id} />
+          </div>
+        )}
+
+        {tab === 'client' && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="space-y-4">
+              <ClientPicker applicationId={id} client={application.client}
+                onChange={client => setApplication(prev => (prev ? { ...prev, client } : prev))} />
+              <CardsSection applicationId={id} />
+            </div>
+            <ShareSection applicationId={id} defaultLabel={application.client?.name ?? ''} />
+          </div>
+        )}
+
+        {tab === 'notes' && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            <NotesJournal applicationId={id} />
             <NotesSection
               notes={notes}
               savingNotes={savingNotes}
               onNotesChange={setNotes}
               onBlur={handleSaveNotes}
             />
-            <PdfSection
-              applicationId={id}
-              pdfFilename={application.pdf_filename}
-              pdfUploading={pdfUploading}
-              onPdfReupload={handlePdfReupload}
-              artifacts={artifacts}
-              completed={isCompletedStatus(application.status)}
-              onArtifactsChange={setArtifacts}
-            />
-            <AttachmentsSection applicationId={id} />
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

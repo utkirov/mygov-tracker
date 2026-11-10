@@ -5,9 +5,10 @@ import { startTransition, useEffect, useState } from 'react';
 
 interface Item { applicationId: string; application_number: string; title: string; elapsedDays: number; overdueDays: number | null; stage: string }
 interface Waiting { applicationId: string; application_number: string; title: string; attempts: number; daysSinceRejection: number | null }
-interface Attention { slow: Item[]; stale: Item[]; awaiting: Waiting[] }
+interface Reminder { id: string; applicationId: string; title: string; text: string; remind_on: string | null }
+interface Attention { slow: Item[]; stale: Item[]; awaiting: Waiting[]; reminders?: Reminder[] }
 
-type Group = 'slow' | 'awaiting' | 'stale';
+type Group = 'slow' | 'awaiting' | 'stale' | 'reminders';
 
 function days(v: number | null): string {
   if (v === null) return '—';
@@ -27,8 +28,10 @@ export function AttentionStrip() {
       .catch(() => undefined);
   }, []);
 
-  if (!data || data.slow.length + data.awaiting.length + data.stale.length === 0) return null;
+  const reminders = data?.reminders ?? [];
+  if (!data || data.slow.length + data.awaiting.length + data.stale.length + reminders.length === 0) return null;
   const groups: Array<{ id: Group; label: string; count: number; color: string }> = [
+    { id: 'reminders', label: 'Напоминания', count: reminders.length, color: 'var(--accent)' },
     { id: 'slow', label: 'Дольше обычного', count: data.slow.length, color: 'var(--warning)' },
     { id: 'awaiting', label: 'Отказ — ждёт новой подачи', count: data.awaiting.length, color: 'var(--danger)' },
     { id: 'stale', label: 'Зависли', count: data.stale.length, color: 'var(--text-muted)' },
@@ -49,7 +52,14 @@ export function AttentionStrip() {
       </div>
       {open && (
         <ul className="mt-2 grid gap-x-6 gap-y-1.5 rounded-[10px] p-3 sm:grid-cols-2 lg:grid-cols-3" style={{ background: 'var(--panel)' }}>
-          {open === 'awaiting'
+          {open === 'reminders'
+            ? reminders.map(r => (
+              <li key={r.id} className="min-w-0 text-[12px]">
+                <Link href={`/applications/${r.applicationId}?tab=notes`} className="block truncate font-semibold hover:underline" style={{ color: 'var(--text)' }}>{r.text}</Link>
+                <span style={{ color: 'var(--text-muted)' }}>{r.title}{r.remind_on ? ` · на ${r.remind_on.slice(8, 10)}.${r.remind_on.slice(5, 7)}` : ''}</span>
+              </li>
+            ))
+            : open === 'awaiting'
             ? data.awaiting.map(a => (
               <li key={a.applicationId} className="min-w-0 text-[12px]">
                 <Link href={`/applications/${a.applicationId}`} className="block truncate font-semibold hover:underline" style={{ color: 'var(--text)' }}>{a.title}</Link>
@@ -57,7 +67,7 @@ export function AttentionStrip() {
                 <Link href={`/add?parent_id=${a.applicationId}`} className="font-medium hover:underline" style={{ color: 'var(--accent)' }}>подать повторно</Link>
               </li>
             ))
-            : data[open].map(f => (
+            : (open === 'slow' ? data.slow : data.stale).map(f => (
               <li key={f.applicationId} className="min-w-0 text-[12px]">
                 <Link href={`/applications/${f.applicationId}`} className="block truncate font-semibold hover:underline" style={{ color: 'var(--text)' }}>{f.title}</Link>
                 <span style={{ color: 'var(--text-muted)' }}>идёт {days(f.elapsedDays)}{f.overdueDays ? ` · сверх срока ${days(f.overdueDays)}` : ''}</span>

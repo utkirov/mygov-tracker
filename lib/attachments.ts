@@ -210,3 +210,19 @@ export async function getAttachmentFile(
   return { info, data };
 }
 
+
+/** Attachments already downloaded to disk (for «download all» — nothing is fetched from the portal). */
+export async function readCachedAttachmentFiles(applicationId: string): Promise<Array<{ name: string; data: Buffer }>> {
+  const dir = dirOf(applicationId);
+  const stored = await readStored(applicationId);
+  if (!dir || !stored) return [];
+  const out: Array<{ name: string; data: Buffer }> = [];
+  for (const item of stored.items) {
+    const cached = stored.files[item.key];
+    if (!cached) continue;
+    try {
+      out.push({ name: cached.name, data: await readFile(path.join(dir, 'attachments', cached.path)) });
+    } catch { /* removed by hand */ }
+  }
+  return out;
+}

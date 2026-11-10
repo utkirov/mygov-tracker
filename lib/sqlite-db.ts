@@ -221,6 +221,16 @@ function applySchema(db: Database.Database): void {
       PRIMARY KEY (token, chat_id)
     );
 
+    CREATE TABLE IF NOT EXISTS application_notes (
+      id TEXT PRIMARY KEY,
+      application_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      remind_on TEXT,
+      done_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_application_notes_app ON application_notes(application_id);
+
     CREATE TABLE IF NOT EXISTS push_devices (
       token TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
