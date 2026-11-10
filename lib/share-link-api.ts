@@ -1,11 +1,13 @@
 /** Shared request/response helpers for the share-link API routes (application and client links). */
 import { NextRequest, NextResponse } from 'next/server';
 
-import { countSubscribers, isShareLinkActive, SHARE_DURATIONS, shareUrl, type ShareLink } from './share-links';
+import { countSubscribers, ensureSlug, isShareLinkActive, SHARE_DURATIONS, shareUrl, type ShareLink } from './share-links';
 
-export async function serializeLinks(links: ShareLink[]) {
+export async function serializeLinks(input: ShareLink[]) {
+  // Active links made before readable addresses get one now; the old address keeps working.
+  const links = await Promise.all(input.map(l => (isShareLinkActive(l) ? ensureSlug(l) : l)));
   const subs = await countSubscribers(links.map(l => l.token));
-  return links.map(l => ({ ...l, url: shareUrl(l.token), active: isShareLinkActive(l), subscribers: subs.get(l.token) ?? 0 }));
+  return links.map(l => ({ ...l, url: shareUrl(l), active: isShareLinkActive(l), subscribers: subs.get(l.token) ?? 0 }));
 }
 
 /** Validates the «create link» body; returns options or an error response. */

@@ -49,6 +49,15 @@ function applyMigrations(db: Database.Database): void {
   const shareCols = (db.prepare("PRAGMA table_info(share_links)").all() as { name: string }[]).map(c => c.name);
   if (shareCols.length > 0 && !shareCols.includes('client_id')) db.exec("ALTER TABLE share_links ADD COLUMN client_id TEXT");
   if (shareCols.length > 0 && !shareCols.includes('pin_hash')) db.exec("ALTER TABLE share_links ADD COLUMN pin_hash TEXT");
+  // Readable address /s/<slug> next to /s/<token> (lib/slug.ts); old links get one lazily.
+  if (shareCols.length > 0 && !shareCols.includes('slug')) db.exec("ALTER TABLE share_links ADD COLUMN slug TEXT");
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_share_links_slug ON share_links(slug) WHERE slug IS NOT NULL');
+  // Per-view analytics: app the link was opened in, Cloudflare location, a salted
+  // visitor hash for «unique visitors» (no IP stored).
+  const viewCols = (db.prepare("PRAGMA table_info(share_link_views)").all() as { name: string }[]).map(c => c.name);
+  for (const col of ['app', 'country', 'city', 'visitor']) {
+    if (viewCols.length > 0 && !viewCols.includes(col)) db.exec(`ALTER TABLE share_link_views ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+  }
   const pushCols = (db.prepare("PRAGMA table_info(push_devices)").all() as { name: string }[]).map(c => c.name);
   if (pushCols.length > 0 && !pushCols.includes('prefs')) {
     db.exec("ALTER TABLE push_devices ADD COLUMN prefs TEXT NOT NULL DEFAULT ''");

@@ -261,7 +261,7 @@ export const api = {
   createLink: (t: ShareTarget, opts: { minutes: number | null; showDocuments: boolean; pin: string; label: string }) =>
     request<{ link: ShareLinkInfo }>(shareBase(t), { method: 'POST', body: JSON.stringify(opts) }),
   revokeLink: (token: string) => request<{ ok: boolean }>(`/api/share-links/${enc(token)}`, { method: 'DELETE' }),
-  linkViews: (token: string) => request<{ views: Array<{ viewed_at: string; device: string }> }>(`/api/share-links/${enc(token)}/views`),
+  linkViews: (token: string) => request<{ views: Array<{ viewed_at: string; device: string; app?: string; place?: string; visitor?: string }> }>(`/api/share-links/${enc(token)}/views`),
   clients: () => cachedRequest<{ clients: ClientSummary[]; suggestions: Array<{ name: string; applicationIds: string[] }> }>('clients', '/api/clients'),
   client: (id: string) => cachedRequest<{ client: ClientSummary; applications: Application[]; stats: ClientStats | null }>(`client:${id}`, `/api/clients/${enc(id)}`),
   createClient: (input: { name: string; phone?: string; applicationIds?: string[] }) =>
@@ -325,6 +325,11 @@ export async function createApplication(body: Record<string, unknown>): Promise<
 /** URL of a stored file; load it with authHeaders() (Image source headers / downloadAndOpen). */
 export function artifactUrl(id: string, file: string, version?: string): string {
   return `${API_BASE}/api/applications/${enc(id)}/artifacts/${file}${version ? `?v=${enc(version)}` : ''}`;
+}
+
+/** PNG card to send (server lib/card-images.tsx): 'access' — project, number, password; 'progress' — dates, days, stage. */
+export function cardUrl(id: string, type: 'access' | 'progress'): string {
+  return `${API_BASE}/api/applications/${enc(id)}/card?type=${type}`;
 }
 
 export function attachmentUrl(id: string, key: string): string {

@@ -11,6 +11,7 @@ import {
   applicationPdfUrl,
   artifactUrl,
   attachmentUrl,
+  cardUrl,
   authHeaders,
   downloadAndOpen,
   UnauthorizedError,
@@ -84,6 +85,18 @@ export default function ApplicationScreen() {
   useEffect(() => {
     api.attachments(id).then(r => setAttachments(r.data.attachments)).catch(() => setAttachments([]));
   }, [id]);
+
+  /** Picture card → Android share sheet (Telegram, WhatsApp…). */
+  function chooseCard() {
+    if (!app) return;
+    const send = (type: 'access' | 'progress', name: string) =>
+      void open(`card:${type}`, cardUrl(id, type), `${name} ${app.application_number}.png`, 'image/png');
+    Alert.alert('Какую карточку отправить?', undefined, [
+      { text: 'Доступ: проект, номер, пароль', onPress: () => send('access', 'Доступ') },
+      { text: 'Ход заявления: даты, дни, этап', onPress: () => send('progress', 'Ход заявления') },
+      { text: 'Отмена', style: 'cancel' },
+    ]);
+  }
 
   async function openAttachment(a: Attachment) {
     setBusyFile(`att:${a.key}`);
@@ -263,6 +276,8 @@ export default function ApplicationScreen() {
 
       <Button title="Поделиться с клиентом" variant="secondary" disabled={!!offlineSince}
         onPress={() => router.push({ pathname: '/share', params: { app: id, title: app?.object_name || app?.service_name || app?.application_number || '' } })} />
+      <Button title="Отправить карточку" variant="secondary" disabled={!!offlineSince} busy={busyFile?.startsWith('card:')}
+        onPress={chooseCard} />
 
       <Card style={{ gap: 10 }}>
         <View style={styles.sectionHead}>

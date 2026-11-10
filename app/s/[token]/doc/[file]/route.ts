@@ -10,11 +10,11 @@ export const runtime = 'nodejs';
  * only result PDFs, only applications the link covers (?app=<id> for client links).
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ token: string; file: string }> }) {
-  const { token, file } = await params;
-  const link = await findShareLink(token);
+  const { token: address, file } = await params;
+  const link = await findShareLink(address);
   const notFound = NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (!link || !isShareLinkActive(link) || !link.show_documents || !/^result-\d{1,2}\.pdf$/.test(file) || !isValidArtifactFileName(file)) return notFound;
-  if (!(await isUnlocked(token, request.cookies.get(unlockCookieName(token))?.value))) return notFound;
+  if (!(await isUnlocked(link.token, request.cookies.get(unlockCookieName(link.token))?.value))) return notFound;
   const allowed = await linkApplicationIds(link);
   const applicationId = link.application_id || request.nextUrl.searchParams.get('app') || '';
   if (!allowed.includes(applicationId)) return notFound;

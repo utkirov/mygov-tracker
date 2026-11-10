@@ -20,7 +20,10 @@ import {
   listAllShareLinks,
   listShareLinks,
   listShareViews,
+  placeName,
   recordShareView,
+  shareStats,
+  shareUrl,
   revokeShareLink,
   subscribeChat,
   subscribePayload,
@@ -67,23 +70,40 @@ describe('client share links', () => {
     await expect(createShareLink('app-1', { minutes: 60, pin: '12' }, root)).rejects.toThrow();
   });
 
-  it('logs views once per device per 15 minutes; revoking stops the link', async () => {
+  it('logs views once per visitor per 15 minutes with app and place; revoking stops the link', async () => {
     const link = await createShareLink('app-1', { minutes: 60, label: 'Заказчик' }, root);
     const ua = 'Mozilla/5.0 (Linux; Android 15) Telegram-Android/11';
-    await recordShareView(link.token, ua, root, new Date('2026-10-20T10:00:00Z'));
-    await recordShareView(link.token, ua, root, new Date('2026-10-20T10:05:00Z'));
-    await recordShareView(link.token, 'Mozilla/5.0 (Windows NT 10.0)', root, new Date('2026-10-20T10:06:00Z'));
+    await recordShareView(link.token, { userAgent: ua, ip: '10.0.0.5' }, root, new Date('2026-10-20T10:00:00Z'));
+    await recordShareView(link.token, { userAgent: ua, ip: '10.0.0.5' }, root, new Date('2026-10-20T10:05:00Z'));
+    await recordShareView(link.token, { userAgent: 'Mozilla/5.0 (Windows NT 10.0) Chrome/130.0', ip: '10.0.0.6', country: 'uz', city: 'Tashkent' }, root, new Date('2026-10-20T10:06:00Z'));
     // Pasting the link into a chat: the messenger's preview bot fetches it — not a view.
-    await recordShareView(link.token, 'TelegramBot (like TwitterBot)', root, new Date('2026-10-20T10:07:00Z'));
-    await recordShareView(link.token, 'WhatsApp/2.24', root, new Date('2026-10-20T10:07:00Z'));
+    await recordShareView(link.token, { userAgent: 'TelegramBot (like TwitterBot)' }, root, new Date('2026-10-20T10:07:00Z'));
+    await recordShareView(link.token, { userAgent: 'WhatsApp/2.24' }, root, new Date('2026-10-20T10:07:00Z'));
     expect((await findShareLink(link.token, root))!.views).toBe(2);
-    expect((await listShareViews(link.token, 10, root)).map(v => v.device)).toEqual(['Windows', 'Android · Telegram']);
+    const views = await listShareViews(link.token, 10, root);
+    expect(views.map(v => [v.device, v.app, placeName(v)])).toEqual([
+      ['Windows', 'Chrome', 'Tashkent, Узбекистан'],
+      ['Android · Telegram', 'Telegram', 'не определено'],
+    ]);
+    expect(views.every(v => !JSON.stringify(v).includes('10.0.0'))).toBe(true);
+    const stats = await shareStats(link.token, root, new Date('2026-10-20T12:00:00Z'));
+    expect(stats).toMatchObject({ views: 2, visitors: 2, first_at: '2026-10-20T10:00:00.000Z' });
+    expect(stats.days.at(-1)).toEqual({ day: '2026-10-20', count: 2 });
     expect(await revokeShareLink(link.token, root)).toBe(true);
     expect(isShareLinkActive((await findShareLink(link.token, root))!)).toBe(false);
     expect((await listShareLinks('app-1', root)).map(l => l.label)).toEqual(['Заказчик']);
     expect(await findShareLink('not-a-token', root)).toBeNull();
     expect(deviceFromUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)')).toBe('iPhone');
     expect(deviceFromUserAgent('TelegramBot (like TwitterBot)')).toBe('предпросмотр');
+  });
+
+  it('gives links a readable address that opens the same link', async () => {
+    const link = await createShareLink('app-1', { minutes: 60 }, root);
+    expect(link.slug).toMatch(/^360416823-zhiloy-dom-[a-z0-9]{8}$/);
+    expect(shareUrl(link)).toMatch(/\/s\/360416823-zhiloy-dom-[a-z0-9]{8}$/);
+    expect((await findShareLink(link.slug!, root))?.token).toBe(link.token);
+    expect((await findShareLink(link.token, root))?.slug).toBe(link.slug);
+    expect(await findShareLink('360416823-zhiloy-dom-aaaaaaaa', root)).toBeNull();
   });
 
   it('lists every link and extends or revives one, but never a revoked one', async () => {

@@ -284,6 +284,30 @@ PDF, заметки, цепочка); добавление по PDF (drag-drop);
   отказа — в push о завершении. Показ: сайт (ChecklistSection, полоска на доске), приложение
   (ChecklistCard, полоска в списке), карточка в боте. Попутно исправлено: при ручной проверке
   push не отправлялись (ранний return в `checkOne`).
+- ЧПУ, аналитика ссылок, картинки (2026-11-10):
+  - Адрес ссылки `/s/<slug>`: `lib/slug.ts` — транслит «<номер> <объект>» или имени клиента +
+    8 случайных символов `[a-z0-9]` (секретность держится на них). Колонка `share_links.slug`
+    (уникальный индекс); старым активным ссылкам выдаётся при первом `serializeLinks`
+    (`ensureSlug`), `/s/<token>` продолжает работать. `findShareLink` ищет по токену или slug;
+    PIN-форма, документы и cookie разблокировки — по токену, cookie теперь с `path: '/s'`.
+    proxy пропускает `/s/<[A-Za-z0-9_-]{8,96}>` (+ `/opengraph-image…`).
+  - Просмотры: `share_link_views` + `app` (Telegram/Chrome/Safari…), `country`, `city`
+    (Cloudflare `cf-ipcountry`/`cf-ipcity`, только для туннельных запросов), `visitor` —
+    HMAC(SESSION_SECRET, ip|ua) 12 символов, IP не хранится. Повтор одного посетителя за 15 мин
+    не считается. Свои открытия не считаются: вход в трекер (cookie `mg_session`) или `?own=1`
+    (кнопки «Открыть» в трекере). `GET /api/share-links/<token>/views` → `{views: [... place,
+    visitor: «Посетитель N»], stats}`; `shareStats`: открытия, уникальные, первый/последний,
+    14 дней, где / чем / устройство. UI — компонент `Views` (ShareSection, `/links`), в
+    приложении — строка «время · посетитель · устройство · приложение · место».
+    **Город приходит только если в Cloudflare включено Rules → Transform Rules → Managed
+    Transforms → «Add visitor location headers»** (сейчас приходит лишь страна).
+  - Картинки (`lib/card-images.tsx`, next/og + Inter из `assets/fonts`, OFL): превью ссылки
+    `app/s/[token]/opengraph-image.tsx` (номер, статус, услуга, этап; PIN — общий текст),
+    `metadataBase` = PUBLIC_BASE_URL (иначе og:image уходил на localhost:3000);
+    карточки `GET /api/applications/<id>/card?type=access|progress[&download=1]` —
+    «Доступ» (проект или объект, номер, пароль) и «Ход заявления» (подано, изменено, дней в
+    работе, этап X из Y). Сайт — `CardsSection` в карточке заявления, приложение — «Отправить
+    карточку» → выбор → share sheet (OTA 4f434728).
 - Страница «Ссылки» `/links` (2026-11-10): все ссылки заявлений и клиентов в одном списке
   (`GET /api/share-links` — с целью: номер/объект или имя клиента), фильтры Активные /
   Истекают за сутки / Не открывали / Истекшие / Отозванные / Все, поиск, журнал просмотров

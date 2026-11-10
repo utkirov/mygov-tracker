@@ -31,7 +31,7 @@ export default function ShareScreen() {
   const [docs, setDocs] = useState(true);
   const [busy, setBusy] = useState(false);
   const [links, setLinks] = useState<ShareLinkInfo[]>([]);
-  const [views, setViews] = useState<Record<string, Array<{ viewed_at: string; device: string }>>>({});
+  const [views, setViews] = useState<Record<string, Array<{ viewed_at: string; device: string; app?: string; place?: string; visitor?: string }>>>({});
 
   const key = target ? JSON.stringify(target) : '';
   const load = useCallback(async () => {
@@ -109,7 +109,7 @@ export default function ShareScreen() {
             <Pressable onPress={() => revoke(l)}><Text style={[styles.small, { color: t.danger }]}>Отозвать</Text></Pressable>
           </View>
           {views[l.token]?.map((v, i) => (
-            <Text key={i} style={[styles.tiny, { color: t.textSoft }]}>{formatDate(v.viewed_at)} · {v.device}</Text>
+            <Text key={i} style={[styles.tiny, { color: t.textSoft }]}>{[formatDate(v.viewed_at), v.visitor, v.device, v.app && !v.device.includes(v.app) ? v.app : '', v.place].filter(Boolean).join(' · ')}</Text>
           ))}
           {views[l.token]?.length === 0 && <Text style={[styles.tiny, { color: t.textMuted }]}>Ещё не открывали</Text>}
         </Card>

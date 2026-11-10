@@ -83,7 +83,7 @@ export async function notifyClientSubscribers(app: LocalDbApplication, checklist
   const client = await clientOfApplication(app.id);
   const subs = await subscribersFor(app.id, client?.id ?? null);
   for (const s of subs) {
-    await sendTo(botToken, s.chat_id, buildClientMessage(app, checklist, change, shareUrl(s.link.token)))
+    await sendTo(botToken, s.chat_id, buildClientMessage(app, checklist, change, shareUrl(s.link)))
       .catch(err => console.error('[ClientNotify] error:', err));
   }
   return subs.length;

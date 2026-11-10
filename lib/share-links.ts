@@ -16,6 +16,7 @@ import type { Checklist } from './checklist';
 import { clientApplications, getClient } from './clients';
 import { getApplicationById, getStatusHistory, type LocalDbApplication } from './local-db';
 import { openDb } from './sqlite-db';
+import { makeShareSlug, SLUG_RE } from './slug';
 import { getMyGovStatus, getStatusType, isCompletedStatus } from '@/types';
 
 export interface ShareLink {
@@ -31,6 +32,8 @@ export interface ShareLink {
   views: number;
   last_viewed_at: string | null;
   has_pin: boolean;
+  /** Readable address part (/s/<slug>); null for links made before slugs — filled lazily. */
+  slug: string | null;
 }
 
 interface Row extends Omit<ShareLink, 'show_documents' | 'has_pin'> { show_documents: number; pin_hash: string | null }
@@ -52,6 +55,7 @@ const toLink = (r: Row): ShareLink => ({
   views: r.views,
   last_viewed_at: r.last_viewed_at,
   has_pin: !!r.pin_hash,
+  slug: r.slug ?? null,
 });
 
 export function isShareLinkActive(link: ShareLink, now = new Date()): boolean {
@@ -70,6 +74,7 @@ async function insertLink(target: { applicationId: string } | { clientId: string
   const pin = (opts.pin ?? '').trim();
   if (pin && !PIN_RE.test(pin)) throw new Error('PIN — от 4 до 8 цифр');
   const db = await openDb(rootPath);
+  const slug = await uniqueSlug(db, await slugParts(target, rootPath));
   const row: Row = {
     token: randomBytes(18).toString('base64url'),
     application_id: 'applicationId' in target ? target.applicationId : '',
@@ -82,10 +87,34 @@ async function insertLink(target: { applicationId: string } | { clientId: string
     views: 0,
     last_viewed_at: null,
     pin_hash: pin ? hashPin(pin) : null,
+    slug,
   };
-  db.prepare(`INSERT INTO share_links (token, application_id, client_id, label, show_documents, created_at, expires_at, pin_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(row.token, row.application_id, row.client_id, row.label, row.show_documents, row.created_at, row.expires_at, row.pin_hash);
+  db.prepare(`INSERT INTO share_links (token, application_id, client_id, label, show_documents, created_at, expires_at, pin_hash, slug) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(row.token, row.application_id, row.client_id, row.label, row.show_documents, row.created_at, row.expires_at, row.pin_hash, row.slug);
   return toLink(row);
+}
+
+/** Readable words for the address: «<number> <object>» or the client's name. */
+async function slugParts(target: { applicationId: string } | { clientId: string }, rootPath?: string): Promise<string[]> {
+  if ('clientId' in target) return [(await getClient(target.clientId, rootPath).catch(() => null))?.name ?? ''];
+  const app = await getApplicationById(target.applicationId, rootPath).catch(() => null);
+  return app ? [app.application_number, app.object_name || app.service_name] : [];
+}
+
+async function uniqueSlug(db: Awaited<ReturnType<typeof openDb>>, parts: string[]): Promise<string> {
+  for (;;) {
+    const slug = makeShareSlug(parts);
+    if (!db.prepare('SELECT 1 FROM share_links WHERE slug = ?').get(slug)) return slug;
+  }
+}
+
+/** Gives a pre-slug link its readable address (once; the old /s/<token> keeps working). */
+export async function ensureSlug(link: ShareLink, rootPath?: string): Promise<ShareLink> {
+  if (link.slug) return link;
+  const db = await openDb(rootPath);
+  const slug = await uniqueSlug(db, await slugParts(link.client_id ? { clientId: link.client_id } : { applicationId: link.application_id }, rootPath));
+  db.prepare('UPDATE share_links SET slug = ? WHERE token = ? AND slug IS NULL').run(slug, link.token);
+  return { ...link, slug };
 }
 
 export function createShareLink(applicationId: string, opts: CreateOptions, rootPath?: string, now = new Date()): Promise<ShareLink> {
@@ -131,13 +160,14 @@ export async function revokeShareLink(token: string, rootPath?: string): Promise
   return db.prepare('UPDATE share_links SET revoked_at = ? WHERE token = ? AND revoked_at IS NULL').run(new Date().toISOString(), token).changes > 0;
 }
 
-async function findRow(token: string, rootPath?: string): Promise<Row | null> {
-  if (!TOKEN_RE.test(token)) return null;
+/** By token or by readable address — /s/<token> and /s/<slug> open the same link. */
+async function findRow(address: string, rootPath?: string): Promise<Row | null> {
+  if (!TOKEN_RE.test(address) && !SLUG_RE.test(address)) return null;
   const db = await openDb(rootPath);
-  return (db.prepare('SELECT * FROM share_links WHERE token = ?').get(token) as Row | undefined) ?? null;
+  return (db.prepare('SELECT * FROM share_links WHERE token = ? OR slug = ?').get(address, address) as Row | undefined) ?? null;
 }
 
-/** The link if it exists (active or not). */
+/** The link if it exists (active or not); accepts the token or the slug. */
 export async function findShareLink(token: string, rootPath?: string): Promise<ShareLink | null> {
   const row = await findRow(token, rootPath);
   return row ? toLink(row) : null;
@@ -165,30 +195,110 @@ export function deviceFromUserAgent(ua: string): string {
   return parts.join(' · ') || 'неизвестно';
 }
 
+/** Where the page was opened: a messenger's built-in browser or a regular one. */
+export function appFromUserAgent(ua: string): string {
+  if (/Telegram/i.test(ua)) return 'Telegram';
+  if (/Instagram/i.test(ua)) return 'Instagram';
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) return 'Facebook';
+  if (/WhatsApp/i.test(ua)) return 'WhatsApp';
+  if (/YaBrowser|YaSearchBrowser/i.test(ua)) return 'Яндекс Браузер';
+  if (/SamsungBrowser/i.test(ua)) return 'Samsung Internet';
+  if (/OPR\/|Opera/i.test(ua)) return 'Opera';
+  if (/Edg\//i.test(ua)) return 'Edge';
+  if (/Firefox|FxiOS/i.test(ua)) return 'Firefox';
+  if (/CriOS|Chrome\//i.test(ua)) return 'Chrome';
+  if (/Safari/i.test(ua)) return 'Safari';
+  return 'браузер';
+}
+
+export interface ShareVisit {
+  userAgent: string;
+  /** Visitor address — only hashed (with SESSION_SECRET) to count unique visitors, never stored. */
+  ip?: string;
+  /** From Cloudflare (cf-ipcountry / cf-ipcity) for tunnel requests. */
+  country?: string;
+  city?: string;
+}
+
+export interface ShareViewRow { viewed_at: string; device: string; app: string; country: string; city: string; visitor: string }
+
+function visitorHash(visit: ShareVisit): string {
+  return createHmac('sha256', process.env.SESSION_SECRET || 'share-visitors')
+    .update(`${visit.ip ?? ''}|${visit.userAgent}`).digest('base64url').slice(0, 12);
+}
+
 /**
  * Counts an opening of an active link and logs it (last 300 per link are kept).
- * The same device within 15 minutes is one view — the page refreshes itself every 5.
+ * The same visitor within 15 minutes is one view — the page refreshes itself every 5.
  * Messenger preview bots are not views.
  */
-export async function recordShareView(token: string, userAgent: string, rootPath?: string, now = new Date()): Promise<void> {
-  if (isLinkPreviewBot(userAgent)) return;
+export async function recordShareView(token: string, visit: ShareVisit, rootPath?: string, now = new Date()): Promise<void> {
+  if (isLinkPreviewBot(visit.userAgent)) return;
   const db = await openDb(rootPath);
   const at = now.toISOString();
-  const device = deviceFromUserAgent(userAgent);
-  const recent = db.prepare('SELECT 1 FROM share_link_views WHERE token = ? AND device = ? AND viewed_at > ? LIMIT 1')
-    .get(token, device, new Date(now.getTime() - 15 * 60_000).toISOString());
+  const device = deviceFromUserAgent(visit.userAgent);
+  const visitor = visitorHash(visit);
+  const recent = db.prepare('SELECT 1 FROM share_link_views WHERE token = ? AND visitor = ? AND viewed_at > ? LIMIT 1')
+    .get(token, visitor, new Date(now.getTime() - 15 * 60_000).toISOString());
   if (recent) return;
+  const country = (visit.country ?? '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+  const city = (visit.city ?? '').slice(0, 80);
   db.transaction(() => {
     db.prepare('UPDATE share_links SET views = views + 1, last_viewed_at = ? WHERE token = ?').run(at, token);
-    db.prepare('INSERT INTO share_link_views (token, viewed_at, device) VALUES (?, ?, ?)').run(token, at, device);
+    db.prepare('INSERT INTO share_link_views (token, viewed_at, device, app, country, city, visitor) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(token, at, device, appFromUserAgent(visit.userAgent), country, city, visitor);
     db.prepare(`DELETE FROM share_link_views WHERE token = ? AND viewed_at < (
       SELECT viewed_at FROM share_link_views WHERE token = ? ORDER BY viewed_at DESC LIMIT 1 OFFSET 299)`).run(token, token);
   })();
 }
 
-export async function listShareViews(token: string, limit = 30, rootPath?: string): Promise<Array<{ viewed_at: string; device: string }>> {
+export async function listShareViews(token: string, limit = 30, rootPath?: string): Promise<ShareViewRow[]> {
   const db = await openDb(rootPath);
-  return db.prepare('SELECT viewed_at, device FROM share_link_views WHERE token = ? ORDER BY viewed_at DESC LIMIT ?').all(token, limit) as Array<{ viewed_at: string; device: string }>;
+  return db.prepare('SELECT viewed_at, device, app, country, city, visitor FROM share_link_views WHERE token = ? ORDER BY viewed_at DESC LIMIT ?')
+    .all(token, limit) as ShareViewRow[];
+}
+
+export interface ShareStats {
+  views: number;
+  visitors: number;
+  first_at: string | null;
+  last_at: string | null;
+  devices: Array<{ name: string; count: number }>;
+  apps: Array<{ name: string; count: number }>;
+  places: Array<{ name: string; count: number }>;
+  /** Views per day for the last 14 days, oldest first. */
+  days: Array<{ day: string; count: number }>;
+}
+
+const top = (values: string[]) => [...values.reduce((m, v) => m.set(v, (m.get(v) ?? 0) + 1), new Map<string, number>())]
+  .map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+
+/** One link's analytics from its view log (last 300 openings). */
+export async function shareStats(token: string, rootPath?: string, now = new Date()): Promise<ShareStats> {
+  const rows = await listShareViews(token, 300, rootPath);
+  const days: ShareStats['days'] = [];
+  for (let i = 13; i >= 0; i--) {
+    const day = new Date(now.getTime() - i * 86_400_000).toISOString().slice(0, 10);
+    days.push({ day, count: rows.filter(r => r.viewed_at.startsWith(day)).length });
+  }
+  return {
+    views: rows.length,
+    visitors: new Set(rows.map(r => r.visitor || r.device)).size,
+    first_at: rows.at(-1)?.viewed_at ?? null,
+    last_at: rows[0]?.viewed_at ?? null,
+    devices: top(rows.map(r => r.device.split(' · ')[0] || 'неизвестно')),
+    apps: top(rows.map(r => r.app || 'не записано')),
+    places: top(rows.map(r => placeName(r))),
+    days,
+  };
+}
+
+const COUNTRY: Record<string, string> = { UZ: 'Узбекистан', RU: 'Россия', KZ: 'Казахстан', TR: 'Турция', US: 'США', DE: 'Германия', KG: 'Кыргызстан', TJ: 'Таджикистан', AE: 'ОАЭ' };
+
+/** «Ташкент, Узбекистан» / «Узбекистан» / «не определено» (views before location was recorded, or from the office network). */
+export function placeName(r: Pick<ShareViewRow, 'country' | 'city'>): string {
+  const country = r.country ? (COUNTRY[r.country] ?? r.country) : '';
+  return [r.city, country].filter(Boolean).join(', ') || 'не определено';
 }
 
 // ── PIN ────────────────────────────────────────────────────────────────────
@@ -369,7 +479,7 @@ export async function linkApplicationIds(link: ShareLink, rootPath?: string): Pr
 }
 
 /** Public address (Cloudflare Tunnel) — links are for clients outside the office network. */
-export function shareUrl(token: string): string {
+export function shareUrl(link: Pick<ShareLink, 'token' | 'slug'>): string {
   const base = (process.env.PUBLIC_BASE_URL?.trim() || 'https://tracker.turonproject.uz').replace(/\/+$/, '');
-  return `${base}/s/${token}`;
+  return `${base}/s/${link.slug ?? link.token}`;
 }

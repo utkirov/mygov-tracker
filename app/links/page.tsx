@@ -173,13 +173,14 @@ export default function LinksPage() {
                   <Link href={href} className="mt-0.5 block truncate text-[14px] font-semibold text-[var(--text)] hover:underline">
                     {l.target.title}
                   </Link>
+                  <p className="mt-0.5 truncate font-mono text-[11px] text-[var(--text-muted)]">{l.url.replace(/^https?:\/\//, '')}</p>
                   <p className="mt-1 text-[12px] text-[var(--text-muted)]">
                     <span style={{ color: s === 'revoked' ? 'var(--danger)' : expiresSoon(l) ? 'var(--warning)' : undefined }}>
                       {s === 'revoked' ? `отозвана ${when(l.revoked_at)}` : left(l.expires_at)}
                     </span>
                     {' · '}
                     <button type="button" onClick={() => setOpenViews(openViews === l.token ? null : l.token)} className="underline decoration-dotted">
-                      {l.views ? `просмотров: ${l.views}` : 'не открывали'}
+                      {l.views ? `просмотров: ${l.views} · аналитика` : 'не открывали'}
                     </button>
                     {l.last_viewed_at ? ` · последний ${when(l.last_viewed_at)}` : ''}
                     {l.subscribers ? ` · в Telegram: ${l.subscribers}` : ''}
@@ -192,7 +193,7 @@ export default function LinksPage() {
                   {s === 'active' && (
                     <>
                       <button type="button" onClick={() => void copy(l.url)} style={{ color: 'var(--accent)' }}>Копировать</button>
-                      <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Открыть</a>
+                      <a href={`${l.url}?own=1`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Открыть</a>
                     </>
                   )}
                   {s !== 'revoked' && (

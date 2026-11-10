@@ -15,6 +15,8 @@ const jetbrains = JetBrains_Mono({ subsets: ['latin', 'cyrillic'], variable: '--
 // tracker») but stay out of search engines (also robots.ts). Icons come from
 // app/icon.svg, app/apple-icon.tsx and app/favicon.ico; the PWA name from manifest.ts.
 export const metadata: Metadata = {
+  // Absolute URLs in previews (og:image of share links) point at the public domain.
+  metadataBase: new URL(process.env.PUBLIC_BASE_URL?.trim() || 'https://tracker.turonproject.uz'),
   title: { template: '%s · my.gov tracker', default: 'my.gov tracker' },
   description: 'Отслеживание заявлений my.gov.uz: статусы, согласования, документы и уведомления.',
   applicationName: 'my.gov tracker',

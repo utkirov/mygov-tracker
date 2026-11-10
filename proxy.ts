@@ -58,13 +58,14 @@ export function proxy(request: NextRequest) {
       return NextResponse.json({ error: 'Cross-site request blocked' }, { status: 403 });
     }
     if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
-    // Client share links: the page and its result documents check the token
-    // themselves (lib/share-links.ts). Only GET — nothing there changes data.
-    if (/^\/s\/[A-Za-z0-9_-]{20,64}(\/doc\/result-\d{1,2}\.pdf)?$/.test(pathname) && request.method === 'GET') {
+    // Client share links (/s/<token> or the readable /s/<slug>): the page, its
+    // preview image and result documents check the link themselves
+    // (lib/share-links.ts). Only GET — nothing there changes data.
+    if (/^\/s\/[A-Za-z0-9_-]{8,96}(\/doc\/result-\d{1,2}\.pdf|\/opengraph-image[\w-]*)?$/.test(pathname) && request.method === 'GET') {
       return NextResponse.next();
     }
     // The PIN form of a protected link (checked and rate-limited there).
-    if (/^\/s\/[A-Za-z0-9_-]{20,64}\/unlock$/.test(pathname) && request.method === 'POST') {
+    if (/^\/s\/[A-Za-z0-9_-]{8,96}\/unlock$/.test(pathname) && request.method === 'POST') {
       return NextResponse.next();
     }
 

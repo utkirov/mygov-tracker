@@ -33,20 +33,72 @@ export function when(value: string | null): string {
   return new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+interface ViewRow { viewed_at: string; device: string; app: string; place: string; visitor: string }
+interface Stats {
+  views: number; visitors: number; first_at: string | null; last_at: string | null;
+  devices: Array<{ name: string; count: number }>; apps: Array<{ name: string; count: number }>;
+  places: Array<{ name: string; count: number }>; days: Array<{ day: string; count: number }>;
+}
+
+function Breakdown({ title, items }: { title: string; items: Array<{ name: string; count: number }> }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{title}</p>
+      <ul className="space-y-0.5">
+        {items.slice(0, 5).map(i => (
+          <li key={i.name} className="flex justify-between gap-2 text-[11px] text-[var(--text-soft)]">
+            <span className="truncate">{i.name}</span><span className="font-mono text-[var(--text-muted)]">{i.count}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Link analytics: totals, 14-day bars, where/what it was opened in, and the log «who · when · where». */
 export function Views({ token }: { token: string }) {
-  const [views, setViews] = useState<Array<{ viewed_at: string; device: string }> | null>(null);
+  const [data, setData] = useState<{ views: ViewRow[]; stats: Stats | null } | null>(null);
   useEffect(() => {
     fetch(`/api/share-links/${token}/views`, { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : { views: [] }))
-      .then((d: { views: Array<{ viewed_at: string; device: string }> }) => startTransition(() => setViews(d.views)))
-      .catch(() => startTransition(() => setViews([])));
+      .then(r => (r.ok ? r.json() : { views: [], stats: null }))
+      .then((d: { views: ViewRow[]; stats: Stats | null }) => startTransition(() => setData(d)))
+      .catch(() => startTransition(() => setData({ views: [], stats: null })));
   }, [token]);
-  if (!views) return <p className="mt-2 text-[11px] text-[var(--text-muted)]">Загрузка…</p>;
-  if (views.length === 0) return <p className="mt-2 text-[11px] text-[var(--text-muted)]">Ещё не открывали</p>;
+  if (!data) return <p className="mt-2 text-[11px] text-[var(--text-muted)]">Загрузка…</p>;
+  const { views, stats } = data;
+  if (views.length === 0 || !stats) return <p className="mt-2 text-[11px] text-[var(--text-muted)]">Ещё не открывали</p>;
+  const peak = Math.max(1, ...stats.days.map(d => d.count));
   return (
-    <ul className="mt-2 max-h-40 space-y-0.5 overflow-y-auto text-[11px] text-[var(--text-soft)]">
-      {views.map((v, i) => <li key={i} className="flex justify-between gap-3"><span>{v.device}</span><span className="font-mono text-[var(--text-muted)]">{when(v.viewed_at)}</span></li>)}
-    </ul>
+    <div className="mt-3 space-y-3 rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
+      <p className="text-[12px] text-[var(--text-soft)]">
+        <b className="text-[var(--text)]">{stats.views}</b> открытий · <b className="text-[var(--text)]">{stats.visitors}</b> {stats.visitors === 1 ? 'посетитель' : 'посетителей'}
+        {' · '}первый раз {when(stats.first_at)} · последний {when(stats.last_at)}
+      </p>
+      <div>
+        <div className="flex h-10 items-end gap-[3px]" aria-label="Открытия за 14 дней">
+          {stats.days.map(d => (
+            <span key={d.day} title={`${d.day.slice(8, 10)}.${d.day.slice(5, 7)}: ${d.count}`} className="flex-1 rounded-[2px]"
+              style={{ height: `${Math.max(d.count ? 12 : 4, (d.count / peak) * 100)}%`, background: d.count ? 'var(--accent)' : 'var(--border)' }} />
+          ))}
+        </div>
+        <p className="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]"><span>14 дней назад</span><span>сегодня</span></p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Breakdown title="Где" items={stats.places} />
+        <Breakdown title="Чем открывали" items={stats.apps} />
+        <Breakdown title="Устройство" items={stats.devices} />
+      </div>
+      <ul className="max-h-56 space-y-1 overflow-y-auto border-t pt-2 text-[11px] text-[var(--text-soft)]" style={{ borderColor: 'var(--border)' }}>
+        {views.map((v, i) => (
+          <li key={i} className="grid grid-cols-[auto_1fr_auto] gap-x-3">
+            <span className="font-medium text-[var(--text)]">{v.visitor}</span>
+            <span className="truncate">{[v.device, v.app && !v.device.includes(v.app) ? v.app : '', v.place].filter(Boolean).join(' · ')}</span>
+            <span className="font-mono text-[var(--text-muted)]">{when(v.viewed_at)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -153,7 +205,7 @@ export default function ShareSection({ applicationId, clientId, defaultLabel = '
                 <p className="truncate text-[12px] font-semibold text-[var(--text)]">{l.label || 'Ссылка'}{l.has_pin ? ' · с PIN' : ''}</p>
                 <div className="flex shrink-0 gap-3 text-[11px] font-medium">
                   <button type="button" onClick={() => void copy(l.url)} style={{ color: 'var(--accent)' }}>Копировать</button>
-                  <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Открыть</a>
+                  <a href={`${l.url}?own=1`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Открыть</a>
                   <button type="button" onClick={() => void revoke(l.token)} style={{ color: 'var(--danger)' }}>Отозвать</button>
                 </div>
               </div>

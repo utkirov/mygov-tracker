@@ -68,6 +68,7 @@ const PdfSection = dynamic(
 );
 
 const AttachmentsSection = dynamic(() => import('@/components/detail/AttachmentsSection'), { ssr: false });
+const CardsSection = dynamic(() => import('@/components/detail/CardsSection'), { ssr: false });
 
 const ScreenshotSection = dynamic(
   () => import('@/components/detail/ScreenshotSection'),
@@ -606,6 +607,7 @@ export default function DetailPage() {
             <ClientPicker applicationId={id} client={application.client}
               onChange={client => setApplication(prev => (prev ? { ...prev, client } : prev))} />
             <ShareSection applicationId={id} defaultLabel={application.client?.name ?? ''} />
+            <CardsSection applicationId={id} />
             <OperationalDataSection
               application={application}
               sync={sync}

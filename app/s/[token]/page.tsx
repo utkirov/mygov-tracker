@@ -5,6 +5,7 @@ import { connection } from 'next/server';
 import { StageStepper } from '@/components/StageStepper';
 import { Card, fmt, ShareApplicationDetails, statusDot } from '@/components/share/ShareApplication';
 import { telegramSubscribeUrl } from '@/lib/client-notify';
+import { SESSION_COOKIE, verifySession } from '@/lib/session-token';
 import {
   buildClientShareView,
   buildShareView,
@@ -35,7 +36,8 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
     title: { absolute: title },
     description,
     openGraph: { ...base.openGraph, title, description },
-    twitter: { card: 'summary', title, description },
+    // The picture itself comes from ./opengraph-image.tsx.
+    twitter: { card: 'summary_large_image', title, description },
   });
 
   const link = await findShareLink(token);
@@ -54,6 +56,16 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
     `Заявление № ${view.application_number} — ${view.status}`,
     [view.service_name, view.organization, 'Статус обновляется автоматически.'].filter(Boolean).join(' · '),
   );
+}
+
+/** Cloudflare sends non-ASCII city names percent-encoded or as raw UTF-8 bytes. */
+function decodeHeader(value: string | null): string {
+  if (!value) return '';
+  try {
+    return /%[0-9A-F]{2}/i.test(value) ? decodeURIComponent(value) : Buffer.from(value, 'latin1').toString('utf8');
+  } catch {
+    return value;
+  }
 }
 
 function Shell({ children, refresh = true }: { children: React.ReactNode; refresh?: boolean }) {
@@ -93,15 +105,18 @@ function SubscribeButton({ href }: { href: string | null }) {
  * one application, or every application of a client. No login; works until the
  * link expires or is revoked; a PIN link asks for the PIN first (./unlock).
  */
-export default async function SharePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ pin?: string }> }) {
+export default async function SharePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ pin?: string; own?: string }> }) {
   await connection();
-  const { token } = await params;
-  const { pin: pinState } = await searchParams;
-  const link = await findShareLink(token);
+  const { token: address } = await params;
+  const { pin: pinState, own: ownParam } = await searchParams;
+  // /s/<slug> and /s/<token> are the same link; PIN form, documents and the
+  // unlock cookie always go by the token.
+  const link = await findShareLink(address);
   if (!link) return <Message title="Ссылка не найдена" text="Попросите отправителя прислать новую ссылку." />;
   if (!isShareLinkActive(link)) {
     return <Message title={link.revoked_at ? 'Ссылка отозвана' : 'Срок действия ссылки истёк'} text="Попросите отправителя прислать новую ссылку." />;
   }
+  const { token } = link;
 
   if (!(await isUnlocked(token, (await cookies()).get(unlockCookieName(token))?.value))) {
     return (
@@ -121,7 +136,21 @@ export default async function SharePage({ params, searchParams }: { params: Prom
     );
   }
 
-  await recordShareView(token, (await headers()).get('user-agent') ?? '');
+  // Location comes from Cloudflare and is only trusted for tunnel requests
+  // (server.mjs sets x-app-via-tunnel only for cloudflared on loopback).
+  // The owner's own openings don't count: signed in to the tracker, or «Открыть»
+  // from the tracker (?own=1 — at worst someone hides their own view with it).
+  const h = await headers();
+  const viaTunnel = h.get('x-app-via-tunnel') === '1';
+  const owner = ownParam === '1' || !!verifySession((await cookies()).get(SESSION_COOKIE)?.value, process.env.SESSION_SECRET);
+  if (!owner) {
+    await recordShareView(token, {
+      userAgent: h.get('user-agent') ?? '',
+      ip: h.get('x-app-client-ip') ?? '',
+      country: viaTunnel ? h.get('cf-ipcountry') ?? '' : '',
+      city: viaTunnel ? decodeHeader(h.get('cf-ipcity')) : '',
+    });
+  }
   const subscribeHref = await telegramSubscribeUrl(token).catch(() => null);
   const footer = (
     <p className="text-center text-[11px]" style={{ color: 'var(--text-muted)' }}>
