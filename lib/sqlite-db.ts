@@ -45,10 +45,6 @@ function applyMigrations(db: Database.Database): void {
   if (!settingsCols.includes('telegram_commands_chat_id')) {
     db.exec("ALTER TABLE settings ADD COLUMN telegram_commands_chat_id TEXT NOT NULL DEFAULT ''");
   }
-  // Look of the public share page (lib/share-design.ts).
-  if (!settingsCols.includes('share_design')) {
-    db.exec("ALTER TABLE settings ADD COLUMN share_design TEXT NOT NULL DEFAULT 'timeline-auto'");
-  }
   // Share links: client-wide links (application_id = '') and an optional PIN.
   const shareCols = (db.prepare("PRAGMA table_info(share_links)").all() as { name: string }[]).map(c => c.name);
   if (shareCols.length > 0 && !shareCols.includes('client_id')) db.exec("ALTER TABLE share_links ADD COLUMN client_id TEXT");

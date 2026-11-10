@@ -1,14 +1,14 @@
 /**
  * TURON PROJECT frame of the public share page: the contact bar on top, the
- * summary card (looks C / D / F), the timeline card (look E), the call /
- * Telegram card and the owner's look switcher. Server components — no client JS.
+ * timeline card and the call / Telegram card. Server components; the only
+ * client piece is the light / dark icon (ThemeToggle).
  */
 import { BRAND } from '@/lib/brand';
 import { daysInWork, daysWord } from '@/lib/card-images';
-import { isDarkLook, SHARE_DESIGNS, type ShareDesign } from '@/lib/share-design';
 import type { ShareView } from '@/lib/share-links';
 
 import { fmt, statusDot } from './ShareApplication';
+import { ThemeToggle } from './ThemeToggle';
 
 function Mark({ size = 34 }: { size?: number }) {
   return (
@@ -19,22 +19,25 @@ function Mark({ size = 34 }: { size?: number }) {
   );
 }
 
-/** Company name and contacts — always on top of the page. */
-export function ContactBar({ design }: { design: ShareDesign }) {
-  const dark = isDarkLook(design);
+/** Company name, contacts and the light / dark icon — always on top of the page. */
+export function ContactBar() {
   const c = BRAND.colors;
   const link = 'inline-flex items-center gap-1.5 whitespace-nowrap hover:underline';
   return (
-    <div className="relative overflow-hidden" style={{ background: dark ? c.ink2 : c.ink, color: c.cream, borderBottom: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'transparent'}` }}>
-      {dark && <div className="share-hero-glow pointer-events-none absolute inset-0" />}
+    <div className="share-bar relative overflow-hidden" style={{ background: c.ink, color: c.cream }}>
+      {/* Violet glow — shown by CSS in the dark theme only. */}
+      <div className="share-hero-glow pointer-events-none absolute inset-0" />
       <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <a href={BRAND.site} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5">
-          <Mark />
-          <span className="leading-[1.15]">
-            <span className="block text-[14px] font-bold tracking-[0.06em]">{BRAND.short}</span>
-            <span className="block text-[11px]" style={{ color: c.muted }}>{BRAND.product}</span>
-          </span>
-        </a>
+        <div className="flex items-center justify-between gap-3">
+          <a href={BRAND.site} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5">
+            <Mark />
+            <span className="leading-[1.15]">
+              <span className="block text-[14px] font-bold tracking-[0.06em]">{BRAND.short}</span>
+              <span className="block text-[11px]" style={{ color: c.muted }}>{BRAND.product}</span>
+            </span>
+          </a>
+          <span className="sm:hidden"><ThemeToggle /></span>
+        </div>
         <div className="flex flex-col gap-1 text-[12px] sm:items-end">
           <div className="flex flex-wrap gap-x-4 gap-y-1 font-semibold">
             <a href={BRAND.phoneHref} className={link}><span style={{ color: c.violetLight }}>☎</span>{BRAND.phone}</a>
@@ -46,6 +49,7 @@ export function ContactBar({ design }: { design: ShareDesign }) {
             <span>{BRAND.hours}</span>
           </div>
         </div>
+        <span className="hidden sm:block"><ThemeToggle /></span>
       </div>
     </div>
   );
@@ -70,7 +74,7 @@ export function ContactCard() {
   );
 }
 
-// ── what the summary shows ──
+// ── what the card shows ──
 
 interface Facts {
   days: number | null;
@@ -105,85 +109,17 @@ function facts(view: ShareView): Facts {
   };
 }
 
-function StatusPill({ view, onBrand }: { view: ShareView; onBrand?: boolean }) {
+function StatusPill({ view }: { view: ShareView }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-semibold"
-      style={onBrand ? { background: 'rgba(255,255,255,0.16)', color: '#fff' } : { background: 'var(--panel)', color: 'var(--text)' }}>
-      <span className="h-2.5 w-2.5 rounded-full" style={{ background: onBrand ? '#fff' : statusDot(view) }} />
+      style={{ background: 'var(--panel)', color: 'var(--text)' }}>
+      <span className="h-2.5 w-2.5 rounded-full" style={{ background: statusDot(view) }} />
       {view.status}
     </span>
   );
 }
 
-/** One segment per stage: done, now (pulsing), ahead. */
-function StageBar({ f }: { f: Facts }) {
-  if (f.steps.length === 0) return null;
-  return (
-    <div className="flex gap-1" aria-label={`Этап ${f.stageNo} из ${f.steps.length}`}>
-      {f.steps.map((s, i) => (
-        <span key={i} title={s.title} className={`h-2 flex-1 rounded-full ${s.state === 'current' ? 'animate-pulse' : ''}`}
-          style={{ background: s.state === 'done' ? (f.rejected && i === f.steps.length - 1 ? 'var(--danger)' : BRAND.colors.violet) : s.state === 'current' ? BRAND.colors.violetLight : 'var(--panel)' }} />
-      ))}
-    </div>
-  );
-}
-
-/** Looks C / D / F: everything a client asks first, in one card. F has the violet Turon header. */
-export function SummaryHero({ view, brand = false }: { view: ShareView; brand?: boolean }) {
-  const f = facts(view);
-  const kpis = [
-    { label: f.finished ? 'Шло' : 'В работе', value: f.days === null ? '—' : String(f.days), unit: f.days === null ? '' : daysWord(f.days) },
-    { label: 'Этап', value: f.steps.length ? String(f.stageNo) : '—', unit: f.steps.length ? `из ${f.steps.length}` : '' },
-    f.approvals
-      ? { label: 'Согласования', value: `${f.approvals.ok}/${f.approvals.total}`, unit: f.approvals.bad ? `отказ: ${f.approvals.bad}` : f.approvals.ok === f.approvals.total ? 'все получены' : 'получено' }
-      : { label: 'Изменено', value: fmt(view.last_changed_date).slice(0, 5), unit: fmt(view.last_changed_date).slice(6, 10) },
-  ];
-  const head = (
-    <>
-      <p className="text-[12px] font-medium" style={{ color: brand ? 'rgba(255,255,255,0.72)' : 'var(--text-muted)' }}>Заявление № {view.application_number}</p>
-      <h2 className="mt-1 text-[20px] font-bold leading-[1.25] md:text-[24px]" style={{ color: brand ? '#fff' : 'var(--text)' }}>{view.title}</h2>
-      {view.organization && <p className="mt-0.5 text-[12px]" style={{ color: brand ? 'rgba(255,255,255,0.72)' : 'var(--text-muted)' }}>{view.organization}</p>}
-      <div className="mt-3"><StatusPill view={view} onBrand={brand} /></div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {kpis.map(k => (
-          <div key={k.label} className="min-w-0 rounded-[12px] p-2.5 sm:p-3" style={{ background: brand ? 'rgba(255,255,255,0.12)' : 'var(--panel)' }}>
-            <p className="truncate text-[9px] font-semibold uppercase sm:text-[10px]" style={{ color: brand ? 'rgba(255,255,255,0.72)' : 'var(--text-muted)' }}>{k.label}</p>
-            <p className="mt-1 text-[24px] font-bold leading-none md:text-[28px]" style={{ color: brand ? '#fff' : 'var(--text)' }}>{k.value}</p>
-            <p className="mt-1 text-[11px]" style={{ color: brand ? 'rgba(255,255,255,0.72)' : 'var(--text-muted)' }}>{k.unit}</p>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-  return (
-    <section className="overflow-hidden rounded-[18px] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-      {brand ? (
-        <div className="p-4 md:p-6" style={{ background: `linear-gradient(135deg, ${BRAND.colors.violet} 0%, ${BRAND.colors.violetDeep} 100%)` }}>{head}</div>
-      ) : (
-        <div className="px-4 pt-4 md:px-6 md:pt-6">{head}</div>
-      )}
-      <div className="space-y-3 p-4 md:px-6 md:pb-6">
-        <StageBar f={f} />
-        <div className="space-y-1.5 text-[13px]">
-          <p style={{ color: 'var(--text-soft)' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Сейчас: </span><b style={{ color: f.rejected ? 'var(--danger)' : 'var(--text)' }}>{f.current || '—'}</b>
-          </p>
-          {f.lastEvent && (
-            <p style={{ color: 'var(--text-soft)' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Последнее событие: </span>{f.lastEvent.text}
-              <span className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}> · {fmt(f.lastEvent.at)}</span>
-            </p>
-          )}
-          {view.documents.length > 0 && (
-            <p className="font-semibold" style={{ color: 'var(--success)' }}>Документы результата готовы: {view.documents.length} — в «Подробнее»</p>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/** Look E: status on top, every stage below as a vertical timeline. */
+/** Status on top, every stage below as a vertical timeline. */
 export function TimelineCard({ view }: { view: ShareView }) {
   const f = facts(view);
   const outcome = view.checklist?.outcome;
@@ -234,23 +170,5 @@ export function TimelineCard({ view }: { view: ShareView }) {
         </ol>
       )}
     </section>
-  );
-}
-
-/** Owner-only: preview the other looks of this very page (adds ?design=…&own=1). */
-export function DesignSwitcher({ current, path }: { current: ShareDesign; path: string }) {
-  return (
-    <div className="fixed inset-x-0 bottom-3 z-50 flex justify-center px-3">
-      <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full border p-1 text-[12px] shadow-lg" style={{ background: '#0C0C0E', borderColor: 'rgba(255,255,255,0.12)', color: '#F3F1EC' }}>
-        <span className="px-2" style={{ color: '#8E8B94' }}>Вид:</span>
-        {SHARE_DESIGNS.map(d => (
-          <a key={d.id} href={`${path}?design=${d.id}&own=1`} title={`${d.label} — ${d.hint}`}
-            className="whitespace-nowrap rounded-full px-2.5 py-1.5 font-semibold"
-            style={d.id === current ? { background: BRAND.colors.violet, color: '#fff' } : undefined}>
-            {d.letter}{d.id === current ? ` · ${d.label}` : ''}
-          </a>
-        ))}
-      </div>
-    </div>
   );
 }

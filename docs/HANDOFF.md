@@ -419,3 +419,11 @@ PDF, заметки, цепочка); добавление по PDF (drag-drop);
   - Хронология (2026-11-10, выбор пользователя): по умолчанию `timeline-auto` (H) — светлая
     или тёмная по теме телефона клиента (`@media (prefers-color-scheme: dark)` в
     `.share-timeline-auto`); отдельно E «светлая» (`timeline`) и G «тёмная» (`timeline-dark`).
+  - Итог (2026-11-10, решение пользователя): у страницы `/s/<…>` остался ОДИН вид — «Хронология»
+    (`TimelineCard`); виды A–D, F, выбор вида, `?design=`, `lib/share-design.ts`,
+    `/api/share-design`, `ShareDesignPicker` удалены (колонка `settings.share_design` в БД
+    осталась, не используется). Светлая/тёмная тема: иконка солнце/луна в шапке
+    (`components/share/ThemeToggle.tsx`) → cookie `share_theme` (path `/s`, год), сервер ставит
+    класс `share-theme-light|dark|auto` на `#share-root` (`lib/share-theme.ts`); без выбора —
+    по теме устройства. Пользователю дан разбор страницы «Аналитика» с вариантами улучшений —
+    ждёт его выбора (ничего не реализовано).

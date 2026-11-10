@@ -3,7 +3,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
-import { ShareDesignPicker } from '@/components/detail/ShareDesignPicker';
 import { DURATIONS, Views, when } from '@/components/detail/ShareSection';
 import { showToast } from '@/lib/toast';
 
@@ -137,8 +136,6 @@ export default function LinksPage() {
           {links === null ? 'Загрузка…' : `Активных: ${counts.active} · просмотров всего: ${counts.views} · подписаны в Telegram: ${counts.subscribers}`}
         </p>
       </header>
-
-      <ShareDesignPicker previewUrl={(links ?? []).find(l => l.active && l.target.kind === 'application')?.url ?? (links ?? []).find(l => l.active)?.url ?? null} />
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {chips.map(c => (

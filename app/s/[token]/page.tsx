@@ -2,13 +2,12 @@ import type { Metadata } from 'next';
 import { cookies, headers } from 'next/headers';
 import { connection } from 'next/server';
 
-import { StageStepper } from '@/components/StageStepper';
 import { Card, fmt, ShareApplicationDetails, statusDot } from '@/components/share/ShareApplication';
-import { ContactBar, ContactCard, DesignSwitcher, SummaryHero, TimelineCard } from '@/components/share/ShareChrome';
+import { ContactBar, ContactCard, TimelineCard } from '@/components/share/ShareChrome';
 import { BRAND } from '@/lib/brand';
 import { telegramSubscribeUrl } from '@/lib/client-notify';
 import { SESSION_COOKIE, verifySession } from '@/lib/session-token';
-import { getShareDesign, isSummaryLook, isTimelineLook, parseShareDesign, type ShareDesign } from '@/lib/share-design';
+import { parseShareTheme, SHARE_THEME_COOKIE, type ShareTheme } from '@/lib/share-theme';
 import {
   buildClientShareView,
   buildShareView,
@@ -16,7 +15,6 @@ import {
   isShareLinkActive,
   isUnlocked,
   recordShareView,
-  type ShareView,
   unlockCookieName,
 } from '@/lib/share-links';
 
@@ -72,22 +70,19 @@ function decodeHeader(value: string | null): string {
   }
 }
 
-interface Look { design: ShareDesign; switcher: { path: string } | null }
-
-/** TURON PROJECT frame: contacts on top, the chosen look's colours, the owner's look switcher. */
-function Shell({ children, look, refresh = true }: { children: React.ReactNode; look: Look; refresh?: boolean }) {
+/** TURON PROJECT frame: contacts and the theme icon on top, light or dark colours. */
+function Shell({ children, look, refresh = true }: { children: React.ReactNode; look: ShareTheme; refresh?: boolean }) {
   return (
-    <div className={`share-${look.design} min-h-svh`} style={{ background: 'var(--bg)', color: 'var(--text)' }}>
+    <div id="share-root" className={`share-theme-${look} min-h-svh`} style={{ background: 'var(--bg)', color: 'var(--text)' }}>
       {/* The page refreshes itself so an open tab stays current. */}
       {refresh && <meta httpEquiv="refresh" content="300" />}
-      <ContactBar design={look.design} />
-      <div className={`mx-auto w-full max-w-3xl px-4 py-6 md:py-10${look.switcher ? ' pb-20' : ''}`}>{children}</div>
-      {look.switcher && <DesignSwitcher current={look.design} path={look.switcher.path} />}
+      <ContactBar />
+      <div className="mx-auto w-full max-w-3xl px-4 py-6 md:py-10">{children}</div>
     </div>
   );
 }
 
-function Message({ title, text, look }: { title: string; text: string; look: Look }) {
+function Message({ title, text, look }: { title: string; text: string; look: ShareTheme }) {
   return (
     <Shell refresh={false} look={look}>
       <Card>
@@ -126,18 +121,16 @@ function SubscribeButton({ href }: { href: string | null }) {
  * one application, or every application of a client. No login; works until the
  * link expires or is revoked; a PIN link asks for the PIN first (./unlock).
  */
-export default async function SharePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ pin?: string; own?: string; design?: string }> }) {
+export default async function SharePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ pin?: string; own?: string }> }) {
   await connection();
   const { token: address } = await params;
-  const { pin: pinState, own: ownParam, design: designParam } = await searchParams;
+  const { pin: pinState, own: ownParam } = await searchParams;
   const jar = await cookies();
   // The owner's own openings don't count: signed in to the tracker, or «Открыть»
   // from the tracker (?own=1 — at worst someone hides their own view with it).
   const owner = ownParam === '1' || !!verifySession(jar.get(SESSION_COOKIE)?.value, process.env.SESSION_SECRET);
-  const look: Look = {
-    design: parseShareDesign(designParam) ?? await getShareDesign(),
-    switcher: owner ? { path: `/s/${address}` } : null,
-  };
+  // Light / dark: the visitor's choice (the icon in the top bar), else their device theme.
+  const look = parseShareTheme(jar.get(SHARE_THEME_COOKIE)?.value);
   // /s/<slug> and /s/<token> are the same link; PIN form, documents and the
   // unlock cookie always go by the token.
   const link = await findShareLink(address);
@@ -187,11 +180,6 @@ export default async function SharePage({ params, searchParams }: { params: Prom
       </p>
     </>
   );
-  // Card looks (summary / timeline): the card first, the full blocks folded under «Подробнее».
-  const cardLook = isSummaryLook(look.design) || isTimelineLook(look.design);
-  const hero = (app: ShareView) => (isTimelineLook(look.design)
-    ? <TimelineCard view={app} />
-    : <SummaryHero view={app} brand={look.design === 'brand'} />);
 
   if (link.client_id) {
     const view = await buildClientShareView(link);
@@ -199,7 +187,6 @@ export default async function SharePage({ params, searchParams }: { params: Prom
     const active = view.applications.filter(a => !a.completed);
     const done = view.applications.filter(a => a.completed);
     const docHref = (appId: string) => (file: string) => `/s/${token}/doc/${file}?app=${encodeURIComponent(appId)}`;
-    if (cardLook) {
       return (
         <Shell look={look}>
           <div className="space-y-4">
@@ -215,7 +202,7 @@ export default async function SharePage({ params, searchParams }: { params: Prom
             {view.applications.length === 0 && <Card><p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>Заявлений пока нет.</p></Card>}
             {active.map(app => (
               <div key={app.id} className="space-y-2">
-                {hero(app)}
+                <TimelineCard view={app} />
                 <More text="Подробнее: согласования, документы, история">
                   <ShareApplicationDetails view={app} docHref={docHref(app.id)} />
                 </More>
@@ -233,7 +220,7 @@ export default async function SharePage({ params, searchParams }: { params: Prom
                   <span className="text-[12px] font-semibold" style={{ color: 'var(--accent)' }}>Открыть</span>
                 </summary>
                 <div className="space-y-3 border-t p-3 md:p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
-                  {hero(app)}
+                  <TimelineCard view={app} />
                   <ShareApplicationDetails view={app} docHref={docHref(app.id)} />
                 </div>
               </details>
@@ -242,56 +229,14 @@ export default async function SharePage({ params, searchParams }: { params: Prom
           </div>
         </Shell>
       );
-    }
-    return (
-      <Shell look={look}>
-        <div className="space-y-4">
-          <header>
-            <p className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>my.gov.uz · заявления клиента</p>
-            <h1 className="mt-1 text-[22px] font-bold leading-[1.25]" style={{ color: 'var(--text)' }}>{view.client_name}</h1>
-            <p className="mt-1 text-[13px]" style={{ color: 'var(--text-soft)' }}>
-              В работе: {active.length} · завершено: {done.length}
-            </p>
-            <div className="mt-3"><SubscribeButton href={subscribeHref} /></div>
-          </header>
-
-          {view.applications.length === 0 && <Card><p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>Заявлений пока нет.</p></Card>}
-
-          {[...active, ...done].map(app => (
-            <details key={app.id} open={!app.completed && active.length <= 3}
-              className="rounded-[14px] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-              <summary className="cursor-pointer list-none p-4 md:p-5">
-                <div className="flex items-start gap-2.5">
-                  <span className="mt-[7px] h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: statusDot(app) }} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-semibold" style={{ color: 'var(--text)' }}>{app.title}</p>
-                    <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                      № {app.application_number} · {app.status}{app.current_action ? ` · ${app.current_action}` : ''}
-                    </p>
-                    {!app.completed && app.checklist && app.checklist.progress.length > 0 && (
-                      <div className="mt-3"><StageStepper checklist={app.checklist} /></div>
-                    )}
-                  </div>
-                </div>
-              </summary>
-              <div className="border-t p-3 md:p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
-                <ShareApplicationDetails view={app} docHref={docHref(app.id)} />
-              </div>
-            </details>
-          ))}
-          {footer}
-        </div>
-      </Shell>
-    );
   }
 
   const view = await buildShareView(link);
   if (!view) return <Message look={look} title="Ссылка не найдена" text="Попросите отправителя прислать новую ссылку." />;
-  if (cardLook) {
     return (
       <Shell look={look}>
         <div className="space-y-4">
-          {hero(view)}
+          <TimelineCard view={view} />
           <div><SubscribeButton href={subscribeHref} /></div>
           <More text="Подробнее: согласования, документы, история">
             <ShareApplicationDetails view={view} docHref={file => `/s/${token}/doc/${file}`} />
@@ -300,20 +245,4 @@ export default async function SharePage({ params, searchParams }: { params: Prom
         </div>
       </Shell>
     );
-  }
-  return (
-    <Shell look={look}>
-      <div className="space-y-4">
-        <header>
-          <p className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>my.gov.uz · заявление № {view.application_number}</p>
-          <h1 className="mt-1 text-[22px] font-bold leading-[1.25]" style={{ color: 'var(--text)' }}>{view.title}</h1>
-          {view.title !== view.service_name && <p className="mt-1 text-[13px]" style={{ color: 'var(--text-soft)' }}>{view.service_name}</p>}
-          {view.organization && <p className="mt-0.5 text-[13px]" style={{ color: 'var(--text-muted)' }}>{view.organization}</p>}
-          <div className="mt-3"><SubscribeButton href={subscribeHref} /></div>
-        </header>
-        <ShareApplicationDetails view={view} docHref={file => `/s/${token}/doc/${file}`} />
-        {footer}
-      </div>
-    </Shell>
-  );
 }

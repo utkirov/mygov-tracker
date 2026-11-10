@@ -363,11 +363,13 @@ html, body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   CLIENT SHARE PAGE — TURON PROJECT looks (lib/share-design.ts).
-   Scoped tokens: the page keeps its look whatever theme the visitor's browser has.
+   CLIENT SHARE PAGE /s/<…> — TURON PROJECT colours, light and dark.
+   The class on #share-root comes from the visitor's choice (lib/share-theme.ts,
+   the sun / moon icon); «auto» follows the device theme. Scoped tokens, so the
+   tracker's own theme never leaks in.
    ══════════════════════════════════════════════════════════════════════════ */
 
-.share-light, .share-summary, .share-timeline, .share-timeline-auto, .share-brand {
+.share-theme-light, .share-theme-auto {
   --bg: #F3F1EC; --surface: #FFFFFF; --panel: #ECE9E2;
   --border: rgba(12, 12, 14, 0.08); --border-strong: rgba(12, 12, 14, 0.16);
   --text: #0C0C0E; --text-soft: #4A4852; --text-muted: #8E8B94;
@@ -376,7 +378,7 @@ html, body {
   color-scheme: light;
 }
 
-.share-dark, .share-summary-dark, .share-timeline-dark {
+.share-theme-dark {
   --bg: #0C0C0E; --surface: #151518; --panel: #1F1E24;
   --border: rgba(255, 255, 255, 0.10); --border-strong: rgba(255, 255, 255, 0.18);
   --text: #F3F1EC; --text-soft: #B4B1BA; --text-muted: #8E8B94;
@@ -385,9 +387,13 @@ html, body {
   color-scheme: dark;
 }
 
-/* «Хронология · авто»: dark when the visitor's phone is in dark mode. */
+.share-hero-glow, .share-icon-sun { display: none; }
+.share-theme-dark .share-hero-glow { display: block; background: radial-gradient(120% 140% at 0% 0%, rgba(124, 77, 255, 0.35) 0%, rgba(43, 20, 102, 0.25) 40%, transparent 75%); }
+.share-theme-dark .share-icon-sun { display: block; }
+.share-theme-dark .share-icon-moon { display: none; }
+
 @media (prefers-color-scheme: dark) {
-  .share-timeline-auto {
+  .share-theme-auto {
     --bg: #0C0C0E; --surface: #151518; --panel: #1F1E24;
     --border: rgba(255, 255, 255, 0.10); --border-strong: rgba(255, 255, 255, 0.18);
     --text: #F3F1EC; --text-soft: #B4B1BA; --text-muted: #8E8B94;
@@ -395,11 +401,7 @@ html, body {
     --success: #4ADE80; --warning: #FACC15; --danger: #F87171;
     color-scheme: dark;
   }
-  .share-timeline-auto .share-hero-glow {
-    background: radial-gradient(120% 140% at 0% 0%, rgba(124, 77, 255, 0.35) 0%, rgba(43, 20, 102, 0.25) 40%, transparent 75%);
-  }
-}
-
-.share-dark .share-hero-glow, .share-summary-dark .share-hero-glow, .share-timeline-dark .share-hero-glow {
-  background: radial-gradient(120% 140% at 0% 0%, rgba(124, 77, 255, 0.35) 0%, rgba(43, 20, 102, 0.25) 40%, transparent 75%);
+  .share-theme-auto .share-hero-glow { display: block; background: radial-gradient(120% 140% at 0% 0%, rgba(124, 77, 255, 0.35) 0%, rgba(43, 20, 102, 0.25) 40%, transparent 75%); }
+  .share-theme-auto .share-icon-sun { display: block; }
+  .share-theme-auto .share-icon-moon { display: none; }
 }
