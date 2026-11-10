@@ -50,16 +50,34 @@ function DurationBar({ d, max }: { d: DurationStats; max: number }) {
 const th = 'px-2 py-1.5 text-left text-[11px] font-medium';
 const td = 'px-2 py-1.5 text-[12px] align-top';
 
+const PERIODS: Array<{ months: number | null; label: string }> = [
+  { months: 3, label: '3 месяца' },
+  { months: 6, label: '6 месяцев' },
+  { months: 12, label: 'Год' },
+  { months: null, label: 'Всё время' },
+];
+
+/** The portal words a failed check as the requirement itself — say what it means. */
+const failed = (label: string) => `Не выполнено: «${label.replace(/\.$/, '')}»`;
+const stageName = (title: string) => (/^форма заявления$/i.test(title.trim()) ? 'После подачи — до первого действия' : title);
+
 export default function AnalyticsPage() {
   const [data, setData] = useState<Analytics | null>(null);
   const [error, setError] = useState('');
+  const [months, setMonths] = useState<number | null>(6);
+  const [personal, setPersonal] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch('/api/analytics', { cache: 'no-store' })
+    const q = new URLSearchParams();
+    if (months) q.set('months', String(months));
+    if (!personal) q.set('personal', '0');
+    startTransition(() => setLoading(true));
+    fetch(`/api/analytics?${q}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((a: Analytics) => startTransition(() => setData(a)))
-      .catch((e: Error) => startTransition(() => setError(e.message)));
-  }, []);
+      .then((a: Analytics) => startTransition(() => { setData(a); setLoading(false); }))
+      .catch((e: Error) => startTransition(() => { setError(e.message); setLoading(false); }));
+  }, [months, personal]);
 
   if (error) return <p className="p-6 text-[13px]" style={{ color: 'var(--danger)' }}>Не удалось загрузить аналитику: {error}</p>;
   if (!data) {
@@ -68,12 +86,17 @@ export default function AnalyticsPage() {
 
   const t = data.totals;
   const stageRows = data.stages.filter(s => s.p80 >= 0.05).slice(0, 12);
-  const slow = data.forecasts.filter(f => f.pace === 'slow');
+  const live = data.forecasts.filter(f => !f.stale);
+  const stale = data.forecasts.filter(f => f.stale);
+  const slow = live.filter(f => f.pace === 'slow');
+  const o = data.objects;
+  const needsAttention = slow.length + data.awaiting.length + stale.length;
   const stageMax = Math.max(...stageRows.map(s => s.p80), 1);
   const serviceRows = data.services.filter(s => s.n > 0 || s.active > 0);
   const serviceMax = Math.max(...serviceRows.map(s => s.p80), 1);
   const monthMax = Math.max(...data.months.map(m => m.submitted), 1);
-  const orgRows = data.orgs.filter(o => o.total >= 2).slice(0, 20);
+  const orgRows = data.orgs.filter(g => g.ok + g.bad + g.other >= 3)
+    .sort((a, b) => (b.rejectRate ?? 0) - (a.rejectRate ?? 0) || b.total - a.total).slice(0, 20);
   const muted = { color: 'var(--text-muted)' };
   const text = { color: 'var(--text)' };
 
@@ -83,24 +106,86 @@ export default function AnalyticsPage() {
         <div>
           <h1 className="text-[22px] font-bold tracking-tight" style={text}>Сроки и аналитика</h1>
           <p className="mt-1 text-[13px]" style={muted}>
-            По {t.applications} заявлениям, из них с хронологией портала — {data.coverage.withTimeline}. Медиана — половина заявлений
-            уложилась в этот срок; «обычно до» — 80% заявлений.
+            {o.total} объектов · {t.applications} подач{data.filter.excludedPersonal ? ` · без личных: ${data.filter.excludedPersonal}` : ''}
+            {data.filter.excludedOld ? ` · вне периода: ${data.filter.excludedOld}` : ''}. Объект — заявление со всеми повторными подачами.
+            Медиана — половина уложилась в этот срок; «обычно до» — 80%.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2" style={{ opacity: loading ? 0.6 : 1 }}>
+            {PERIODS.map(per => (
+              <button key={per.label} type="button" onClick={() => setMonths(per.months)}
+                className="rounded-full px-3 py-1.5 text-[12px] font-medium"
+                style={months === per.months ? { background: 'var(--text)', color: 'var(--surface)' } : { background: 'var(--panel)', color: 'var(--text-soft)' }}>
+                {per.label}
+              </button>
+            ))}
+            <label className="ml-1 flex items-center gap-1.5 text-[12px]" style={muted}>
+              <input type="checkbox" checked={personal} onChange={e => setPersonal(e.target.checked)} />
+              с личными заявлениями
+            </label>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Kpi label="Одобрено" value={pct(t.approvalRate)} sub={`${t.approved} из ${t.approved + t.rejected} решённых`} />
-          <Kpi label="Срок до решения" value={days(t.duration?.median)} sub={t.duration ? `обычно до ${days(t.duration.p80)}` : undefined} />
-          <Kpi label="Одобрение / отказ" value={`${days(t.approvedDuration?.median)} / ${days(t.rejectedDuration?.median)}`} sub="медиана" />
-          <Kpi label="В работе" value={String(t.active)} sub={slow.length ? `дольше обычного: ${slow.length}` : 'все в обычных сроках'} />
+          <Kpi label="Объектов одобрено" value={`${o.approved} из ${o.approved + o.awaiting + o.dropped}`}
+            sub={`${pct(o.approvalRate)} завершённых · по подачам ${pct(t.approvalRate)}`} />
+          <Kpi label="Сейчас" value={`${o.active} в работе`} sub={`ждут повторной подачи: ${o.awaiting}`} />
+          <Kpi label="Исправление после отказа" value={days(data.fixDays?.median)}
+            sub={data.fixDays ? `обычно до ${days(data.fixDays.p80)} · ${data.fixDays.n} раз` : 'нет повторных подач'} />
+          <Kpi label="Срок одной подачи" value={days(t.duration?.median)}
+            sub={`одобрение ${days(t.approvedDuration?.median)} · отказ ${days(t.rejectedDuration?.median)}`} />
         </div>
 
-        <Card title="Сейчас в работе — прогноз" hint="Ожидаемая дата — подача + медианный срок такой же услуги (если их меньше 3 — по всем услугам).">
+        {needsAttention > 0 && (
+          <Card title={`Требует внимания · ${needsAttention}`} hint="Что стоит открыть сегодня: идёт дольше обычного, ждёт новой подачи после отказа или давно зависло.">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <p className="text-[12px] font-semibold" style={{ color: 'var(--warning)' }}>Дольше обычного · {slow.length}</p>
+                <ul className="mt-1.5 space-y-2">
+                  {slow.map(f => (
+                    <li key={f.applicationId} className="text-[12px]">
+                      <Link href={`/applications/${f.applicationId}`} className="font-semibold hover:underline" style={text}>{f.title}</Link>
+                      <p style={muted}>идёт {days(f.elapsedDays)}{f.overdueDays ? ` · сверх срока ${days(f.overdueDays)}` : ''}</p>
+                      <p className="line-clamp-2" style={muted}>{f.stage}</p>
+                    </li>
+                  ))}
+                  {slow.length === 0 && <li className="text-[12px]" style={muted}>Все в обычных сроках</li>}
+                </ul>
+              </div>
+              <div>
+                <p className="text-[12px] font-semibold" style={{ color: 'var(--danger)' }}>Отказ — ждёт новой подачи · {data.awaiting.length}</p>
+                <ul className="mt-1.5 space-y-2">
+                  {data.awaiting.slice(0, 8).map(a => (
+                    <li key={a.applicationId} className="text-[12px]">
+                      <Link href={`/applications/${a.applicationId}`} className="font-semibold hover:underline" style={text}>{a.title}</Link>
+                      <p style={muted}>отказ {a.daysSinceRejection === null ? '—' : `${days(a.daysSinceRejection)} назад`} · подач: {a.attempts}</p>
+                    </li>
+                  ))}
+                  {data.awaiting.length > 8 && <li className="text-[11px]" style={muted}>и ещё {data.awaiting.length - 8}</li>}
+                  {data.awaiting.length === 0 && <li className="text-[12px]" style={muted}>Нет</li>}
+                </ul>
+              </div>
+              <div>
+                <p className="text-[12px] font-semibold" style={muted}>Зависли · {stale.length}</p>
+                <ul className="mt-1.5 space-y-2">
+                  {stale.map(f => (
+                    <li key={f.applicationId} className="text-[12px]">
+                      <Link href={`/applications/${f.applicationId}`} className="font-semibold hover:underline" style={text}>{f.title}</Link>
+                      <p style={muted}>идёт {days(f.elapsedDays)} — проверьте или перенесите в архив</p>
+                    </li>
+                  ))}
+                  {stale.length === 0 && <li className="text-[12px]" style={muted}>Нет</li>}
+                </ul>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        <Card title={`Сейчас в работе — прогноз · ${live.length}`} hint="Ожидаемая дата — подача + медианный срок такой же услуги (если их меньше 3 — по всем услугам). Зависшие — в блоке выше.">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px]">
               <thead><tr style={muted}><th className={th}>Заявление</th><th className={th}>Идёт</th><th className={th}>Обычно</th><th className={th}>Ожидается</th><th className={th}>Последний этап · сколько на нём</th></tr></thead>
               <tbody>
-                {data.forecasts.map(f => (
+                {live.map(f => (
                   <tr key={f.applicationId} className="border-t" style={{ borderColor: 'var(--border)' }}>
                     <td className={td}>
                       <Link href={`/applications/${f.applicationId}`} className="font-semibold hover:underline" style={text}>{f.title}</Link>
@@ -109,14 +194,16 @@ export default function AnalyticsPage() {
                     </td>
                     <td className={`${td} tabular-nums`} style={f.pace === 'slow' ? { color: 'var(--warning)' } : text}>{days(f.elapsedDays)}</td>
                     <td className={`${td} tabular-nums`} style={muted}>{days(f.typicalDays)}{f.typicalBasis === 'all' ? '*' : ''}</td>
-                    <td className={`${td} tabular-nums`} style={f.expectedAt && new Date(f.expectedAt) < new Date() ? { color: 'var(--warning)' } : text}>{shortDate(f.expectedAt)}</td>
-                    <td className={td} style={muted}>{f.stage || '—'}{f.stageDays !== null && <> · {days(f.stageDays)}{f.stageTypicalDays !== null && ` (обычно ${days(f.stageTypicalDays)})`}</>}</td>
+                    <td className={`${td} tabular-nums`} style={f.overdueDays ? { color: 'var(--warning)' } : text}>
+                      {f.overdueDays ? `сверх срока ${days(f.overdueDays)}` : f.expectedAt && new Date(f.expectedAt) < new Date() ? 'со дня на день' : shortDate(f.expectedAt)}
+                    </td>
+                    <td className={td} style={muted}>{stageName(f.stage || '—')}{f.stageDays !== null && <> · {days(f.stageDays)}{f.stageTypicalDays !== null && ` (обычно ${days(f.stageTypicalDays)})`}</>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {data.forecasts.some(f => f.typicalBasis === 'all') && <p className="mt-2 text-[11px]" style={muted}>* мало истории по этой услуге — срок по всем услугам</p>}
+          {live.some(f => f.typicalBasis === 'all') && <p className="mt-2 text-[11px]" style={muted}>* мало истории по этой услуге — срок по всем услугам</p>}
         </Card>
 
         <Card title="Сколько ждут после каждого этапа" hint="Время от события в хронологии портала до следующего события. Тёмная часть — медиана, светлая — «обычно до»; справа — число заявлений.">
@@ -124,7 +211,7 @@ export default function AnalyticsPage() {
             {stageRows.map(s => (
               <div key={s.stage} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_140px]">
                 <div className="min-w-0">
-                  <p className="truncate text-[12px] font-medium" style={text}>{s.stage}</p>
+                  <p className="truncate text-[12px] font-medium" style={text}>{stageName(s.stage)}</p>
                   {s.actor && <p className="truncate text-[11px]" style={muted}>{s.actor}</p>}
                 </div>
                 <div className="hidden md:block"><DurationBar d={s} max={stageMax} /></div>
@@ -134,10 +221,10 @@ export default function AnalyticsPage() {
           </div>
         </Card>
 
-        <Card title="Сроки по услугам" hint="Только решённые заявления (одобрено или отказ).">
+        <Card title="Сроки по услугам" hint="Одна услуга на русском и узбекском считается вместе. Сроки — по решённым подачам (одобрено или отказ).">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px]">
-              <thead><tr style={muted}><th className={th}>Услуга</th><th className={th}>Всего</th><th className={th}>Одобрено</th><th className={th}>Медиана</th><th className={th}>Обычно до</th><th className={`${th} w-[160px]`} /></tr></thead>
+              <thead><tr style={muted}><th className={th}>Услуга</th><th className={th}>Подач</th><th className={th}>Одобрено подач</th><th className={th}>Медиана</th><th className={th}>Обычно до</th><th className={`${th} w-[160px]`} /></tr></thead>
               <tbody>
                 {serviceRows.map(s => (
                   <tr key={s.service} className="border-t" style={{ borderColor: 'var(--border)' }}>
@@ -155,12 +242,12 @@ export default function AnalyticsPage() {
         </Card>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Card title="Причины отказов" hint={`По ${data.rejections.withResult} отказам с разбором критериев.`}>
+          <Card title="За что отказывают" hint={`По ${data.rejections.withResult} отказам с разбором критериев: какое требование не выполнено и сколько раз.`}>
             {data.rejections.criteria.length === 0 ? <p className="text-[12px]" style={muted}>Нет данных</p> : (
               <ul className="space-y-1.5">
                 {data.rejections.criteria.map(c => (
                   <li key={c.label} className="flex justify-between gap-3 text-[12px]">
-                    <span style={text}>{c.label}</span><span className="tabular-nums" style={muted}>{c.count}</span>
+                    <span style={text}>{failed(c.label)}</span><span className="tabular-nums" style={muted}>{c.count}</span>
                   </li>
                 ))}
               </ul>
@@ -231,18 +318,21 @@ export default function AnalyticsPage() {
           </Card>
         )}
 
-        <Card title="Комиссии и организации" hint="Ответы в «Заключении комиссии»: доля отказов и время ответа с момента принятия.">
+        <Card title="Комиссии: где чаще отказывают" hint="Ответы в «Заключении комиссии», от самой строгой: доля отказов и время ответа с момента принятия (от 3 ответов).">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px]">
               <thead><tr style={muted}><th className={th}>Организация</th><th className={th}>Ответов</th><th className={th}>Отказы</th><th className={th}>Ответ, медиана</th><th className={th}>Обычно до</th></tr></thead>
               <tbody>
-                {orgRows.map(o => (
-                  <tr key={o.name} className="border-t" style={{ borderColor: 'var(--border)' }}>
-                    <td className={td} style={text}>{o.name}</td>
-                    <td className={`${td} tabular-nums`} style={muted}>{o.ok + o.bad + o.other}{o.wait ? ` · ждут ${o.wait}` : ''}</td>
-                    <td className={`${td} tabular-nums`} style={o.bad ? { color: 'var(--danger)' } : muted}>{pct(o.rejectRate)}</td>
-                    <td className={`${td} tabular-nums`} style={text}>{days(o.response?.median)}</td>
-                    <td className={`${td} tabular-nums`} style={muted}>{days(o.response?.p80)}</td>
+                {orgRows.map(g => (
+                  <tr key={g.name} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                    <td className={td} style={text}>{g.name}</td>
+                    <td className={`${td} tabular-nums`} style={muted}>{g.ok + g.bad + g.other}{g.wait ? ` · ждут ${g.wait}` : ''}</td>
+                    <td className={`${td} tabular-nums`} style={(g.rejectRate ?? 0) >= 25 ? { color: 'var(--danger)' } : muted}>
+                      <span className="inline-block w-9">{pct(g.rejectRate)}</span>
+                      <span className="ml-1 inline-block h-1.5 rounded-full align-middle" style={{ width: Math.max(2, (g.rejectRate ?? 0) * 0.6), background: (g.rejectRate ?? 0) >= 25 ? 'var(--danger)' : 'var(--border-strong)' }} />
+                    </td>
+                    <td className={`${td} tabular-nums`} style={text}>{days(g.response?.median)}</td>
+                    <td className={`${td} tabular-nums`} style={muted}>{days(g.response?.p80)}</td>
                   </tr>
                 ))}
               </tbody>

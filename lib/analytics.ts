@@ -2,6 +2,7 @@ import { readChecklist } from './application-artifacts';
 import type { Checklist } from './checklist';
 import { loadClientIndex } from './clients';
 import { listApplications, type LocalDbApplication } from './local-db';
+import { canonicalService, isPersonalService } from './service-names';
 
 /**
  * Terms and analytics from the history the tracker has already collected:
@@ -18,6 +19,10 @@ const DAY = 24 * 60 * 60 * 1000;
 const TASHKENT_OFFSET = 5 * 60 * 60 * 1000;
 /** A service or stage needs this many finished samples before we trust its median. */
 const MIN_SAMPLES = 3;
+/** An active application this old (and 3× past the usual term) is «stale», not just slow. */
+const STALE_DAYS = 45;
+/** A rejected object waits for a resubmission this long; after that it counts as dropped. */
+const AWAITING_DAYS = 60;
 
 export type Outcome = 'approved' | 'rejected' | 'cancelled' | 'active';
 
@@ -63,6 +68,38 @@ export interface Forecast {
   /** «slow» — this stage or the whole application already takes longer than 80% of past ones. */
   pace: 'on_track' | 'slow' | 'unknown';
   reason: string;
+  /** Days past the expected date (null while still in time). */
+  overdueDays: number | null;
+  /** Long past every usual term — most likely abandoned, shown apart from the live ones. */
+  stale: boolean;
+}
+
+/** An «object»: one application with all its resubmissions (the portal's chain). */
+export interface ObjectTotals {
+  total: number;
+  approved: number;
+  active: number;
+  /** Last attempt rejected, nothing in work — waits for a new submission. */
+  awaiting: number;
+  /** Cancelled, or rejected long ago and never resubmitted. */
+  dropped: number;
+  approvalRate: number | null;
+}
+
+export interface AwaitingObject {
+  applicationId: string;
+  application_number: string;
+  title: string;
+  service: string;
+  attempts: number;
+  daysSinceRejection: number | null;
+}
+
+export interface AnalyticsOptions {
+  /** Only applications submitted in the last N months (null — all time). */
+  months?: number | null;
+  /** Keep private errands (passport, benefits…) in the numbers. */
+  includePersonal?: boolean;
 }
 
 export interface ClientStats {
@@ -96,6 +133,12 @@ export interface Analytics {
   forecasts: Forecast[];
   clients: ClientStats[];
   coverage: { withTimeline: number; total: number };
+  /** What the numbers cover (AnalyticsOptions) and how much was left out. */
+  filter: { months: number | null; includePersonal: boolean; excludedPersonal: number; excludedOld: number };
+  objects: ObjectTotals;
+  /** Days from a rejection to the next submission of the same object — «our» time. */
+  fixDays: DurationStats | null;
+  awaiting: AwaitingObject[];
 }
 
 export function outcomeOf(status: string): Outcome {
@@ -147,7 +190,7 @@ function acceptedAt(checklist: Checklist): number | null {
   return wallTime(accepted?.date ?? checklist.stages[0]?.date);
 }
 
-interface Row { app: LocalDbApplication; checklist: Checklist | null; outcome: Outcome; client?: { id: string; name: string } | null }
+export interface Row { app: LocalDbApplication; checklist: Checklist | null; outcome: Outcome; client?: { id: string; name: string } | null }
 
 export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
   const nowWall = now.getTime() + TASHKENT_OFFSET;
@@ -161,14 +204,14 @@ export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
   // Services: totals over all, durations over decided (approved/rejected) applications.
   const byService = new Map<string, Row[]>();
   for (const r of rows) {
-    const k = keyOf(r.app.service_name) || '—';
+    const k = canonicalService(r.app.service_name).key;
     byService.set(k, [...(byService.get(k) ?? []), r]);
   }
   const services: ServiceStats[] = [...byService.values()].map(list => {
     const count = (o: Outcome) => list.filter(r => r.outcome === o).length;
     const d = stats(list.filter(r => r.outcome === 'approved' || r.outcome === 'rejected').map(durationOf));
     return {
-      service: list[0].app.service_name || '—',
+      service: canonicalService(list[0].app.service_name).label,
       total: list.length,
       approved: count('approved'), rejected: count('rejected'), cancelled: count('cancelled'), active: count('active'),
       approvalRate: rate(count('approved'), count('approved') + count('rejected')),
@@ -256,6 +299,40 @@ export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
     if (tries === 1) firstTimeApproved += 1; else approvedAfterRetry += 1;
   }
 
+  // Objects: a chain of attempts counts once, by how it stands now.
+  const objects: ObjectTotals = { total: groups.size, approved: 0, active: 0, awaiting: 0, dropped: 0, approvalRate: null };
+  const fixSamples: number[] = [];
+  const awaiting: AwaitingObject[] = [];
+  for (const list of groups.values()) {
+    const ordered = [...list].sort((a, b) => (span(a.app, a.checklist).start ?? 0) - (span(b.app, b.checklist).start ?? 0));
+    for (let i = 0; i < ordered.length - 1; i++) {
+      if (ordered[i].outcome !== 'rejected') continue;
+      const end = span(ordered[i].app, ordered[i].checklist).end;
+      const next = span(ordered[i + 1].app, ordered[i + 1].checklist).start;
+      if (end !== null && next !== null && next >= end) fixSamples.push((next - end) / DAY);
+    }
+    const last = ordered[ordered.length - 1];
+    if (ordered.some(r => r.outcome === 'approved')) objects.approved += 1;
+    else if (ordered.some(r => r.outcome === 'active')) objects.active += 1;
+    else {
+      const end = span(last.app, last.checklist).end;
+      const since = end !== null ? Math.max(0, (nowWall - end) / DAY) : null;
+      if (last.outcome === 'rejected' && (since === null || since <= AWAITING_DAYS)) {
+        objects.awaiting += 1;
+        awaiting.push({
+          applicationId: last.app.id,
+          application_number: last.app.application_number,
+          title: last.app.object_name || canonicalService(last.app.service_name).label,
+          service: canonicalService(last.app.service_name).label,
+          attempts: Math.max(ordered.length, last.checklist?.chain.length ?? 0, 1),
+          daysSinceRejection: since === null ? null : Math.round(since * 10) / 10,
+        });
+      } else objects.dropped += 1;
+    }
+  }
+  objects.approvalRate = rate(objects.approved, objects.approved + objects.awaiting + objects.dropped);
+  awaiting.sort((a, b) => (a.daysSinceRejection ?? 0) - (b.daysSinceRejection ?? 0));
+
   // Months by submission date.
   const monthMap = new Map<string, Analytics['months'][number]>();
   for (const r of rows) {
@@ -274,7 +351,7 @@ export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
   const forecasts: Forecast[] = rows.filter(r => r.outcome === 'active').map((r): Forecast => {
     const { start } = span(r.app, r.checklist);
     const elapsedDays = start !== null ? Math.max(0, (nowWall - start) / DAY) : 0;
-    const service = services.find(s => keyOf(s.service) === (keyOf(r.app.service_name) || '—'));
+    const service = services.find(s => s.service === canonicalService(r.app.service_name).label);
     const basis: Forecast['typicalBasis'] = service && service.n >= MIN_SAMPLES ? 'service' : allDecided && allDecided.n >= MIN_SAMPLES ? 'all' : null;
     const typical = basis === 'service' ? service! : basis === 'all' ? allDecided! : null;
     const last = r.checklist?.stages.at(-1);
@@ -292,7 +369,10 @@ export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
       reasons.push(`заявление идёт ${fmtDays(elapsedDays)}, обычно ${fmtDays(typical.median)}`);
     }
     const r1 = (x: number) => Math.round(x * 10) / 10;
+    const overdue = typical ? elapsedDays - typical.p80 : null;
     return {
+      overdueDays: overdue !== null && overdue > 0 ? r1(overdue) : null,
+      stale: !!typical && elapsedDays > STALE_DAYS && elapsedDays > typical.p80 * 3,
       applicationId: r.app.id,
       application_number: r.app.application_number,
       title: r.app.object_name || r.app.service_name || r.app.application_number,
@@ -307,7 +387,7 @@ export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
       pace: reasons.length ? 'slow' : typical || stageTypical ? 'on_track' : 'unknown',
       reason: reasons.join('; '),
     };
-  }).sort((a, b) => (a.pace === 'slow' ? 0 : 1) - (b.pace === 'slow' ? 0 : 1) || b.elapsedDays - a.elapsedDays);
+  }).sort((a, b) => Number(a.stale) - Number(b.stale) || (a.pace === 'slow' ? 0 : 1) - (b.pace === 'slow' ? 0 : 1) || b.elapsedDays - a.elapsedDays);
 
   // Clients: the same numbers per client (lib/clients.ts assignments, resubmissions included).
   const slowIds = new Set(forecasts.filter(f => f.pace === 'slow').map(f => f.applicationId));
@@ -356,7 +436,30 @@ export function computeAnalytics(rows: Row[], now = new Date()): Analytics {
     forecasts,
     clients,
     coverage: { withTimeline: rows.filter(r => (r.checklist?.stages.length ?? 0) > 1).length, total: rows.length },
+    filter: { months: null, includePersonal: true, excludedPersonal: 0, excludedOld: 0 },
+    objects,
+    fixDays: stats(fixSamples),
+    awaiting,
   };
+}
+
+/** The same numbers over a part of the history: a period and / or without private errands. */
+export function filterRows(rows: Row[], options: AnalyticsOptions, now = new Date()): { rows: Row[]; filter: Analytics['filter'] } {
+  const months = options.months ?? null;
+  const includePersonal = options.includePersonal ?? true;
+  const from = months ? now.getTime() + TASHKENT_OFFSET - months * 30.44 * DAY : null;
+  let excludedPersonal = 0;
+  let excludedOld = 0;
+  const kept = rows.filter(r => {
+    if (!includePersonal && isPersonalService(r.app.service_name)) { excludedPersonal += 1; return false; }
+    if (from !== null) {
+      const start = span(r.app, r.checklist).start;
+      // Still in work — always shown, however old.
+      if (start !== null && start < from && r.outcome !== 'active') { excludedOld += 1; return false; }
+    }
+    return true;
+  });
+  return { rows: kept, filter: { months, includePersonal, excludedPersonal, excludedOld } };
 }
 
 /** «5 ч», «1,5 дн», «12 дн». */
@@ -369,8 +472,9 @@ export function fmtDays(days: number): string {
 let cache: { at: number; root: string | undefined; value: Analytics } | null = null;
 
 /** Loads every application and its checklist; cached for a minute (the list API calls it too). */
-export async function loadAnalytics(rootPath?: string, now = new Date()): Promise<Analytics> {
-  if (cache && cache.root === rootPath && now.getTime() - cache.at < 60_000) return cache.value;
+export async function loadAnalytics(rootPath?: string, now = new Date(), options?: AnalyticsOptions): Promise<Analytics> {
+  const plain = !options || ((options.months ?? null) === null && (options.includePersonal ?? true));
+  if (plain && cache && cache.root === rootPath && now.getTime() - cache.at < 60_000) return cache.value;
   const apps = await listApplications({}, rootPath);
   const { byApplication } = await loadClientIndex(rootPath, apps);
   const rows: Row[] = await Promise.all(apps.map(async app => ({
@@ -379,6 +483,10 @@ export async function loadAnalytics(rootPath?: string, now = new Date()): Promis
     checklist: await readChecklist(app.id, rootPath),
     outcome: app.archived ? (outcomeOf(app.status) === 'active' ? 'cancelled' : outcomeOf(app.status)) : outcomeOf(app.status),
   })));
+  if (!plain) {
+    const part = filterRows(rows, options!, now);
+    return { ...computeAnalytics(part.rows, now), filter: part.filter };
+  }
   const value = computeAnalytics(rows, now);
   cache = { at: now.getTime(), root: rootPath, value };
   return value;
