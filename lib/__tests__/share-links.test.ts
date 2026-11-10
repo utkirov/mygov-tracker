@@ -12,10 +12,12 @@ import {
   createClientShareLink,
   createShareLink,
   deviceFromUserAgent,
+  extendShareLink,
   findShareLink,
   isShareLinkActive,
   isUnlocked,
   linkApplicationIds,
+  listAllShareLinks,
   listShareLinks,
   listShareViews,
   recordShareView,
@@ -82,6 +84,22 @@ describe('client share links', () => {
     expect(await findShareLink('not-a-token', root)).toBeNull();
     expect(deviceFromUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)')).toBe('iPhone');
     expect(deviceFromUserAgent('TelegramBot (like TwitterBot)')).toBe('предпросмотр');
+  });
+
+  it('lists every link and extends or revives one, but never a revoked one', async () => {
+    const t0 = new Date('2026-10-20T10:00:00Z');
+    const short = await createShareLink('app-1', { minutes: 30, label: 'Прораб' }, root, t0);
+    const gone = await createShareLink('app-1', { minutes: 60 }, root, t0);
+    await revokeShareLink(gone.token, root);
+    expect((await listAllShareLinks(root)).map(l => l.token)).toEqual(expect.arrayContaining([short.token, gone.token]));
+
+    const later = new Date('2026-10-21T10:00:00Z');
+    expect(isShareLinkActive(short, later)).toBe(false);
+    const revived = await extendShareLink(short.token, 7 * 24 * 60, root, later);
+    expect(revived?.expires_at).toBe('2026-10-28T10:00:00.000Z');
+    expect((await extendShareLink(short.token, null, root, later))?.expires_at).toBeNull();
+    expect(await extendShareLink(gone.token, 60, root, later)).toBeNull();
+    await expect(extendShareLink(short.token, 5, root, later)).rejects.toThrow();
   });
 
   it('never exposes the check password, phones, notes or the PDF', async () => {

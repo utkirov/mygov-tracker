@@ -106,6 +106,25 @@ export async function listClientShareLinks(clientId: string, rootPath?: string):
   return (db.prepare('SELECT * FROM share_links WHERE client_id = ? ORDER BY created_at DESC').all(clientId) as Row[]).map(toLink);
 }
 
+/** Every link, newest first — the «Ссылки» page. */
+export async function listAllShareLinks(rootPath?: string): Promise<ShareLink[]> {
+  const db = await openDb(rootPath);
+  return (db.prepare('SELECT * FROM share_links ORDER BY created_at DESC').all() as Row[]).map(toLink);
+}
+
+/**
+ * «Продлить»: a new lifetime counted from now (null = until revoked). Works for
+ * an expired link too — the same URL starts working again; a revoked one stays dead.
+ */
+export async function extendShareLink(token: string, minutes: number | null, rootPath?: string, now = new Date()): Promise<ShareLink | null> {
+  if (!TOKEN_RE.test(token)) return null;
+  if (!(SHARE_DURATIONS as readonly (number | null)[]).includes(minutes)) throw new Error('Недопустимый срок ссылки');
+  const db = await openDb(rootPath);
+  const expires = minutes === null ? null : new Date(now.getTime() + minutes * 60_000).toISOString();
+  const changed = db.prepare('UPDATE share_links SET expires_at = ? WHERE token = ? AND revoked_at IS NULL').run(expires, token).changes;
+  return changed ? findShareLink(token, rootPath) : null;
+}
+
 export async function revokeShareLink(token: string, rootPath?: string): Promise<boolean> {
   if (!TOKEN_RE.test(token)) return false;
   const db = await openDb(rootPath);

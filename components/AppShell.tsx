@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Archive, BarChart3, Folder, Keyboard, LayoutDashboard, Moon, Plus, RefreshCw, Search, Settings, Sun, Users, X } from 'lucide-react';
+import { Archive, BarChart3, Folder, Keyboard, LayoutDashboard, Link as LinkIcon, Moon, Plus, RefreshCw, Search, Settings, Sun, Users, X } from 'lucide-react';
 
 import { useSyncEngineSnapshot, startSyncEngine, stopSyncEngine, requestImmediateSyncRun } from '@/lib/sync-engine';
 import { useTheme } from './ThemeProvider';
@@ -18,7 +18,8 @@ const NAV = [
   { href: '/dashboard',  icon: LayoutDashboard, label: 'Доска' },
   { href: '/archive',    icon: Archive,          label: 'Архив' },
   { href: '/clients',    icon: Users,            label: 'Клиенты' },
-  // Rarely used — kept off the phone bottom bar so seven items still fit at 375 px.
+  { href: '/links',      icon: LinkIcon,         label: 'Ссылки', mobile: false },
+  // Rarely used on the go — kept off the phone bottom bar so it still fits at 375 px.
   { href: '/projects',   icon: Folder,           label: 'Проекты', mobile: false },
   { href: '/analytics',  icon: BarChart3,        label: 'Аналитика' },
   { href: '/settings',   icon: Settings,         label: 'Настройки' },

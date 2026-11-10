@@ -19,7 +19,7 @@ interface ShareLink {
   subscribers: number;
 }
 
-const DURATIONS: Array<{ minutes: number | null; label: string }> = [
+export const DURATIONS: Array<{ minutes: number | null; label: string }> = [
   { minutes: 30, label: '30 минут' },
   { minutes: 60, label: '1 час' },
   { minutes: 24 * 60, label: '1 день' },
@@ -28,12 +28,12 @@ const DURATIONS: Array<{ minutes: number | null; label: string }> = [
   { minutes: null, label: 'Бессрочно' },
 ];
 
-function when(value: string | null): string {
+export function when(value: string | null): string {
   if (!value) return '—';
   return new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-function Views({ token }: { token: string }) {
+export function Views({ token }: { token: string }) {
   const [views, setViews] = useState<Array<{ viewed_at: string; device: string }> | null>(null);
   useEffect(() => {
     fetch(`/api/share-links/${token}/views`, { cache: 'no-store' })
