@@ -1,6 +1,7 @@
 import * as Application from 'expo-application';
 import { File, Paths } from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as Updates from 'expo-updates';
 import { useEffect, useState } from 'react';
 
 import { API_BASE, authHeaders } from '@/lib/api';
@@ -53,6 +54,21 @@ export async function downloadAndInstall(release: AppRelease, onProgress: (fract
     flags: FLAG_GRANT_READ_URI_PERMISSION,
     type: 'application/vnd.android.package-archive',
   });
+}
+
+/**
+ * «Срочное обновление»: fetch the newest OTA bundle right now and restart into
+ * it, instead of waiting for the next cold start. Returns what happened so the
+ * screen can fall back to the APK check.
+ */
+export async function applyOtaNow(): Promise<'reloading' | 'latest' | 'unavailable'> {
+  if (!Updates.isEnabled) return 'unavailable';
+  const check = await Updates.checkForUpdateAsync();
+  if (!check.isAvailable) return 'latest';
+  const fetched = await Updates.fetchUpdateAsync();
+  if (!fetched.isNew) return 'latest';
+  await Updates.reloadAsync();
+  return 'reloading';
 }
 
 /** Checks once per app start. */

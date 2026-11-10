@@ -1,18 +1,18 @@
 import { useColorScheme } from 'react-native';
 
 // Same tokens as the website (app/globals.css) and the approved Figma design:
-// neutral greys, black primary, one blue accent, status shown as a dot.
+// TURON PROJECT brand: cream / ink, one violet accent, status shown as a dot.
 const light = {
-  bg: '#F7F7F8',
+  bg: '#F3F1EC',
   surface: '#FFFFFF',
-  panel: '#F2F2F4',
-  border: '#E4E4E7',
-  text: '#0B0B0D',
+  panel: '#ECE9E2',
+  border: '#E2DED5',
+  text: '#0C0C0E',
   textSoft: '#52525B',
-  textMuted: '#8B8B94',
+  textMuted: '#8E8B94',
   primary: '#0B0B0D',
   onPrimary: '#FFFFFF',
-  accent: '#2563EB',
+  accent: '#7C4DFF',
   danger: '#DC2626',
   status: {
     new: '#2563EB',
@@ -25,16 +25,16 @@ const light = {
 };
 
 const dark: typeof light = {
-  bg: '#0B0B0D',
-  surface: '#141416',
-  panel: '#1C1C1F',
+  bg: '#0C0C0E',
+  surface: '#151518',
+  panel: '#1C1B20',
   border: '#27272A',
-  text: '#F4F4F5',
+  text: '#F3F1EC',
   textSoft: '#A1A1AA',
-  textMuted: '#71717A',
+  textMuted: '#8E8B94',
   primary: '#F4F4F5',
   onPrimary: '#0B0B0D',
-  accent: '#60A5FA',
+  accent: '#A688FF',
   danger: '#F87171',
   status: {
     new: '#60A5FA',

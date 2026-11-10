@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "my.gov tracker",
+    "name": "TURON PROJECT Application Tracker",
     "slug": "mygov-tracker",
     "version": "1.3.2",
     "orientation": "portrait",
@@ -79,7 +79,7 @@
           "widgets": [
             {
               "name": "Tracker",
-              "label": "my.gov tracker",
+              "label": "TURON PROJECT Tracker",
               "description": "Сколько заявлений ждут вашего действия и последние изменения",
               "minWidth": "250dp",
               "minHeight": "110dp",

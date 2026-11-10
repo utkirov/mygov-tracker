@@ -12,27 +12,27 @@
   --font-ui:   var(--font-inter), 'Segoe UI', system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), 'Fira Code', monospace;
 
-  --bg:            #F7F7F8;
-  --bg2:           #F2F2F4;
+  --bg:            #F3F1EC;
+  --bg2:           #ECE9E2;
   --shell:         #FFFFFF;
   --surface:       #FFFFFF;
-  --surface2:      #FAFAFA;
-  --panel:         #F2F2F4;
-  --panel-strong:  #E4E4E7;
+  --surface2:      #FBFAF7;
+  --panel:         #ECE9E2;
+  --panel-strong:  #DFDBD1;
   --border:        rgba(0, 0, 0, 0.08);
   --border-strong: rgba(0, 0, 0, 0.14);
-  --text:          #0B0B0D;
-  --text-soft:     #52525B;
-  --text-muted:    #8B8B94;
+  --text:          #0C0C0E;
+  --text-soft:     #4A4852;
+  --text-muted:    #8E8B94;
   --text2:         var(--text-soft);
   --text3:         var(--text-muted);
 
-  --primary:       #0B0B0D;
+  --primary:       #0C0C0E;
   --on-primary:    #FFFFFF;
-  --accent:        #2563EB;
-  --accent-hover:  #1D4ED8;
-  --accent-soft:   rgba(37, 99, 235, 0.08);
-  --accent-glow:   0 0 0 3px rgba(37, 99, 235, 0.18);
+  --accent:        #7C4DFF;
+  --accent-hover:  #6A3AF0;
+  --accent-soft:   rgba(124, 77, 255, 0.10);
+  --accent-glow:   0 0 0 3px rgba(124, 77, 255, 0.20);
 
   --danger:        #DC2626;
   --danger-soft:   rgba(220, 38, 38, 0.08);
@@ -65,27 +65,27 @@
 }
 
 .dark {
-  --bg:            #0B0B0D;
-  --bg2:           #111113;
-  --shell:         #141416;
-  --surface:       #141416;
-  --surface2:      #18181B;
-  --panel:         #1F1F23;
+  --bg:            #0C0C0E;
+  --bg2:           #131316;
+  --shell:         #151518;
+  --surface:       #151518;
+  --surface2:      #19191D;
+  --panel:         #1F1E24;
   --panel-strong:  #2A2A2F;
   --border:        rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --text:          #F4F4F5;
-  --text-soft:     #A1A1AA;
-  --text-muted:    #71717A;
+  --text:          #F3F1EC;
+  --text-soft:     #B4B1BA;
+  --text-muted:    #8E8B94;
   --text2:         var(--text-soft);
   --text3:         var(--text-muted);
 
-  --primary:       #F4F4F5;
-  --on-primary:    #0B0B0D;
-  --accent:        #60A5FA;
-  --accent-hover:  #93C5FD;
-  --accent-soft:   rgba(96, 165, 250, 0.14);
-  --accent-glow:   0 0 0 3px rgba(96, 165, 250, 0.22);
+  --primary:       #F3F1EC;
+  --on-primary:    #0C0C0E;
+  --accent:        #A688FF;
+  --accent-hover:  #BBA4FF;
+  --accent-soft:   rgba(166, 136, 255, 0.14);
+  --accent-glow:   0 0 0 3px rgba(166, 136, 255, 0.24);
 
   --danger:        #F87171;
   --danger-soft:   rgba(248, 113, 113, 0.14);
@@ -118,7 +118,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 ::selection {
-  background: rgba(37, 99, 235, 0.18);
+  background: rgba(124, 77, 255, 0.20);
   color: var(--text);
 }
 
@@ -360,4 +360,31 @@ html, body {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CLIENT SHARE PAGE — TURON PROJECT looks (lib/share-design.ts).
+   Scoped tokens: the page keeps its look whatever theme the visitor's browser has.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.share-light, .share-summary {
+  --bg: #F3F1EC; --surface: #FFFFFF; --panel: #ECE9E2;
+  --border: rgba(12, 12, 14, 0.08); --border-strong: rgba(12, 12, 14, 0.16);
+  --text: #0C0C0E; --text-soft: #4A4852; --text-muted: #8E8B94;
+  --accent: #7C4DFF; --accent-soft: rgba(124, 77, 255, 0.10);
+  --success: #16A34A; --warning: #CA8A04; --danger: #DC2626;
+  color-scheme: light;
+}
+
+.share-dark {
+  --bg: #0C0C0E; --surface: #151518; --panel: #1F1E24;
+  --border: rgba(255, 255, 255, 0.10); --border-strong: rgba(255, 255, 255, 0.18);
+  --text: #F3F1EC; --text-soft: #B4B1BA; --text-muted: #8E8B94;
+  --accent: #A688FF; --accent-soft: rgba(166, 136, 255, 0.14);
+  --success: #4ADE80; --warning: #FACC15; --danger: #F87171;
+  color-scheme: dark;
+}
+
+.share-dark .share-hero-glow {
+  background: radial-gradient(120% 140% at 0% 0%, rgba(124, 77, 255, 0.35) 0%, rgba(43, 20, 102, 0.25) 40%, transparent 75%);
 }

@@ -11,27 +11,27 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter', display: 'swap' });
 const jetbrains = JetBrains_Mono({ subsets: ['latin', 'cyrillic'], variable: '--font-jetbrains', display: 'swap' });
 
-// A private tool behind a login: pages get clear tab titles («Доска · my.gov
-// tracker») but stay out of search engines (also robots.ts). Icons come from
+// A private tool behind a login: pages get clear tab titles («Доска · TURON
+// PROJECT») but stay out of search engines (also robots.ts). Icons come from
 // app/icon.svg, app/apple-icon.tsx and app/favicon.ico; the PWA name from manifest.ts.
 export const metadata: Metadata = {
   // Absolute URLs in previews (og:image of share links) point at the public domain.
   metadataBase: new URL(process.env.PUBLIC_BASE_URL?.trim() || 'https://tracker.turonproject.uz'),
-  title: { template: '%s · my.gov tracker', default: 'my.gov tracker' },
+  title: { template: '%s · TURON PROJECT', default: 'TURON PROJECT Application Tracker' },
   description: 'Отслеживание заявлений my.gov.uz: статусы, согласования, документы и уведомления.',
-  applicationName: 'my.gov tracker',
+  applicationName: 'TURON PROJECT Application Tracker',
   robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
   referrer: 'strict-origin-when-cross-origin',
   formatDetection: { telephone: false, email: false, address: false },
-  appleWebApp: { capable: true, title: 'Tracker', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: 'TURON Tracker', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#F7F7F8' },
-    { media: '(prefers-color-scheme: dark)', color: '#0B0B0D' },
+    { media: '(prefers-color-scheme: light)', color: '#F3F1EC' },
+    { media: '(prefers-color-scheme: dark)', color: '#0C0C0E' },
   ],
 };
 

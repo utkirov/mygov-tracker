@@ -201,12 +201,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Link href="/dashboard" className="mr-2 flex shrink-0 items-center gap-2">
           <div
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[12px] font-semibold"
-            style={{ background: 'var(--primary)', color: 'var(--on-primary)' }}
+            style={{ background: 'var(--accent)', color: '#FFFFFF' }}
           >
-            mg
+            TP
           </div>
-          <span className="hidden text-[14px] font-semibold tracking-tight sm:block" style={{ color: 'var(--text)' }}>
-            my.gov tracker
+          <span className="hidden leading-[1.1] sm:block">
+            <span className="block text-[13px] font-bold tracking-[0.04em]" style={{ color: 'var(--text)' }}>TURON PROJECT</span>
+            <span className="block text-[10.5px] font-medium" style={{ color: 'var(--text-muted)' }}>Application Tracker</span>
           </span>
         </Link>
 

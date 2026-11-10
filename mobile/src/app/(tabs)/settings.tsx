@@ -24,7 +24,8 @@ import { currentPushToken, registerForPush } from '@/lib/push';
 import { isWaitingReminderOn, setWaitingReminder } from '@/lib/waiting-reminder';
 import { formatDate, formatUntil } from '@/lib/status';
 import { font, radius, useTheme } from '@/lib/theme';
-import { fetchAvailableUpdate, type AppRelease } from '@/lib/updates';
+import { BRAND } from '@/lib/brand';
+import { applyOtaNow, fetchAvailableUpdate, type AppRelease } from '@/lib/updates';
 
 const THEMES: Array<{ id: ThemeChoice; label: string }> = [
   { id: 'system', label: 'Как в системе' },
@@ -47,6 +48,7 @@ export default function SettingsScreen() {
   const [waitingReminder, setWaitingReminderState] = useState(true);
   const [update, setUpdate] = useState<AppRelease | null>(null);
   const [checkedUpdate, setCheckedUpdate] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   const load = useCallback(async () => {
     const token = await currentPushToken();
@@ -74,7 +76,7 @@ export default function SettingsScreen() {
   async function enablePush() {
     const token = await registerForPush().catch(() => null);
     if (!token) {
-      Alert.alert('Уведомления выключены', 'Разрешите уведомления для my.gov tracker в настройках Android.');
+      Alert.alert('Уведомления выключены', 'Разрешите уведомления для TURON PROJECT Application Tracker в настройках Android.');
       return;
     }
     await load();
@@ -101,7 +103,7 @@ export default function SettingsScreen() {
   /** Nothing OS / Android freeze background apps — this page has «Батарея → Без ограничений». */
   function openAppSystemSettings() {
     void IntentLauncher.startActivityAsync('android.settings.APPLICATION_DETAILS_SETTINGS', { data: `package:${Application.applicationId ?? 'uz.turonproject.tracker'}` })
-      .catch(() => Alert.alert('Не удалось открыть', 'Откройте Настройки → Приложения → my.gov tracker вручную.'));
+      .catch(() => Alert.alert('Не удалось открыть', 'Откройте Настройки → Приложения → TURON PROJECT Application Tracker вручную.'));
   }
 
   async function toggleBiometric(on: boolean) {
@@ -114,6 +116,22 @@ export default function SettingsScreen() {
       setSync(on);
     } catch {
       Alert.alert('Не удалось', 'Android не разрешил фоновую задачу.');
+    }
+  }
+
+  /** Urgent update: newest OTA bundle now (restarts the app), otherwise the APK if the server has a newer one. */
+  async function updateNow() {
+    setUpdating(true);
+    try {
+      const ota = await applyOtaNow().catch(() => 'unavailable' as const);
+      if (ota === 'reloading') return;
+      const release = await fetchAvailableUpdate();
+      setUpdate(release);
+      setCheckedUpdate(true);
+      if (release) Alert.alert(`Доступна версия ${release.version}`, 'Нажмите «Установить обновление» в карточке выше.');
+      else Alert.alert('Обновлений нет', ota === 'unavailable' ? 'Проверка по воздуху недоступна в этой сборке. APK — последней версии.' : 'Установлена последняя версия.');
+    } finally {
+      setUpdating(false);
     }
   }
 
@@ -131,8 +149,8 @@ export default function SettingsScreen() {
   return (
     <ScrollView contentContainerStyle={styles.wrap}>
       <Card style={styles.profile}>
-        <View style={[styles.avatar, { backgroundColor: t.primary }]}>
-          <Text style={[styles.avatarText, { color: t.onPrimary }]}>mg</Text>
+        <View style={[styles.avatar, { backgroundColor: t.accent }]}>
+          <Text style={[styles.avatarText, { color: '#FFFFFF' }]}>{BRAND.mark}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: t.text }]}>{username ?? 'admin'}</Text>
@@ -207,6 +225,10 @@ export default function SettingsScreen() {
           hint={otaDate ? `Обновлено по воздуху ${formatDate(otaDate)}` : 'Установлена из APK'}
           right={<Text style={[styles.small, { color: update ? t.accent : t.status.done }]}>{!checkedUpdate ? '…' : update ? `Есть ${update.version}` : 'Актуальна'}</Text>}
         />
+        <View style={{ paddingVertical: 8, gap: 6 }}>
+          <Button title={updating ? 'Проверяю обновления…' : 'Обновить сейчас'} onPress={() => void updateNow()} disabled={updating} />
+          <Text style={[styles.small, { color: t.textMuted, textAlign: 'center' }]}>Скачает последнее обновление и перезапустит приложение</Text>
+        </View>
         <View style={[styles.item, { borderTopColor: t.border }]}>
           <Text style={[styles.label, { color: t.text }]}>Тема</Text>
           <View style={[styles.segment, { backgroundColor: t.panel }]}>

@@ -31,10 +31,13 @@ export default function LoginScreen() {
     <SafeAreaView style={[styles.screen, { backgroundColor: t.bg }]}>
       <KeyboardAvoidingView behavior="height" style={styles.center}>
         <View style={styles.brand}>
-          <View style={[styles.logo, { backgroundColor: t.primary }]}>
-            <Text style={[styles.logoText, { color: t.onPrimary }]}>mg</Text>
+          <View style={[styles.logo, { backgroundColor: t.accent }]}>
+            <Text style={[styles.logoText, { color: '#FFFFFF' }]}>TP</Text>
           </View>
-          <Text style={[styles.brandText, { color: t.text }]}>my.gov tracker</Text>
+          <View>
+            <Text style={[styles.brandText, { color: t.text }]}>TURON PROJECT</Text>
+            <Text style={[styles.brandSub, { color: t.textMuted }]}>Application Tracker</Text>
+          </View>
         </View>
         <Card style={{ gap: 14 }}>
           <View style={{ gap: 4 }}>
@@ -64,7 +67,8 @@ const styles = StyleSheet.create({
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logo: { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   logoText: { fontFamily: font.semibold, fontSize: 12 },
-  brandText: { fontFamily: font.semibold, fontSize: 15 },
+  brandText: { fontFamily: font.semibold, fontSize: 15, letterSpacing: 0.5 },
+  brandSub: { fontFamily: font.regular, fontSize: 12 },
   title: { fontFamily: font.semibold, fontSize: 20 },
   subtitle: { fontFamily: font.regular, fontSize: 13, lineHeight: 18 },
   error: { fontFamily: font.medium, fontSize: 13 },

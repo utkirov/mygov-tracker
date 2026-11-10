@@ -13,9 +13,12 @@ import path from 'node:path';
 
 import { ImageResponse } from 'next/og';
 
+import { BRAND } from './brand';
+
 const C = {
-  bg: '#F7F7F8', surface: '#FFFFFF', text: '#111113', soft: '#3F3F46', muted: '#71717A', border: '#E4E4E7',
-  accent: '#2563EB', ok: '#16A34A', warn: '#CA8A04', bad: '#DC2626',
+  // TURON PROJECT brand (lib/brand.ts): cream, ink, violet.
+  bg: '#F3F1EC', surface: '#FFFFFF', text: '#0C0C0E', soft: '#4A4852', muted: '#8E8B94', border: '#E2DED5',
+  accent: '#7C4DFF', ok: '#16A34A', warn: '#CA8A04', bad: '#DC2626',
 };
 
 let fontsPromise: Promise<Array<{ name: string; data: Buffer; weight: 400 | 600 | 700; style: 'normal' }>> | null = null;
@@ -65,8 +68,11 @@ function Brand({ right }: { right?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ display: 'flex', width: 52, height: 52, borderRadius: 12, background: C.text, color: '#fff', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 700 }}>mg</div>
-        <div style={{ display: 'flex', fontSize: 26, fontWeight: 600, color: C.text }}>my.gov tracker</div>
+        <div style={{ display: 'flex', width: 52, height: 52, borderRadius: 12, background: C.accent, color: '#fff', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700 }}>TP</div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', fontSize: 24, fontWeight: 700, color: C.text, letterSpacing: 1 }}>TURON PROJECT</div>
+          <div style={{ display: 'flex', fontSize: 17, color: C.muted }}>Application Tracker</div>
+        </div>
       </div>
       {right ? <div style={{ display: 'flex', fontSize: 22, color: C.muted }}>{right}</div> : null}
     </div>
@@ -139,7 +145,10 @@ export async function linkPreviewImage(input:
     <Frame width={width} height={height}>
       <Brand right="my.gov.uz" />
       {body}
-      <div style={{ display: 'flex', fontSize: 22, color: C.muted }}>Статус обновляется автоматически</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 22, color: C.muted }}>
+        <div style={{ display: 'flex' }}>Статус обновляется автоматически</div>
+        <div style={{ display: 'flex', color: C.accent, fontWeight: 600 }}>{BRAND.phone} · {BRAND.telegram}</div>
+      </div>
     </Frame>,
     width, height,
   );

@@ -121,7 +121,7 @@ function Gate() {
       </Stack>
       {locked && (
         <View style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.bg }]}>
-          <Text style={[styles.lockTitle, { color: theme.text }]}>my.gov tracker заблокирован</Text>
+          <Text style={[styles.lockTitle, { color: theme.text }]}>TURON PROJECT Application Tracker заблокирован</Text>
           <Button title="Разблокировать" onPress={() => void unlock()} />
         </View>
       )}

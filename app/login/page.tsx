@@ -60,8 +60,11 @@ function LoginForm() {
       <div className="w-full max-w-[380px]">
         <div className="mb-6 flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[12px] font-semibold"
-            style={{ background: 'var(--text)', color: 'var(--surface)' }}>mg</div>
-          <span className="text-[15px] font-semibold" style={{ color: 'var(--text)' }}>my.gov tracker</span>
+            style={{ background: 'var(--accent)', color: '#FFFFFF' }}>TP</div>
+          <span className="leading-[1.15]">
+            <span className="block text-[15px] font-bold tracking-[0.04em]" style={{ color: 'var(--text)' }}>TURON PROJECT</span>
+            <span className="block text-[12px]" style={{ color: 'var(--text-muted)' }}>Application Tracker</span>
+          </span>
         </div>
 
         <form onSubmit={submit} className="rounded-[12px] border p-6"

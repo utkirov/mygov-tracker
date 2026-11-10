@@ -116,7 +116,7 @@ export default function AddScreen() {
         ) : null}
         <Button title={parsed ? 'Выбрать другой файл' : 'Выбрать файл'} variant={parsed ? 'secondary' : 'primary'} onPress={() => void pick()} disabled={busy !== null} />
         <Text style={[styles.small, { color: t.textMuted }]}>
-          PDF из «Загрузок» — или откройте PDF в Telegram/почте через «Открыть с помощью → my.gov tracker».
+          PDF из «Загрузок» — или откройте PDF в Telegram/почте через «Открыть с помощью → TURON PROJECT Application Tracker».
         </Text>
       </Card>
 

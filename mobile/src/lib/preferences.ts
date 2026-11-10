@@ -52,7 +52,7 @@ export async function setBiometricLock(on: boolean): Promise<boolean> {
 }
 
 export async function unlockWithBiometrics(): Promise<boolean> {
-  const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Разблокируйте my.gov tracker', fallbackLabel: 'Код телефона' });
+  const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Разблокируйте TURON PROJECT Application Tracker', fallbackLabel: 'Код телефона' });
   return result.success;
 }
 

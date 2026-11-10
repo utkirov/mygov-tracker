@@ -35,7 +35,7 @@ function TrackerWidgetView({ data, p, rows }: { data: WidgetData; p: Palette; ro
       style={{ height: 'match_parent', width: 'match_parent', backgroundColor: p.bg, borderRadius: 20, padding: 14, flexDirection: 'column' }}
     >
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <TextWidget text="my.gov tracker" style={{ fontSize: 13, color: p.soft, fontWeight: '600' }} />
+        <TextWidget text="TURON PROJECT Tracker" style={{ fontSize: 13, color: p.soft, fontWeight: '600' }} />
         <FlexWidget clickAction="REFRESH" style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: p.panel }}>
           <TextWidget text={data.loading ? '…' : '↻ Обновить'} style={{ fontSize: 12, color: p.accent }} />
         </FlexWidget>

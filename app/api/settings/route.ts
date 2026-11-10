@@ -249,7 +249,7 @@ export async function PUT(request: NextRequest) {
   };
 
   try {
-    await sendTelegramMessage(testSettings, 'Test message from my.gov tracker');
+    await sendTelegramMessage(testSettings, 'Test message from TURON PROJECT Application Tracker');
     return NextResponse.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Connection failed';
