@@ -17,7 +17,7 @@ interface Props {
   onArtifactsChange: (next: ApplicationArtifacts) => void;
 }
 
-function DocRow({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+export function DocRow({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 rounded-[10px] p-3" style={{ background: 'var(--panel)' }}>
       <FileText size={16} className="shrink-0" style={{ color: 'var(--text-muted)' }} />

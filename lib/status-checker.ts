@@ -3,7 +3,8 @@ import * as cheerio from 'cheerio';
 
 import type { LocalDbApplicationChangeField } from './local-db';
 
-const ORIGIN = 'https://oldmy.gov.uz:4433';
+export const MYGOV_ORIGIN = 'https://oldmy.gov.uz:4433';
+const ORIGIN = MYGOV_ORIGIN;
 const BASE = `${ORIGIN}/ru/site/task-view`;
 const CAPTCHA_REFRESH = `${ORIGIN}/ru/site/captcha?refresh=1`;
 

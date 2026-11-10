@@ -18,12 +18,13 @@ import {
   type LocalDbApplication,
   type LocalDbApplicationChangeField,
 } from './local-db';
+import { parseAttachments, saveAttachmentList } from './attachments';
 import { produceCheckOutputs, type CheckOutputs } from './check-outputs';
 import { describeVerdicts, refreshChecklist, rejectionSummary } from './checklist-updates';
 import { openDb } from './sqlite-db';
 import { notifyClientSubscribers } from './client-notify';
 import { sendPushToAll } from './push';
-import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, parseMyGovDate } from './status-checker';
+import { CHANGE_FIELD_LABELS, fetchApplicationStatusSession, MYGOV_ORIGIN, parseMyGovDate } from './status-checker';
 import {
   buildApplicationErrorMessage,
   buildCycleSummaryMessage,
@@ -238,6 +239,11 @@ export async function checkOne(
   const checklistUpdate = session
     ? await refreshChecklist(updatedEntry, session.page.html).catch(err => { console.error('[Scheduler] Checklist failed:', err); return null; })
     : null;
+  // Files attached on the page (акт, декларация, паспорт…) — the list only; files are fetched on demand.
+  if (session) {
+    await saveAttachmentList(updatedEntry.id, parseAttachments(session.page.html, MYGOV_ORIGIN))
+      .catch(err => console.error('[Scheduler] Attachments failed:', err));
+  }
   const completedNow = isCompletedStatus(updatedEntry.status) && !isCompletedStatus(previousValues.status ?? '');
   if (checklistUpdate && checklistUpdate.newVerdicts.length > 0 && !completedNow) {
     const { title, body, urgent } = describeVerdicts(checklistUpdate);

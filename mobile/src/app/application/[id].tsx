@@ -10,11 +10,13 @@ import {
   api,
   applicationPdfUrl,
   artifactUrl,
+  attachmentUrl,
   authHeaders,
   downloadAndOpen,
   UnauthorizedError,
   type Application,
   type ApplicationArtifacts,
+  type Attachment,
   type Checklist,
   type StatusHistoryEntry,
 } from '@/lib/api';
@@ -50,6 +52,7 @@ export default function ApplicationScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [busyFile, setBusyFile] = useState<string | null>(null);
   const [shotOpen, setShotOpen] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[] | null>(null);
   const [archiving, setArchiving] = useState(false);
 
   const load = useCallback(async () => {
@@ -76,6 +79,24 @@ export default function ApplicationScreen() {
       else setError(e instanceof Error ? e.message : 'Нет связи с сервером');
     }
   }, [id, expire]);
+
+  // Files attached on my.gov: the first request may read the portal page, so it doesn't hold up the card.
+  useEffect(() => {
+    api.attachments(id).then(r => setAttachments(r.data.attachments)).catch(() => setAttachments([]));
+  }, [id]);
+
+  async function openAttachment(a: Attachment) {
+    setBusyFile(`att:${a.key}`);
+    try {
+      const { file } = await api.prepareAttachment(id, a.key);
+      setAttachments(prev => prev?.map(x => (x.key === a.key ? { ...x, file } : x)) ?? prev);
+      await downloadAndOpen(attachmentUrl(id, a.key), file.name, file.mime);
+    } catch (e) {
+      Alert.alert('Не удалось открыть', e instanceof Error ? e.message : 'Повторите попытку');
+    } finally {
+      setBusyFile(null);
+    }
+  }
 
   // Also on return from the client picker / share screen.
   useFocusEffect(useCallback(() => { void load(); }, [load]));
@@ -331,6 +352,15 @@ export default function ApplicationScreen() {
           <DocRow key={doc.file} title={doc.title || 'Документ результата'} subtitle={[doc.pin && `PIN ${doc.pin}`, formatSize(doc.size)].filter(Boolean).join(' · ')}
             busy={busyFile === doc.file}
             onPress={() => void open(doc.file, artifactUrl(id, doc.file), `${doc.title || 'document'}-${n}.pdf`, 'application/pdf')} />
+        ))}
+        {!!attachments?.length && (
+          <Text style={[styles.small, { color: t.textMuted, marginTop: 4 }]}>Файлы заявления с my.gov</Text>
+        )}
+        {attachments?.map(a => (
+          <DocRow key={a.key} title={a.label}
+            subtitle={a.file ? `${a.file.name.split('.').pop()?.toUpperCase()} · ${formatSize(a.file.size)}` : 'скачается с портала'}
+            busy={busyFile === `att:${a.key}`}
+            onPress={() => void openAttachment(a)} />
         ))}
         {artifacts.results.length === 0 && (completed ? (
           <Button title="Получить документы результата" variant="secondary" busy={busyFile === 'results'} onPress={fetchResults} disabled={!!offlineSince} />

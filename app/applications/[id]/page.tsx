@@ -67,6 +67,8 @@ const PdfSection = dynamic(
   }
 );
 
+const AttachmentsSection = dynamic(() => import('@/components/detail/AttachmentsSection'), { ssr: false });
+
 const ScreenshotSection = dynamic(
   () => import('@/components/detail/ScreenshotSection'),
   {
@@ -624,6 +626,7 @@ export default function DetailPage() {
               completed={isCompletedStatus(application.status)}
               onArtifactsChange={setArtifacts}
             />
+            <AttachmentsSection applicationId={id} />
           </div>
         </div>
       </div>

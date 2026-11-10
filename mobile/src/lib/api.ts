@@ -97,6 +97,10 @@ export interface ArtifactFile { file: string; size: number; saved_at: string }
 export interface ResultDocument extends ArtifactFile { title: string; state: string; pin: string }
 export interface ApplicationArtifacts { screenshot: ArtifactFile | null; status_pdf: ArtifactFile | null; results: ResultDocument[] }
 
+/** Server lib/attachments.ts — files attached on the my.gov page. */
+export interface AttachmentFile { name: string; mime: string; size: number; saved_at: string }
+export interface Attachment { key: string; label: string; stage: string; file: AttachmentFile | null }
+
 export interface CheckLogEntry {
   id: string;
   application_id: string;
@@ -248,6 +252,9 @@ export const api = {
   artifacts: (id: string) => cachedRequest<ApplicationArtifacts>(`artifacts:${id}`, `/api/applications/${enc(id)}/artifacts`),
   chain: (id: string) => cachedRequest<Application[]>(`chain:${id}`, `/api/applications/${enc(id)}/chain`),
   checkLog: (limit = 100) => cachedRequest<CheckLogEntry[]>('check-log', `/api/check-log?limit=${limit}`),
+  attachments: (id: string) => cachedRequest<{ attachments: Attachment[] }>(`attachments:${id}`, `/api/applications/${enc(id)}/attachments`),
+  /** Makes the server fetch the file from my.gov (first time only) and tells its name and type. */
+  prepareAttachment: (id: string, key: string) => request<{ file: AttachmentFile }>(`/api/applications/${enc(id)}/attachments/${enc(key)}`, { method: 'POST' }),
   checklist: (id: string) => cachedRequest<{ checklist: Checklist | null }>(`checklist:${id}`, `/api/applications/${enc(id)}/checklist`),
   refreshChecklist: (id: string) => request<{ checklist: Checklist }>(`/api/applications/${enc(id)}/checklist`, { method: 'POST' }),
   shareLinks: (t: ShareTarget) => request<{ links: ShareLinkInfo[] }>(shareBase(t)),
@@ -318,6 +325,10 @@ export async function createApplication(body: Record<string, unknown>): Promise<
 /** URL of a stored file; load it with authHeaders() (Image source headers / downloadAndOpen). */
 export function artifactUrl(id: string, file: string, version?: string): string {
   return `${API_BASE}/api/applications/${enc(id)}/artifacts/${file}${version ? `?v=${enc(version)}` : ''}`;
+}
+
+export function attachmentUrl(id: string, key: string): string {
+  return `${API_BASE}/api/applications/${enc(id)}/attachments/${enc(key)}`;
 }
 
 export function applicationPdfUrl(id: string): string {
