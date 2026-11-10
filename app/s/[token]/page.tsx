@@ -4,11 +4,11 @@ import { connection } from 'next/server';
 
 import { StageStepper } from '@/components/StageStepper';
 import { Card, fmt, ShareApplicationDetails, statusDot } from '@/components/share/ShareApplication';
-import { ContactBar, ContactCard, DesignSwitcher, SummaryHero } from '@/components/share/ShareChrome';
+import { ContactBar, ContactCard, DesignSwitcher, SummaryHero, TimelineCard } from '@/components/share/ShareChrome';
 import { BRAND } from '@/lib/brand';
 import { telegramSubscribeUrl } from '@/lib/client-notify';
 import { SESSION_COOKIE, verifySession } from '@/lib/session-token';
-import { getShareDesign, parseShareDesign, type ShareDesign } from '@/lib/share-design';
+import { getShareDesign, isSummaryLook, parseShareDesign, type ShareDesign } from '@/lib/share-design';
 import {
   buildClientShareView,
   buildShareView,
@@ -16,6 +16,7 @@ import {
   isShareLinkActive,
   isUnlocked,
   recordShareView,
+  type ShareView,
   unlockCookieName,
 } from '@/lib/share-links';
 
@@ -97,6 +98,18 @@ function Message({ title, text, look }: { title: string; text: string; look: Loo
   );
 }
 
+/** «Подробнее» — the full detail blocks, folded. */
+function More({ text, children }: { text: string; children: React.ReactNode }) {
+  return (
+    <details className="rounded-[14px] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[13px] font-semibold" style={{ color: 'var(--accent)' }}>
+        {text}<span aria-hidden>▾</span>
+      </summary>
+      <div className="border-t p-3 md:p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>{children}</div>
+    </details>
+  );
+}
+
 function SubscribeButton({ href }: { href: string | null }) {
   if (!href) return null;
   return (
@@ -174,7 +187,11 @@ export default async function SharePage({ params, searchParams }: { params: Prom
       </p>
     </>
   );
-  const summary = look.design === 'summary';
+  // Looks C–F: a summary (or timeline) card first, the full blocks folded under «Подробнее».
+  const cardLook = isSummaryLook(look.design) || look.design === 'timeline';
+  const hero = (app: ShareView) => (look.design === 'timeline'
+    ? <TimelineCard view={app} />
+    : <SummaryHero view={app} brand={look.design === 'brand'} />);
 
   if (link.client_id) {
     const view = await buildClientShareView(link);
@@ -182,27 +199,44 @@ export default async function SharePage({ params, searchParams }: { params: Prom
     const active = view.applications.filter(a => !a.completed);
     const done = view.applications.filter(a => a.completed);
     const docHref = (appId: string) => (file: string) => `/s/${token}/doc/${file}?app=${encodeURIComponent(appId)}`;
-    if (summary) {
+    if (cardLook) {
       return (
         <Shell look={look}>
           <div className="space-y-4">
             <header>
               <p className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>Заявления клиента</p>
               <h1 className="mt-1 text-[24px] font-bold leading-[1.2]" style={{ color: 'var(--text)' }}>{view.client_name}</h1>
-              <p className="mt-1 text-[13px]" style={{ color: 'var(--text-soft)' }}>В работе: {active.length} · завершено: {done.length}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-[12px] font-semibold">
+                <span className="rounded-full px-3 py-1" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>В работе: {active.length}</span>
+                <span className="rounded-full px-3 py-1" style={{ background: 'var(--panel)', color: 'var(--text-soft)' }}>Завершено: {done.length}</span>
+              </div>
               <div className="mt-3"><SubscribeButton href={subscribeHref} /></div>
             </header>
             {view.applications.length === 0 && <Card><p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>Заявлений пока нет.</p></Card>}
-            {[...active, ...done].map(app => (
+            {active.map(app => (
               <div key={app.id} className="space-y-2">
-                <SummaryHero view={app} />
-                <details className="rounded-[14px] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-                  <summary className="cursor-pointer list-none px-4 py-3 text-[13px] font-semibold" style={{ color: 'var(--accent)' }}>Подробнее: этапы, согласования, история</summary>
-                  <div className="border-t p-3 md:p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
-                    <ShareApplicationDetails view={app} docHref={docHref(app.id)} />
-                  </div>
-                </details>
+                {hero(app)}
+                <More text="Подробнее: согласования, документы, история">
+                  <ShareApplicationDetails view={app} docHref={docHref(app.id)} />
+                </More>
               </div>
+            ))}
+            {done.length > 0 && <p className="pt-2 text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Завершённые</p>}
+            {done.map(app => (
+              <details key={app.id} className="rounded-[14px] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+                <summary className="flex cursor-pointer list-none items-center gap-2.5 p-4">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: statusDot(app) }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-semibold" style={{ color: 'var(--text)' }}>{app.title}</span>
+                    <span className="block text-[12px]" style={{ color: 'var(--text-muted)' }}>№ {app.application_number} · {app.status} · {fmt(app.last_changed_date).slice(0, 10)}</span>
+                  </span>
+                  <span className="text-[12px] font-semibold" style={{ color: 'var(--accent)' }}>Открыть</span>
+                </summary>
+                <div className="space-y-3 border-t p-3 md:p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
+                  {hero(app)}
+                  <ShareApplicationDetails view={app} docHref={docHref(app.id)} />
+                </div>
+              </details>
             ))}
             {footer}
           </div>
@@ -253,18 +287,15 @@ export default async function SharePage({ params, searchParams }: { params: Prom
 
   const view = await buildShareView(link);
   if (!view) return <Message look={look} title="Ссылка не найдена" text="Попросите отправителя прислать новую ссылку." />;
-  if (summary) {
+  if (cardLook) {
     return (
       <Shell look={look}>
         <div className="space-y-4">
-          <SummaryHero view={view} />
+          {hero(view)}
           <div><SubscribeButton href={subscribeHref} /></div>
-          <details className="rounded-[14px] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-            <summary className="cursor-pointer list-none px-4 py-3 text-[13px] font-semibold" style={{ color: 'var(--accent)' }}>Подробнее: этапы, согласования, документы, история</summary>
-            <div className="border-t p-3 md:p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
-              <ShareApplicationDetails view={view} docHref={file => `/s/${token}/doc/${file}`} />
-            </div>
-          </details>
+          <More text="Подробнее: согласования, документы, история">
+            <ShareApplicationDetails view={view} docHref={file => `/s/${token}/doc/${file}`} />
+          </More>
           {footer}
         </div>
       </Shell>
