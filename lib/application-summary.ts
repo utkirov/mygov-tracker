@@ -3,10 +3,11 @@ import { loadAnalytics } from './analytics';
 import { readArtifacts, readChecklist } from './application-artifacts';
 import { stageSummary } from './checklist';
 import { loadClientIndex } from './clients';
+import { getErpLinks } from './erp';
 import type { LocalDbApplication } from './local-db';
 
 export async function enrichApplications(applications: LocalDbApplication[], opts: { resultDocuments?: boolean } = {}) {
-  const [analytics, clients] = await Promise.all([loadAnalytics(), loadClientIndex()]);
+  const [analytics, clients, erp] = await Promise.all([loadAnalytics(), loadClientIndex(), getErpLinks()]);
   const forecasts = new Map(analytics.forecasts.map(f => [f.applicationId, f]));
   return Promise.all(applications.map(async (application) => {
     const checklist = await readChecklist(application.id);
@@ -19,6 +20,7 @@ export async function enrichApplications(applications: LocalDbApplication[], opt
       checklist_summary: summary,
       forecast: application.archived ? null : forecasts.get(application.id) ?? null,
       client: client ? { id: client.id, name: client.name } : null,
+      erp_project_id: erp.get(application.id) ?? null,
       ...(opts.resultDocuments ? { result_documents: (await readArtifacts(application.id)).results.length } : {}),
     };
   }));

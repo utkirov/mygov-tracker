@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import type { Application } from '@/types';
 import { showToast } from '@/lib/toast';
+import ErpProjectSelect from '@/components/ErpProjectSelect';
 
 export default function EditPage() {
   const { id } = useParams<{ id: string }>();
@@ -135,7 +136,8 @@ export default function EditPage() {
                 )}
               </label>
             ))}
-
+            <ErpProjectSelect value={form.erp_project_id ?? ''} onChange={v => setForm(prev => ({ ...prev, erp_project_id: v || null }))}
+              className={`mt-1.5 ${inputCls}`} style={inputSty} labelClassName="block text-[12px] font-medium" labelStyle={{ color: 'var(--text-soft)' }} />
           </div>
         </div>
 

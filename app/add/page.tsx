@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check, ChevronRight, X } from 'lucide-react';
 
+import ErpProjectSelect from '@/components/ErpProjectSelect';
 import { PdfUpload } from '@/components/PdfUpload';
 import { requestImmediateSyncRun } from '@/lib/sync-engine';
 import { showToast } from '@/lib/toast';
@@ -66,6 +67,8 @@ function AddPageInner() {
   const [objectName,    setObjectName]    = useState('');
   const [notes,         setNotes]         = useState('');
   const [projectId,     setProjectId]     = useState(initialProject ?? '');
+  const [erpId,         setErpId]         = useState('');
+  const [erpOn,         setErpOn]         = useState(false);
   const [parentId,      setParentId]      = useState(initialParent ?? '');
   const [projects,      setProjects]      = useState<Project[]>([]);
   const [candidates,    setCandidates]    = useState<Application[]>([]);
@@ -98,6 +101,7 @@ function AddPageInner() {
         setObjectName(application.object_name ?? '');
         setNotes(application.notes ?? '');
         if (application.project_id) setProjectId(application.project_id);
+        if (application.erp_project_id) setErpId(application.erp_project_id);
       })
       .catch(() => {});
   }, [initialParent]);
@@ -174,6 +178,7 @@ function AddPageInner() {
           pdf_storage_key: pdfStorageKey,
           parent_id:       parentId || null,
           project_id:      projectId || null,
+          erp_project_id:  erpId || null,
         }),
       });
       const payload = await response.json().catch(() => null) as { id?: string; error?: string } | null;
@@ -262,13 +267,18 @@ function AddPageInner() {
               {field('Статус', 'status')}
               {field('Дата подачи', 'submission_date')}
               {field('SMS-телефон', 'sms_phone')}
-              <label className={labelCls} style={{ color: 'var(--text-muted)' }}>
-                Проект
-                <select value={projectId} onChange={e => setProjectId(e.target.value)} disabled={disabled} className={inputCls} style={inputSty}>
-                  <option value="">Без проекта</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </label>
+              <ErpProjectSelect value={erpId} onChange={setErpId} disabled={disabled} onAvailable={setErpOn}
+                className={inputCls} style={inputSty} labelClassName={labelCls} labelStyle={{ color: 'var(--text-muted)' }} />
+              {/* проект трекера — только пока ERP недоступна (или он уже выбран) */}
+              {(!erpOn || projectId) && (
+                <label className={labelCls} style={{ color: 'var(--text-muted)' }}>
+                  Проект
+                  <select value={projectId} onChange={e => setProjectId(e.target.value)} disabled={disabled} className={inputCls} style={inputSty}>
+                    <option value="">Без проекта</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+              )}
               <label className={labelCls} style={{ color: 'var(--text-muted)' }}>
                 Родительское заявление (цепочка)
                 <select value={parentId} onChange={e => setParentId(e.target.value)} disabled={disabled} className={inputCls} style={inputSty}>

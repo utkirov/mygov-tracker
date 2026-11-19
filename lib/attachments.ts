@@ -211,6 +211,20 @@ export async function getAttachmentFile(
 }
 
 
+/** One attachment already downloaded to disk, or null — never fetches from the portal (ERP integration). */
+export async function readCachedAttachment(applicationId: string, key: string): Promise<{ info: AttachmentFile; label: string; data: Buffer } | null> {
+  const dir = dirOf(applicationId);
+  const stored = await readStored(applicationId);
+  const item = stored?.items.find(i => i.key === key);
+  const cached = item ? stored?.files[key] : undefined;
+  if (!dir || !item || !cached) return null;
+  try {
+    return { info: publicFile(cached), label: item.label, data: await readFile(path.join(dir, 'attachments', cached.path)) };
+  } catch {
+    return null;
+  }
+}
+
 /** Attachments already downloaded to disk (for «download all» — nothing is fetched from the portal). */
 export async function readCachedAttachmentFiles(applicationId: string): Promise<Array<{ name: string; data: Buffer }>> {
   const dir = dirOf(applicationId);

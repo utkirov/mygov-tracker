@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { enrichApplications } from '@/lib/application-summary';
+import { notifyErp, setErpLink } from '@/lib/erp';
 import { clientOfApplication, setApplicationClient } from '@/lib/clients';
 import {
   insertApplication,
@@ -115,6 +116,11 @@ export async function POST(request: NextRequest) {
     recorded_at: now,
   });
   await touchMeta(now);
+  // Проект ERP: выбран в форме, иначе — как у первой подачи цепочки (ERP и сам привяжет цепочку).
+  if (typeof body.erp_project_id === 'string' && body.erp_project_id.trim()) {
+    await setErpLink(application.id, body.erp_project_id).catch(err => console.warn('[ERP] выбор проекта не сохранён:', err));
+  }
+  notifyErp(application.id, 'created');
 
   return NextResponse.json(application, { status: 201 });
 }

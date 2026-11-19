@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { deleteArtifacts } from '@/lib/application-artifacts';
 import { enrichApplications } from '@/lib/application-summary';
+import { notifyErp, setErpLink } from '@/lib/erp';
 import { deletePdfFile } from '@/lib/local-storage';
 import {
   deleteApplicationRow,
@@ -140,6 +141,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   await updateApplicationFields(id, patch);
   await touchMeta(updatedAt);
+  if ('erp_project_id' in body) {
+    try { await setErpLink(id, body.erp_project_id); } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'Проект ERP не сохранён' }, { status: 400 });
+    }
+    notifyErp(id, 'erp_project');
+  }
 
   const updatedApplication: LocalDbApplication = { ...application, ...patch };
   return NextResponse.json(updatedApplication);

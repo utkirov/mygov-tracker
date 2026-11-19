@@ -248,5 +248,12 @@ function applySchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_status_history_app ON status_history(application_id, recorded_at);
     CREATE INDEX IF NOT EXISTS idx_applications_archived ON applications(archived);
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(username);
+
+    -- Проект ERP «TPG Проекты», выбранный при добавлении заявления (lib/erp.ts).
+    CREATE TABLE IF NOT EXISTS erp_links (
+      application_id TEXT PRIMARY KEY,
+      erp_project_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }

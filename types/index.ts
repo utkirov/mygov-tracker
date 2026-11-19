@@ -40,6 +40,8 @@ export interface Application {
   forecast?: ApplicationForecast | null;
   /** Who the application is for (lib/clients.ts), inherited by resubmissions. */
   client?: { id: string; name: string } | null;
+  /** Проект ERP «TPG Проекты», выбранный для заявления (lib/erp.ts). */
+  erp_project_id?: string | null;
   sync_state: SyncState;
   last_checked_at: string | null;
   next_check_at: string | null;

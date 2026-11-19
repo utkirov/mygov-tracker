@@ -22,6 +22,7 @@ import { parseAttachments, saveAttachmentList } from './attachments';
 import { produceCheckOutputs, type CheckOutputs } from './check-outputs';
 import { describeVerdicts, refreshChecklist, rejectionSummary } from './checklist-updates';
 import { openDb } from './sqlite-db';
+import { notifyErp } from './erp';
 import { notifyClientSubscribers } from './client-notify';
 import { downtimeMessage, startDowntimeWatch } from './downtime';
 import { sendPushToAll } from './push';
@@ -316,6 +317,10 @@ export async function checkOne(
     completed: completedNow,
     newVerdicts: checklistUpdate?.newVerdicts.length ?? 0,
   }).catch(err => console.error('[Scheduler] Client notify error:', err));
+
+  // ERP «TPG Проекты»: изменения сразу, документы результата — когда скачаются (они приходят позже статуса).
+  if (changedFields.length > 0 || (checklistUpdate?.newVerdicts.length ?? 0) > 0) notifyErp(updatedEntry.id, 'changed');
+  if (completedNow) outputs.then(() => notifyErp(updatedEntry.id, 'documents')).catch(() => {});
 
   if (options.awaitOutputs) return { result, session, outputs: await outputs };
   return { result, session };
